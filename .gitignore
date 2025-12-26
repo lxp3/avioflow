@@ -1,10 +1,24 @@
+# Build directories
 build/
-.cache/
-*.log
-*.txt
-!CMakeLists.txt
-TownTheme.mp3
-.vs/
 out/
 bin/
 lib/
+
+# IDE and editor
+.cache/
+.vs/
+.vscode/
+
+# Downloaded dependencies (can be re-downloaded)
+downloads/
+
+# Logs
+*.log
+
+# Test files
+*.mp3
+*.wav
+*.flac
+
+# Keep CMakeLists.txt
+!CMakeLists.txt

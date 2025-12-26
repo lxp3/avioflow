@@ -5,7 +5,7 @@
 $ErrorActionPreference = "Stop"
 
 # Configuration
-$VCVARS_PATH = "D:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvarsall.bat"
+$VCVARS_PATH = "C:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvarsall.bat"
 $BUILD_DIR = "build"
 
 Write-Host "--- Configuring avioflow (VS 2026) ---" -ForegroundColor Cyan
@@ -16,7 +16,9 @@ if (Test-Path $BUILD_DIR) {
 }
 
 # Run CMake Configuration inside a CMD environment with vcvarsall.bat
-$CmakeConfigCmd = "cmake -B $BUILD_DIR -S . -G `"NMake Makefiles`" -DCMAKE_BUILD_TYPE=Release"
+# Using Ninja for faster builds and cleaner output (filters /showIncludes)
+# CMAKE_EXPORT_COMPILE_COMMANDS generates compile_commands.json for IntelliSense
+$CmakeConfigCmd = "cmake -B $BUILD_DIR -S . -G `"Ninja`" -DCMAKE_BUILD_TYPE=Release -DCMAKE_EXPORT_COMPILE_COMMANDS=ON"
 cmd.exe /c "`"$VCVARS_PATH`" x64 && $CmakeConfigCmd"
 
 if ($LASTEXITCODE -ne 0) {

@@ -1,26 +1,33 @@
-
 # FFmpeg configuration for avioflow
 # Support local and remote downloads of FFmpeg 7.1 shared libraries
 
 set(FFMPEG_VERSION "7.1.3")
 set(FFMPEG_ZIP_NAME "ffmpeg-n7.1.3-19-gdac2a1116d-win64-lgpl-shared-7.1.zip")
 set(FFMPEG_URL "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2025-12-25-12-55/${FFMPEG_ZIP_NAME}")
-set(LOCAL_THIRDPARTY_DIR "E:/Repos/third_party")
 set(FFMPEG_EXTRACT_DIR "${CMAKE_BINARY_DIR}/ffmpeg")
 
-# 1. Check local file
-if(EXISTS "${LOCAL_THIRDPARTY_DIR}/${FFMPEG_ZIP_NAME}")
-    message(STATUS "Found FFmpeg zip locally: ${LOCAL_THIRDPARTY_DIR}/${FFMPEG_ZIP_NAME}")
-    set(FFMPEG_ZIP_PATH "${LOCAL_THIRDPARTY_DIR}/${FFMPEG_ZIP_NAME}")
-else()
-    message(STATUS "FFmpeg zip not found locally, downloading from: ${FFMPEG_URL}")
-    set(FFMPEG_ZIP_PATH "${CMAKE_BINARY_DIR}/${FFMPEG_ZIP_NAME}")
-    if(NOT EXISTS "${FFMPEG_ZIP_PATH}")
-        file(DOWNLOAD "${FFMPEG_URL}" "${FFMPEG_ZIP_PATH}" SHOW_PROGRESS)
-    endif()
+# Use DOWNLOADS_DIR from parent CMakeLists.txt (defaults to ${CMAKE_SOURCE_DIR}/downloads)
+if(NOT DEFINED DOWNLOADS_DIR)
+    set(DOWNLOADS_DIR "${CMAKE_SOURCE_DIR}/downloads")
 endif()
 
-# 2. Extract
+# Ensure downloads directory exists
+file(MAKE_DIRECTORY "${DOWNLOADS_DIR}")
+
+set(FFMPEG_LOCAL_ZIP "${DOWNLOADS_DIR}/${FFMPEG_ZIP_NAME}")
+
+# 1. Check if FFmpeg zip exists in downloads directory
+if(EXISTS "${FFMPEG_LOCAL_ZIP}")
+    message(STATUS "Found FFmpeg zip locally: ${FFMPEG_LOCAL_ZIP}")
+    set(FFMPEG_ZIP_PATH "${FFMPEG_LOCAL_ZIP}")
+else()
+    # Download to downloads directory (not build directory) so it persists across rebuilds
+    message(STATUS "FFmpeg zip not found locally, downloading to: ${FFMPEG_LOCAL_ZIP}")
+    file(DOWNLOAD "${FFMPEG_URL}" "${FFMPEG_LOCAL_ZIP}" SHOW_PROGRESS)
+    set(FFMPEG_ZIP_PATH "${FFMPEG_LOCAL_ZIP}")
+endif()
+
+# 2. Extract to build directory
 if(NOT EXISTS "${FFMPEG_EXTRACT_DIR}")
     message(STATUS "Extracting FFmpeg to: ${FFMPEG_EXTRACT_DIR}")
     file(ARCHIVE_EXTRACT INPUT "${FFMPEG_ZIP_PATH}" DESTINATION "${FFMPEG_EXTRACT_DIR}")
@@ -57,10 +64,6 @@ foreach(LIB_PATH IN LISTS FFMPEG_LIBRARIES)
     set_target_properties(ffmpeg::${LIB_NAME} PROPERTIES
         INTERFACE_INCLUDE_DIRECTORIES "${FFMPEG_INCLUDE_DIRS}"
         IMPORTED_IMPLIB "${LIB_PATH}"
-        IMPORTED_LOCATION "${FFMPEG_BIN_DIR}/${LIB_NAME}-7.dll" # Note: shared dlls often have version suffix
+        IMPORTED_LOCATION "${FFMPEG_BIN_DIR}/${LIB_NAME}-7.dll"
     )
 endforeach()
-
-# Special handling for DLL location - FFmpeg-Builds usually has -7 suffix for dlls in bin/
-# If DLL not found with -7, try without suffix.
-# But for now, let's assume -7 suffix for FFmpeg 7.
