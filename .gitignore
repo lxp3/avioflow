@@ -1,0 +1,10 @@
+build/
+.cache/
+*.log
+*.txt
+!CMakeLists.txt
+TownTheme.mp3
+.vs/
+out/
+bin/
+lib/
