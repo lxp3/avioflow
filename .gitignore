@@ -15,10 +15,9 @@ downloads/
 # Logs
 *.log
 
-# Test files
-*.mp3
-*.wav
-*.flac
+# Exceptions
+!public/
+!public/**/*
 
 # Keep CMakeLists.txt
 !CMakeLists.txt
