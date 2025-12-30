@@ -84,26 +84,24 @@ namespace avioflow
     int src_num_channels = frame->ch_layout.nb_channels;
 
     // Determine output parameters
-    out_sample_rate_ =
-        output_sample_rate_.value_or(src_sample_rate);
-    out_num_channels_ =
-        output_num_channels_.value_or(src_num_channels);
+    output_sample_rate_ = output_sample_rate_.value_or(src_sample_rate);
+    output_num_channels_ = output_num_channels_.value_or(src_num_channels);
 
     // Check if resampling is actually needed
     needs_resample_ = (src_sample_format != output_sample_format_) ||
-                      (src_sample_rate != out_sample_rate_) ||
-                      (src_num_channels != out_num_channels_);
+                      (src_sample_rate != *output_sample_rate_) ||
+                      (src_num_channels != *output_num_channels_);
 
     if (needs_resample_)
     {
       // Setup output channel layout
       AVChannelLayout out_ch_layout;
-      av_channel_layout_default(&out_ch_layout, out_num_channels_);
+      av_channel_layout_default(&out_ch_layout, *output_num_channels_);
 
       SwrContext *swr = nullptr;
       check_av_error(
           swr_alloc_set_opts2(&swr, &out_ch_layout, output_sample_format_,
-                              out_sample_rate_, &frame->ch_layout,
+                              *output_sample_rate_, &frame->ch_layout,
                               src_sample_format, src_sample_rate, 0, nullptr),
           "Could not initialize resampler");
 
@@ -114,11 +112,22 @@ namespace avioflow
       av_channel_layout_uninit(&out_ch_layout);
     }
 
-    // Update metadata with actual output parameters
-    metadata_.sample_rate = out_sample_rate_;
-    metadata_.num_channels = out_num_channels_;
-
     resampler_initialized_ = true;
+  }
+
+  int SingleStreamDecoder::calculate_output_samples(int src_samples,
+                                                    int src_rate,
+                                                    int dst_rate) const
+  {
+    if (src_rate == dst_rate)
+    {
+      return src_samples;
+    }
+
+    // Use av_rescale_rnd with delay handling for accurate sample count
+    int64_t delay = swr_ctx_ ? swr_get_delay(swr_ctx_.get(), src_rate) : 0;
+    return static_cast<int>(av_rescale_rnd(
+        delay + src_samples, dst_rate, src_rate, AV_ROUND_UP));
   }
 
   FrameOutput SingleStreamDecoder::decode_next()
@@ -160,26 +169,17 @@ namespace avioflow
       {
         int src_sample_rate = frame_->sample_rate;
 
-        // Calculate output sample count with proper delay handling
-        int out_samples;
-        if (src_sample_rate != out_sample_rate_)
-        {
-          out_samples = static_cast<int>(av_rescale_rnd(
-              swr_get_delay(swr_ctx_.get(), src_sample_rate) +
-                  frame_->nb_samples,
-              out_sample_rate_, src_sample_rate, AV_ROUND_UP));
-        }
-        else
-        {
-          out_samples = frame_->nb_samples;
-        }
+        // Calculate output sample count
+        int out_samples =
+            calculate_output_samples(frame_->nb_samples, src_sample_rate,
+                                     *output_sample_rate_);
 
         // Prepare converted frame
         av_frame_unref(converted_frame_.get());
         converted_frame_->format = output_sample_format_;
-        converted_frame_->sample_rate = out_sample_rate_;
+        converted_frame_->sample_rate = *output_sample_rate_;
         av_channel_layout_default(&converted_frame_->ch_layout,
-                                  out_num_channels_);
+                                  *output_num_channels_);
         converted_frame_->nb_samples = out_samples;
 
         check_av_error(av_frame_get_buffer(converted_frame_.get(), 0),
@@ -202,8 +202,8 @@ namespace avioflow
 
         output.data = converted_frame_->data[0];
         output.size = static_cast<size_t>(converted) * sizeof(float);
-        output.sample_rate = out_sample_rate_;
-        output.num_channels = out_num_channels_;
+        output.sample_rate = *output_sample_rate_;
+        output.num_channels = *output_num_channels_;
         output.num_samples = converted;
       }
       else
@@ -217,12 +217,70 @@ namespace avioflow
         output.num_samples = frame_->nb_samples;
       }
 
-      av_frame_unref(frame_.get());
+      // Note: We do NOT unref frame_ here to keep data valid until next decode call
+      // The frame will be unref'd at the start of the next decode_next() call
       return output;
     }
 
     eof_reached_ = true;
     return {};
+  }
+
+  AudioSamples SingleStreamDecoder::get_all_samples()
+  {
+    AudioSamples result;
+
+    // Pre-allocate based on estimated duration using av_rescale_rnd
+    size_t estimated_samples = 0;
+    if (metadata_.duration > 0 && metadata_.sample_rate > 0)
+    {
+      int out_rate = output_sample_rate_.value_or(metadata_.sample_rate);
+      int64_t src_samples =
+          static_cast<int64_t>(metadata_.duration * metadata_.sample_rate);
+
+      // Use av_rescale_rnd for consistency, add 10% buffer
+      estimated_samples = static_cast<size_t>(av_rescale_rnd(
+          src_samples * 11 / 10, out_rate, metadata_.sample_rate, AV_ROUND_UP));
+    }
+
+    // Decode all frames
+    while (has_more())
+    {
+      auto frame = decode_next();
+      if (frame.data == nullptr)
+        break;
+
+      // Initialize result on first frame
+      if (result.data.empty())
+      {
+        result.sample_rate = frame.sample_rate;
+        result.data.resize(frame.num_channels);
+
+        if (estimated_samples > 0)
+        {
+          for (auto &ch : result.data)
+          {
+            ch.reserve(estimated_samples);
+          }
+        }
+      }
+
+      // Get the source frame for channel data access
+      // decode_next() returns data pointer to either frame_ or converted_frame_
+      // We need to access all channels from the appropriate source
+      AVFrame *src_frame = needs_resample_ ? converted_frame_.get() : frame_.get();
+
+      for (int c = 0; c < frame.num_channels; ++c)
+      {
+        const float *channel_data =
+            reinterpret_cast<const float *>(src_frame->data[c]);
+
+        result.data[c].insert(result.data[c].end(), channel_data,
+                              channel_data + frame.num_samples);
+      }
+    }
+
+    return result;
   }
 
 } // namespace avioflow

@@ -45,12 +45,13 @@ Example:
 ### Unit Tests
 
 ```powershell
-.\build\avioflow_unit_test.exe
+.\build\avioflow_load_test.exe
+.\build\avioflow_resample_test.exe
 ```
 
 Use `--skip-network` to skip URL-based tests:
 ```powershell
-.\build\avioflow_unit_test.exe --skip-network
+.\build\avioflow_load_test.exe --skip-network
 ```
 
 ## Usage

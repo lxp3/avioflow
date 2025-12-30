@@ -51,9 +51,9 @@ target_link_libraries(avioflow PUBLIC
 )
 
 # Example/Test app
-add_executable(avioflow_test tests/decode_test.cpp)
-target_include_directories(avioflow_test PRIVATE ${FFMPEG_CORE_DIR})
-target_link_libraries(avioflow_test PRIVATE avioflow)
+add_executable(avioflow_audio_load tests/ffmpeg-audio-load.cpp)
+target_include_directories(avioflow_audio_load PRIVATE ${FFMPEG_CORE_DIR})
+target_link_libraries(avioflow_audio_load PRIVATE avioflow)
 
 # Unit tests - Load tests
 add_executable(avioflow_load_test tests/ffmpeg/decoder/test_decoder_load.cpp)
@@ -72,10 +72,10 @@ target_include_directories(avioflow_resample_test PRIVATE
 target_link_libraries(avioflow_resample_test PRIVATE avioflow)
 
 # Copy DLLs to bin (for all test executables)
-add_custom_command(TARGET avioflow_test POST_BUILD
+add_custom_command(TARGET avioflow_audio_load POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
         "${FFMPEG_BIN_DIR}"
-        "$<TARGET_FILE_DIR:avioflow_test>"
+        "$<TARGET_FILE_DIR:avioflow_audio_load>"
 )
 
 add_custom_command(TARGET avioflow_load_test POST_BUILD

@@ -1,5 +1,5 @@
 // Unit tests for SingleStreamDecoder - Resampling
-// Tests cover: output sample rate conversion to common rates
+// Tests cover: output sample rate conversion to common rates using get_all_samples()
 
 #include "single-stream-decoder.h"
 #include "test_framework.h"
@@ -17,13 +17,7 @@ constexpr int ORIGINAL_SAMPLE_RATE = 44100;
 constexpr int ORIGINAL_NUM_SAMPLES = 4297722;
 constexpr int EXPECTED_NUM_CHANNELS = 2;
 
-// Expected sample counts after resampling (provided by user)
-// sample rate: 44100 -> 8000, num samples: 779632
-// sample rate: 44100 -> 16000, num samples: 1559264
-// sample rate: 44100 -> 32000, num samples: 3118529
-// sample rate: 44100 -> 44100, num samples: 4297722
-// sample rate: 44100 -> 48000, num samples: 4677793
-
+// Expected sample counts after resampling
 constexpr int EXPECTED_SAMPLES_8000 = 779632;
 constexpr int EXPECTED_SAMPLES_16000 = 1559264;
 constexpr int EXPECTED_SAMPLES_32000 = 3118529;
@@ -57,23 +51,15 @@ bool test_resample_8000()
     TEST_ASSERT_EQ(ORIGINAL_SAMPLE_RATE, meta.sample_rate, "source sample_rate");
     TEST_ASSERT_EQ(EXPECTED_NUM_CHANNELS, meta.num_channels, "source num_channels");
 
-    size_t total_samples = 0;
-    while (decoder.has_more())
-    {
-        auto frame = decoder.decode_next();
-        if (frame.data == nullptr)
-            break;
+    auto samples = decoder.get_all_samples();
+    size_t num_samples = samples.data.empty() ? 0 : samples.data[0].size();
 
-        // Verify output sample rate in frame
-        TEST_ASSERT_EQ(TARGET_RATE, frame.sample_rate, "output sample_rate");
-        TEST_ASSERT_EQ(EXPECTED_NUM_CHANNELS, frame.num_channels, "frame channels");
-        total_samples += frame.num_samples;
-    }
-
-    TEST_ASSERT(is_within_tolerance(total_samples, EXPECTED_SAMPLES_8000),
+    TEST_ASSERT_EQ(TARGET_RATE, samples.sample_rate, "output sample_rate");
+    TEST_ASSERT_EQ(EXPECTED_NUM_CHANNELS, (int)samples.data.size(), "num_channels");
+    TEST_ASSERT(is_within_tolerance(num_samples, EXPECTED_SAMPLES_8000),
                 "sample count within tolerance");
 
-    std::cout << "    [INFO] 44100 -> " << TARGET_RATE << " Hz: " << total_samples
+    std::cout << "    [INFO] 44100 -> " << TARGET_RATE << " Hz: " << num_samples
               << " samples (expected: " << EXPECTED_SAMPLES_8000 << ")" << std::endl;
 
     return true;
@@ -89,20 +75,14 @@ bool test_resample_16000()
     SingleStreamDecoder decoder(TARGET_RATE);
     decoder.open(TEST_FILE_PATH);
 
-    size_t total_samples = 0;
-    while (decoder.has_more())
-    {
-        auto frame = decoder.decode_next();
-        if (frame.data == nullptr)
-            break;
-        TEST_ASSERT_EQ(TARGET_RATE, frame.sample_rate, "output sample_rate");
-        total_samples += frame.num_samples;
-    }
+    auto samples = decoder.get_all_samples();
+    size_t num_samples = samples.data.empty() ? 0 : samples.data[0].size();
 
-    TEST_ASSERT(is_within_tolerance(total_samples, EXPECTED_SAMPLES_16000),
+    TEST_ASSERT_EQ(TARGET_RATE, samples.sample_rate, "output sample_rate");
+    TEST_ASSERT(is_within_tolerance(num_samples, EXPECTED_SAMPLES_16000),
                 "sample count within tolerance");
 
-    std::cout << "    [INFO] 44100 -> " << TARGET_RATE << " Hz: " << total_samples
+    std::cout << "    [INFO] 44100 -> " << TARGET_RATE << " Hz: " << num_samples
               << " samples (expected: " << EXPECTED_SAMPLES_16000 << ")" << std::endl;
 
     return true;
@@ -118,20 +98,14 @@ bool test_resample_32000()
     SingleStreamDecoder decoder(TARGET_RATE);
     decoder.open(TEST_FILE_PATH);
 
-    size_t total_samples = 0;
-    while (decoder.has_more())
-    {
-        auto frame = decoder.decode_next();
-        if (frame.data == nullptr)
-            break;
-        TEST_ASSERT_EQ(TARGET_RATE, frame.sample_rate, "output sample_rate");
-        total_samples += frame.num_samples;
-    }
+    auto samples = decoder.get_all_samples();
+    size_t num_samples = samples.data.empty() ? 0 : samples.data[0].size();
 
-    TEST_ASSERT(is_within_tolerance(total_samples, EXPECTED_SAMPLES_32000),
+    TEST_ASSERT_EQ(TARGET_RATE, samples.sample_rate, "output sample_rate");
+    TEST_ASSERT(is_within_tolerance(num_samples, EXPECTED_SAMPLES_32000),
                 "sample count within tolerance");
 
-    std::cout << "    [INFO] 44100 -> " << TARGET_RATE << " Hz: " << total_samples
+    std::cout << "    [INFO] 44100 -> " << TARGET_RATE << " Hz: " << num_samples
               << " samples (expected: " << EXPECTED_SAMPLES_32000 << ")" << std::endl;
 
     return true;
@@ -147,20 +121,13 @@ bool test_resample_44100()
     SingleStreamDecoder decoder(TARGET_RATE);
     decoder.open(TEST_FILE_PATH);
 
-    size_t total_samples = 0;
-    while (decoder.has_more())
-    {
-        auto frame = decoder.decode_next();
-        if (frame.data == nullptr)
-            break;
-        TEST_ASSERT_EQ(TARGET_RATE, frame.sample_rate, "output sample_rate");
-        total_samples += frame.num_samples;
-    }
+    auto samples = decoder.get_all_samples();
+    size_t num_samples = samples.data.empty() ? 0 : samples.data[0].size();
 
-    // Should be exact match since no resampling
-    TEST_ASSERT_EQ(EXPECTED_SAMPLES_44100, (int)total_samples, "exact sample count");
+    TEST_ASSERT_EQ(TARGET_RATE, samples.sample_rate, "output sample_rate");
+    TEST_ASSERT_EQ(EXPECTED_SAMPLES_44100, (int)num_samples, "exact sample count");
 
-    std::cout << "    [INFO] 44100 -> " << TARGET_RATE << " Hz: " << total_samples
+    std::cout << "    [INFO] 44100 -> " << TARGET_RATE << " Hz: " << num_samples
               << " samples (expected: " << EXPECTED_SAMPLES_44100 << ")" << std::endl;
 
     return true;
@@ -176,20 +143,14 @@ bool test_resample_48000()
     SingleStreamDecoder decoder(TARGET_RATE);
     decoder.open(TEST_FILE_PATH);
 
-    size_t total_samples = 0;
-    while (decoder.has_more())
-    {
-        auto frame = decoder.decode_next();
-        if (frame.data == nullptr)
-            break;
-        TEST_ASSERT_EQ(TARGET_RATE, frame.sample_rate, "output sample_rate");
-        total_samples += frame.num_samples;
-    }
+    auto samples = decoder.get_all_samples();
+    size_t num_samples = samples.data.empty() ? 0 : samples.data[0].size();
 
-    TEST_ASSERT(is_within_tolerance(total_samples, EXPECTED_SAMPLES_48000),
+    TEST_ASSERT_EQ(TARGET_RATE, samples.sample_rate, "output sample_rate");
+    TEST_ASSERT(is_within_tolerance(num_samples, EXPECTED_SAMPLES_48000),
                 "sample count within tolerance");
 
-    std::cout << "    [INFO] 44100 -> " << TARGET_RATE << " Hz: " << total_samples
+    std::cout << "    [INFO] 44100 -> " << TARGET_RATE << " Hz: " << num_samples
               << " samples (expected: " << EXPECTED_SAMPLES_48000 << ")" << std::endl;
 
     return true;
@@ -205,26 +166,23 @@ bool test_resample_audio_quality()
     SingleStreamDecoder decoder(TARGET_RATE);
     decoder.open(TEST_FILE_PATH);
 
-    int frame_count = 0;
-    while (decoder.has_more() && frame_count < 100)
+    auto samples = decoder.get_all_samples();
+    size_t num_samples = samples.data.empty() ? 0 : samples.data[0].size();
+
+    TEST_ASSERT_EQ(EXPECTED_NUM_CHANNELS, (int)samples.data.size(), "channels count");
+    TEST_ASSERT_GT((int)num_samples, 0, "has samples");
+
+    // Check first 1000 samples of each channel
+    for (size_t c = 0; c < samples.data.size(); ++c)
     {
-        auto frame = decoder.decode_next();
-        if (frame.data == nullptr)
-            break;
-
-        const float *samples = reinterpret_cast<const float *>(frame.data);
-        for (int i = 0; i < std::min(frame.num_samples, 100); ++i)
+        for (size_t i = 0; i < std::min(num_samples, (size_t)1000); ++i)
         {
-            TEST_ASSERT(!std::isnan(samples[i]), "sample is NaN");
-            TEST_ASSERT(!std::isinf(samples[i]), "sample is Inf");
-            TEST_ASSERT(samples[i] >= -2.0f && samples[i] <= 2.0f,
-                        "sample in valid range");
+            float sample = samples.data[c][i];
+            TEST_ASSERT(!std::isnan(sample), "sample is NaN");
+            TEST_ASSERT(!std::isinf(sample), "sample is Inf");
+            TEST_ASSERT(sample >= -2.0f && sample <= 2.0f, "sample in valid range");
         }
-
-        frame_count++;
     }
-
-    TEST_ASSERT_GT(frame_count, 0, "decoded frames");
 
     return true;
 }
@@ -237,7 +195,7 @@ int main(int argc, char **argv)
     (void)argc;
     (void)argv;
 
-    std::cout << "\n=== avioflow Decoder Resample Tests ===" << std::endl;
+    std::cout << "\n=== avioflow Decoder Resample Tests (get_all_samples) ===" << std::endl;
     std::cout << "Test file: " << TEST_FILE_PATH << std::endl;
     std::cout << "Source: " << ORIGINAL_SAMPLE_RATE << " Hz, "
               << ORIGINAL_NUM_SAMPLES << " samples" << std::endl;

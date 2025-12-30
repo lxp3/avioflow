@@ -3,6 +3,7 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
 
 namespace avioflow
 {
@@ -16,7 +17,14 @@ namespace avioflow
     std::string sample_format; // Container/Codec format name
   };
 
-  // Output structure for decoded audio frames
+  // Output structure for complete decoded audio (offline decoding)
+  struct AudioSamples
+  {
+    std::vector<std::vector<float>> data; // Planar float data per channel
+    int sample_rate = 0;
+  };
+
+  // Output structure for decoded audio frames (per-frame, zero-copy)
   struct FrameOutput
   {
     uint8_t *data = nullptr; // Pointer to planar float data (FLTP format)

@@ -32,6 +32,10 @@ namespace avioflow
     // WARNING: Data is only valid until the next decode call
     FrameOutput decode_next();
 
+    // Decode entire audio file at once (offline decoding)
+    // Returns all samples in planar float format
+    AudioSamples get_all_samples();
+
     // Check if there are more frames to decode
     bool has_more() const { return !eof_reached_; }
 
@@ -40,6 +44,7 @@ namespace avioflow
   private:
     void setup_decoder();
     void setup_resampler(AVFrame *frame);
+    int calculate_output_samples(int src_samples, int src_rate, int dst_rate) const;
 
     // Core FFmpeg contexts
     AVFormatContextPtr fmt_ctx_;
@@ -57,10 +62,6 @@ namespace avioflow
     bool eof_reached_ = false;
     bool needs_resample_ = true;
     bool resampler_initialized_ = false;
-
-    // Actual output parameters (resolved after first frame)
-    int out_sample_rate_ = 0;
-    int out_num_channels_ = 0;
 
     // static
     static constexpr AVSampleFormat output_sample_format_ = AV_SAMPLE_FMT_FLTP;
