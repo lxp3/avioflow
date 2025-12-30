@@ -6,7 +6,6 @@
 #include <cmath>
 #include <fstream>
 
-
 using namespace avioflow;
 using namespace avioflow::test;
 
@@ -24,7 +23,8 @@ const std::string TEST_URL =
 //=============================================================================
 // Test 1: File Path Decode
 //=============================================================================
-bool test_decode_from_filepath() {
+bool test_decode_from_filepath()
+{
   SingleStreamDecoder decoder;
   decoder.open(TEST_FILE_PATH);
 
@@ -36,12 +36,17 @@ bool test_decode_from_filepath() {
   TEST_ASSERT_NEAR(EXPECTED_DURATION, meta.duration, 1.0, "duration");
 
   // Decode all samples
-  auto samples = decoder.get_all_samples();
-  TEST_ASSERT_EQ(EXPECTED_NUM_CHANNELS, (int)samples.size(), "channels count");
-  TEST_ASSERT_EQ(EXPECTED_NUM_FRAMES, (int)samples[0].size(), "num_frames");
+  size_t total_samples = 0;
+  while (decoder.has_more())
+  {
+    auto frame = decoder.decode_next();
+    if (frame.data == nullptr)
+      break;
+    total_samples += frame.num_samples;
+    TEST_ASSERT_EQ(EXPECTED_NUM_CHANNELS, frame.num_channels, "frame channels");
+  }
 
-  // Verify both channels have same length
-  TEST_ASSERT_EQ(samples[0].size(), samples[1].size(), "channel length match");
+  TEST_ASSERT_EQ(EXPECTED_NUM_FRAMES, (int)total_samples, "num_frames");
 
   return true;
 }
@@ -49,7 +54,8 @@ bool test_decode_from_filepath() {
 //=============================================================================
 // Test 2: URL Decode
 //=============================================================================
-bool test_decode_from_url() {
+bool test_decode_from_url()
+{
   SingleStreamDecoder decoder;
   decoder.open(TEST_URL);
 
@@ -61,14 +67,14 @@ bool test_decode_from_url() {
 
   // For URL, just decode first few frames to verify it works
   int frame_count = 0;
-  while (decoder.has_more() && frame_count < 10) {
-    auto samples = decoder.decode_next();
-    if (samples.empty())
+  while (decoder.has_more() && frame_count < 10)
+  {
+    auto frame = decoder.decode_next();
+    if (frame.data == nullptr)
       break;
 
-    TEST_ASSERT_EQ(EXPECTED_NUM_CHANNELS, (int)samples.size(),
-                   "frame channels");
-    TEST_ASSERT_GT((int)samples[0].size(), 0, "frame samples");
+    TEST_ASSERT_EQ(EXPECTED_NUM_CHANNELS, frame.num_channels, "frame channels");
+    TEST_ASSERT_GT(frame.num_samples, 0, "frame samples");
     frame_count++;
   }
 
@@ -80,7 +86,8 @@ bool test_decode_from_url() {
 //=============================================================================
 // Test 3: Memory Decode
 //=============================================================================
-bool test_decode_from_memory() {
+bool test_decode_from_memory()
+{
   // Read file into memory
   std::ifstream file(TEST_FILE_PATH, std::ios::binary | std::ios::ate);
   TEST_ASSERT(file.is_open(), "Could not open test file for memory test");
@@ -104,17 +111,25 @@ bool test_decode_from_memory() {
   TEST_ASSERT_EQ(EXPECTED_NUM_CHANNELS, meta.num_channels, "num_channels");
 
   // Decode all samples
-  auto samples = decoder.get_all_samples();
-  TEST_ASSERT_EQ(EXPECTED_NUM_CHANNELS, (int)samples.size(), "channels count");
-  TEST_ASSERT_EQ(EXPECTED_NUM_FRAMES, (int)samples[0].size(), "num_frames");
+  size_t total_samples = 0;
+  while (decoder.has_more())
+  {
+    auto frame = decoder.decode_next();
+    if (frame.data == nullptr)
+      break;
+    total_samples += frame.num_samples;
+  }
+
+  TEST_ASSERT_EQ(EXPECTED_NUM_FRAMES, (int)total_samples, "num_frames");
 
   return true;
 }
 
 //=============================================================================
-// Test 4: Streaming Decode with decode_next_view (zero-copy float*)
+// Test 4: Streaming Decode with FrameOutput
 //=============================================================================
-bool test_streaming_decode_view() {
+bool test_streaming_decode()
+{
   SingleStreamDecoder decoder;
   decoder.open(TEST_FILE_PATH);
 
@@ -124,38 +139,33 @@ bool test_streaming_decode_view() {
   size_t total_samples = 0;
   int frame_count = 0;
 
-  while (decoder.has_more()) {
-    auto frame_view = decoder.decode_next_view();
-    if (frame_view.empty())
+  while (decoder.has_more())
+  {
+    auto frame = decoder.decode_next();
+    if (frame.data == nullptr)
       break;
 
     // Verify frame structure
-    TEST_ASSERT_EQ(EXPECTED_NUM_CHANNELS, (int)frame_view.size(),
-                   "frame channels");
+    TEST_ASSERT_EQ(EXPECTED_NUM_CHANNELS, frame.num_channels, "frame channels");
+    TEST_ASSERT_NOT_NULL(frame.data, "frame data pointer");
+    TEST_ASSERT_GT(frame.num_samples, 0, "frame samples count");
 
-    // Verify each channel has valid float* data
-    for (int ch = 0; ch < EXPECTED_NUM_CHANNELS; ++ch) {
-      const float *channel_data = frame_view[ch].data();
-      size_t channel_samples = frame_view[ch].size();
+    // Cast to float* for FLTP format (planar float)
+    // For planar audio, each channel is stored separately
+    // The data pointer points to channel 0
+    const float *channel_data = reinterpret_cast<const float *>(frame.data);
 
-      TEST_ASSERT_NOT_NULL(channel_data, "channel data pointer");
-      TEST_ASSERT_GT((int)channel_samples, 0, "channel samples count");
-
-      // Verify samples are valid floats (not NaN or Inf)
-      for (size_t i = 0; i < std::min(channel_samples, (size_t)10); ++i) {
-        TEST_ASSERT(!std::isnan(channel_data[i]), "sample is NaN");
-        TEST_ASSERT(!std::isinf(channel_data[i]), "sample is Inf");
-        // Audio samples should be in range [-1.0, 1.0] for normalized float
-        TEST_ASSERT(channel_data[i] >= -2.0f && channel_data[i] <= 2.0f,
-                    "sample out of reasonable range");
-      }
+    // Verify samples are valid floats (not NaN or Inf)
+    for (int i = 0; i < std::min(frame.num_samples, 10); ++i)
+    {
+      TEST_ASSERT(!std::isnan(channel_data[i]), "sample is NaN");
+      TEST_ASSERT(!std::isinf(channel_data[i]), "sample is Inf");
+      // Audio samples should be in range [-1.0, 1.0] for normalized float
+      TEST_ASSERT(channel_data[i] >= -2.0f && channel_data[i] <= 2.0f,
+                  "sample out of reasonable range");
     }
 
-    // All channels should have same sample count
-    TEST_ASSERT_EQ(frame_view[0].size(), frame_view[1].size(),
-                   "channel sample count match");
-
-    total_samples += frame_view[0].size();
+    total_samples += frame.num_samples;
     frame_count++;
   }
 
@@ -170,44 +180,17 @@ bool test_streaming_decode_view() {
 }
 
 //=============================================================================
-// Test 5: Streaming Decode with decode_next (copy mode)
+// Test 5: Metadata Verification
 //=============================================================================
-bool test_streaming_decode_copy() {
-  SingleStreamDecoder decoder;
-  decoder.open(TEST_FILE_PATH);
-
-  size_t total_samples = 0;
-  int frame_count = 0;
-
-  while (decoder.has_more()) {
-    auto samples = decoder.decode_next();
-    if (samples.empty())
-      break;
-
-    TEST_ASSERT_EQ(EXPECTED_NUM_CHANNELS, (int)samples.size(),
-                   "frame channels");
-    TEST_ASSERT_GT((int)samples[0].size(), 0, "frame samples");
-
-    total_samples += samples[0].size();
-    frame_count++;
-  }
-
-  TEST_ASSERT_EQ(EXPECTED_NUM_FRAMES, (int)total_samples, "total samples");
-
-  return true;
-}
-
-//=============================================================================
-// Test 6: Metadata Verification
-//=============================================================================
-bool test_metadata_format() {
+bool test_metadata_format()
+{
   SingleStreamDecoder decoder;
   decoder.open(TEST_FILE_PATH);
 
   const auto &meta = decoder.get_metadata();
 
   // MP3 format should be detected
-  TEST_ASSERT(meta.format.find("mp3") != std::string::npos,
+  TEST_ASSERT(meta.sample_format.find("mp3") != std::string::npos,
               "format should contain 'mp3'");
   TEST_ASSERT_EQ(EXPECTED_SAMPLE_RATE, meta.sample_rate, "sample_rate");
   TEST_ASSERT_EQ(EXPECTED_NUM_CHANNELS, meta.num_channels, "num_channels");
@@ -220,7 +203,8 @@ bool test_metadata_format() {
 //=============================================================================
 // Main Test Runner
 //=============================================================================
-int main(int argc, char **argv) {
+int main(int argc, char **argv)
+{
   std::cout << "\n=== avioflow Decoder Unit Tests ===" << std::endl;
   std::cout << "Test file: " << TEST_FILE_PATH << std::endl;
   std::cout << "Test URL: " << TEST_URL << std::endl;
@@ -230,7 +214,8 @@ int main(int argc, char **argv) {
   bool file_exists = check_file.good();
   check_file.close();
 
-  if (!file_exists) {
+  if (!file_exists)
+  {
     std::cerr << "\n[WARNING] Test file not found: " << TEST_FILE_PATH
               << std::endl;
     std::cerr << "Please download: " << TEST_URL << std::endl;
@@ -241,37 +226,42 @@ int main(int argc, char **argv) {
   TestRunner runner;
 
   // File-based tests (require local file)
-  if (file_exists) {
+  if (file_exists)
+  {
     runner.add_test("test_decode_from_filepath", test_decode_from_filepath);
     runner.add_test("test_decode_from_memory", test_decode_from_memory);
-    runner.add_test("test_streaming_decode_view", test_streaming_decode_view);
-    runner.add_test("test_streaming_decode_copy", test_streaming_decode_copy);
+    runner.add_test("test_streaming_decode", test_streaming_decode);
     runner.add_test("test_metadata_format", test_metadata_format);
-  } else {
+  }
+  else
+  {
     runner.add_test_skip("test_decode_from_filepath", test_decode_from_filepath,
                          "test file not found");
     runner.add_test_skip("test_decode_from_memory", test_decode_from_memory,
                          "test file not found");
-    runner.add_test_skip("test_streaming_decode_view",
-                         test_streaming_decode_view, "test file not found");
-    runner.add_test_skip("test_streaming_decode_copy",
-                         test_streaming_decode_copy, "test file not found");
+    runner.add_test_skip("test_streaming_decode", test_streaming_decode,
+                         "test file not found");
     runner.add_test_skip("test_metadata_format", test_metadata_format,
                          "test file not found");
   }
 
   // URL test (requires network, can be skipped with --skip-network flag)
   bool skip_network = false;
-  for (int i = 1; i < argc; ++i) {
-    if (std::string(argv[i]) == "--skip-network") {
+  for (int i = 1; i < argc; ++i)
+  {
+    if (std::string(argv[i]) == "--skip-network")
+    {
       skip_network = true;
     }
   }
 
-  if (skip_network) {
+  if (skip_network)
+  {
     runner.add_test_skip("test_decode_from_url", test_decode_from_url,
                          "network tests disabled");
-  } else {
+  }
+  else
+  {
     runner.add_test("test_decode_from_url", test_decode_from_url);
   }
 

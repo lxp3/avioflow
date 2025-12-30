@@ -55,24 +55,37 @@ add_executable(avioflow_test tests/decode_test.cpp)
 target_include_directories(avioflow_test PRIVATE ${FFMPEG_CORE_DIR})
 target_link_libraries(avioflow_test PRIVATE avioflow)
 
-# Unit tests
-add_executable(avioflow_unit_test tests/ffmpeg/decoder/test_decoder.cpp)
-target_include_directories(avioflow_unit_test PRIVATE 
+# Unit tests - Load tests
+add_executable(avioflow_load_test tests/ffmpeg/decoder/test_decoder_load.cpp)
+target_include_directories(avioflow_load_test PRIVATE 
     ${FFMPEG_CORE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/tests
 )
-target_link_libraries(avioflow_unit_test PRIVATE avioflow)
+target_link_libraries(avioflow_load_test PRIVATE avioflow)
 
-# Copy DLLs to bin (for both test executables)
+# Unit tests - Resample tests
+add_executable(avioflow_resample_test tests/ffmpeg/decoder/test_decoder_resample.cpp)
+target_include_directories(avioflow_resample_test PRIVATE 
+    ${FFMPEG_CORE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests
+)
+target_link_libraries(avioflow_resample_test PRIVATE avioflow)
+
+# Copy DLLs to bin (for all test executables)
 add_custom_command(TARGET avioflow_test POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
         "${FFMPEG_BIN_DIR}"
         "$<TARGET_FILE_DIR:avioflow_test>"
 )
 
-add_custom_command(TARGET avioflow_unit_test POST_BUILD
+add_custom_command(TARGET avioflow_load_test POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
         "${FFMPEG_BIN_DIR}"
-        "$<TARGET_FILE_DIR:avioflow_unit_test>"
+        "$<TARGET_FILE_DIR:avioflow_load_test>"
 )
 
+add_custom_command(TARGET avioflow_resample_test POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${FFMPEG_BIN_DIR}"
+        "$<TARGET_FILE_DIR:avioflow_resample_test>"
+)
