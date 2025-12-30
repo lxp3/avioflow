@@ -10,7 +10,7 @@ using namespace avioflow;
 using namespace avioflow::test;
 
 // Test file paths
-const std::string TEST_FILE_PATH = "./TownTheme.mp3";
+const std::string TEST_FILE_PATH = "./public/TownTheme.mp3";
 
 // Original file parameters
 constexpr int ORIGINAL_SAMPLE_RATE = 44100;

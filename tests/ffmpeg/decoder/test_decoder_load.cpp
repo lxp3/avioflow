@@ -16,7 +16,7 @@ constexpr int EXPECTED_NUM_FRAMES = 4297722;
 constexpr double EXPECTED_DURATION = 97.489; // seconds (approximate)
 
 // Test file paths
-const std::string TEST_FILE_PATH = "./TownTheme.mp3";
+const std::string TEST_FILE_PATH = "./public/TownTheme.mp3";
 const std::string TEST_URL =
     "https://opengameart.org/sites/default/files/TownTheme.mp3";
 
