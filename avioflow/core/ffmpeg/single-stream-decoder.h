@@ -2,9 +2,10 @@
 #pragma once
 
 #include "ffmpeg-common.h"
-#include "metadata.h"
+#include "../../include/metadata.h"
 #include <optional>
 #include <string>
+#include <functional>
 
 namespace avioflow
 {
@@ -12,25 +13,22 @@ namespace avioflow
   class SingleStreamDecoder
   {
   public:
-    explicit SingleStreamDecoder(
-        std::optional<int> output_sample_rate = std::nullopt,
-        std::optional<int> output_num_channels = std::nullopt);
+    explicit SingleStreamDecoder(const AudioStreamOptions &options = {});
     ~SingleStreamDecoder() = default;
 
-    // Direct opening - accepts file path, URL, or device (e.g.,
-    // "audio=Microphone")
+    // Open from file path, URL, or device (e.g., "audio=Microphone")
     void open(const std::string &source);
 
     // Open from memory buffer (e.g., raw encoded audio data with header)
-    void open(const uint8_t *data, size_t size);
+    void open_memory(const uint8_t *data, size_t size);
+ 
+    // Initialize for incremental byte streams with a read callback
+    // The callback should return: >0 (bytes read), 0 (EOF), <0 (no data available)
+    void open_stream(AVIOReadCallback avio_read_callback);
 
-    // Open from memory buffer with raw PCM data (no header)
-    void open(const uint8_t *data, size_t size, int sample_rate, int channels,
-              const std::string &pcm_format);
-
-    // Decode next frame - returns FrameOutput with pointer to internal buffer
+    // Decode next frame - returns pointer to internal AVFrame
     // WARNING: Data is only valid until the next decode call
-    FrameOutput decode_next();
+    AVFrame *decode_next();
 
     // Decode entire audio file at once (offline decoding)
     // Returns all samples in planar float format
@@ -45,6 +43,7 @@ namespace avioflow
     void setup_decoder();
     void setup_resampler(AVFrame *frame);
     int calculate_output_samples(int src_samples, int src_rate, int dst_rate) const;
+    AVFrame *process_decoded_frame();
 
     // Core FFmpeg contexts
     AVFormatContextPtr fmt_ctx_;
@@ -55,13 +54,15 @@ namespace avioflow
     AVFramePtr frame_;
     AVFramePtr converted_frame_;
 
+    AudioStreamOptions options_;
     Metadata metadata_;
     int audio_stream_index_ = -1;
-    std::optional<int> output_sample_rate_;
-    std::optional<int> output_num_channels_;
     bool eof_reached_ = false;
     bool needs_resample_ = true;
     bool resampler_initialized_ = false;
+
+    // Data provider callback for streaming
+    AVIOReadCallback avio_read_callback_;
 
     // static
     static constexpr AVSampleFormat output_sample_format_ = AV_SAMPLE_FMT_FLTP;

@@ -33,12 +33,14 @@ set(AVIOFLOW_SOURCES
     "${FFMPEG_CORE_DIR}/avio-context-handler.cpp"
     "${FFMPEG_CORE_DIR}/device-handler.cpp"
     "${FFMPEG_CORE_DIR}/single-stream-decoder.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/avioflow/include/avioflow-cxx-api.cpp"
 )
 
 add_library(avioflow SHARED ${AVIOFLOW_SOURCES})
 
 target_include_directories(avioflow PUBLIC 
     $<BUILD_INTERFACE:${FFMPEG_CORE_DIR}>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/avioflow/include>
     $<INSTALL_INTERFACE:include>
 )
 

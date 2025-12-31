@@ -43,7 +43,7 @@ bool test_resample_8000()
 {
     constexpr int TARGET_RATE = 8000;
 
-    SingleStreamDecoder decoder(TARGET_RATE);
+    SingleStreamDecoder decoder({TARGET_RATE});
     decoder.open(TEST_FILE_PATH);
 
     // Verify source metadata unchanged
@@ -53,14 +53,13 @@ bool test_resample_8000()
 
     auto samples = decoder.get_all_samples();
     size_t num_samples = samples.data.empty() ? 0 : samples.data[0].size();
+    auto diff = static_cast<int64_t>(num_samples) - EXPECTED_SAMPLES_8000;
+    printf(std::format("sample_rate: {} -> {},  num_samples: {}, diff: {}\n", meta.sample_rate, TARGET_RATE, num_samples, diff).c_str());
 
     TEST_ASSERT_EQ(TARGET_RATE, samples.sample_rate, "output sample_rate");
     TEST_ASSERT_EQ(EXPECTED_NUM_CHANNELS, (int)samples.data.size(), "num_channels");
     TEST_ASSERT(is_within_tolerance(num_samples, EXPECTED_SAMPLES_8000),
                 "sample count within tolerance");
-
-    std::cout << "    [INFO] 44100 -> " << TARGET_RATE << " Hz: " << num_samples
-              << " samples (expected: " << EXPECTED_SAMPLES_8000 << ")" << std::endl;
 
     return true;
 }
@@ -72,18 +71,18 @@ bool test_resample_16000()
 {
     constexpr int TARGET_RATE = 16000;
 
-    SingleStreamDecoder decoder(TARGET_RATE);
+    SingleStreamDecoder decoder({TARGET_RATE});
     decoder.open(TEST_FILE_PATH);
+    const auto &meta = decoder.get_metadata();
 
     auto samples = decoder.get_all_samples();
     size_t num_samples = samples.data.empty() ? 0 : samples.data[0].size();
+    auto diff = static_cast<int64_t>(num_samples) - EXPECTED_SAMPLES_16000;
+    printf(std::format("sample_rate: {} -> {},  num_samples: {}, diff: {}\n", meta.sample_rate, TARGET_RATE, num_samples, diff).c_str());
 
     TEST_ASSERT_EQ(TARGET_RATE, samples.sample_rate, "output sample_rate");
     TEST_ASSERT(is_within_tolerance(num_samples, EXPECTED_SAMPLES_16000),
                 "sample count within tolerance");
-
-    std::cout << "    [INFO] 44100 -> " << TARGET_RATE << " Hz: " << num_samples
-              << " samples (expected: " << EXPECTED_SAMPLES_16000 << ")" << std::endl;
 
     return true;
 }
@@ -95,18 +94,18 @@ bool test_resample_32000()
 {
     constexpr int TARGET_RATE = 32000;
 
-    SingleStreamDecoder decoder(TARGET_RATE);
+    SingleStreamDecoder decoder({TARGET_RATE});
     decoder.open(TEST_FILE_PATH);
+    const auto &meta = decoder.get_metadata();
 
     auto samples = decoder.get_all_samples();
     size_t num_samples = samples.data.empty() ? 0 : samples.data[0].size();
+    auto diff = static_cast<int64_t>(num_samples) - EXPECTED_SAMPLES_32000;
+    printf(std::format("sample_rate: {} -> {},  num_samples: {}, diff: {}\n", meta.sample_rate, TARGET_RATE, num_samples, diff).c_str());
 
     TEST_ASSERT_EQ(TARGET_RATE, samples.sample_rate, "output sample_rate");
     TEST_ASSERT(is_within_tolerance(num_samples, EXPECTED_SAMPLES_32000),
                 "sample count within tolerance");
-
-    std::cout << "    [INFO] 44100 -> " << TARGET_RATE << " Hz: " << num_samples
-              << " samples (expected: " << EXPECTED_SAMPLES_32000 << ")" << std::endl;
 
     return true;
 }
@@ -118,17 +117,17 @@ bool test_resample_44100()
 {
     constexpr int TARGET_RATE = 44100;
 
-    SingleStreamDecoder decoder(TARGET_RATE);
+    SingleStreamDecoder decoder({TARGET_RATE});
     decoder.open(TEST_FILE_PATH);
+    const auto &meta = decoder.get_metadata();
 
     auto samples = decoder.get_all_samples();
     size_t num_samples = samples.data.empty() ? 0 : samples.data[0].size();
+    auto diff = static_cast<int64_t>(num_samples) - EXPECTED_SAMPLES_44100;
+    printf(std::format("sample_rate: {} -> {},  num_samples: {}, diff: {}\n", meta.sample_rate, TARGET_RATE, num_samples, diff).c_str());
 
     TEST_ASSERT_EQ(TARGET_RATE, samples.sample_rate, "output sample_rate");
     TEST_ASSERT_EQ(EXPECTED_SAMPLES_44100, (int)num_samples, "exact sample count");
-
-    std::cout << "    [INFO] 44100 -> " << TARGET_RATE << " Hz: " << num_samples
-              << " samples (expected: " << EXPECTED_SAMPLES_44100 << ")" << std::endl;
 
     return true;
 }
@@ -140,18 +139,18 @@ bool test_resample_48000()
 {
     constexpr int TARGET_RATE = 48000;
 
-    SingleStreamDecoder decoder(TARGET_RATE);
+    SingleStreamDecoder decoder({TARGET_RATE});
     decoder.open(TEST_FILE_PATH);
+    const auto &meta = decoder.get_metadata();
 
     auto samples = decoder.get_all_samples();
     size_t num_samples = samples.data.empty() ? 0 : samples.data[0].size();
+    auto diff = static_cast<int64_t>(num_samples) - EXPECTED_SAMPLES_48000;
+    printf(std::format("sample_rate: {} -> {},  num_samples: {}, diff: {}\n", meta.sample_rate, TARGET_RATE, num_samples, diff).c_str());
 
     TEST_ASSERT_EQ(TARGET_RATE, samples.sample_rate, "output sample_rate");
     TEST_ASSERT(is_within_tolerance(num_samples, EXPECTED_SAMPLES_48000),
                 "sample count within tolerance");
-
-    std::cout << "    [INFO] 44100 -> " << TARGET_RATE << " Hz: " << num_samples
-              << " samples (expected: " << EXPECTED_SAMPLES_48000 << ")" << std::endl;
 
     return true;
 }
@@ -163,7 +162,7 @@ bool test_resample_audio_quality()
 {
     constexpr int TARGET_RATE = 16000;
 
-    SingleStreamDecoder decoder(TARGET_RATE);
+    SingleStreamDecoder decoder({TARGET_RATE});
     decoder.open(TEST_FILE_PATH);
 
     auto samples = decoder.get_all_samples();
@@ -196,11 +195,6 @@ int main(int argc, char **argv)
     (void)argv;
 
     std::cout << "\n=== avioflow Decoder Resample Tests (get_all_samples) ===" << std::endl;
-    std::cout << "Test file: " << TEST_FILE_PATH << std::endl;
-    std::cout << "Source: " << ORIGINAL_SAMPLE_RATE << " Hz, "
-              << ORIGINAL_NUM_SAMPLES << " samples" << std::endl;
-    std::cout << "Testing sample rates: 8000, 16000, 32000, 44100, 48000 Hz"
-              << std::endl;
 
     // Check if test file exists
     std::ifstream check_file(TEST_FILE_PATH);
@@ -209,10 +203,7 @@ int main(int argc, char **argv)
 
     if (!file_exists)
     {
-        std::cerr << "\n[ERROR] Test file not found: " << TEST_FILE_PATH
-                  << std::endl;
-        std::cerr << "Please ensure TownTheme.mp3 is in the current directory."
-                  << std::endl;
+        std::cerr << "\n[ERROR] Test file not found: " << TEST_FILE_PATH << std::endl;
         return 1;
     }
 

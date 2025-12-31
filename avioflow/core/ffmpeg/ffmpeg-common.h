@@ -6,6 +6,7 @@
 #include <vector>
 #include <memory>
 #include <stdexcept>
+#include <functional>
 
 extern "C" {
 #include <libavcodec/avcodec.h>
@@ -42,5 +43,14 @@ using AVIOContextPtr = std::unique_ptr<AVIOContext, AVIOContextDeleter>;
 using AVPacketPtr = std::unique_ptr<AVPacket, AVPacketDeleter>;
 using AVFramePtr = std::unique_ptr<AVFrame, AVFrameDeleter>;
 using SwrContextPtr = std::unique_ptr<SwrContext, SwrContextDeleter>;
+
+// AVIO callback function types (raw C function pointers for FFmpeg)
+using AVIOReadFunction = int (*)(void*, uint8_t*, int);
+using AVIOWriteFunction = int (*)(void*, const uint8_t*, int);
+using AVIOSeekFunction = int64_t (*)(void*, int64_t, int);
+
+// AVIO read callback for streaming input
+// Returns: >0 (bytes read), 0 (EOF), <0 (no data available, try again)
+using AVIOReadCallback = std::function<int(uint8_t*, int)>;
 
 } // namespace avioflow

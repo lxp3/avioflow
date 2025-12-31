@@ -1,4 +1,3 @@
-
 #include "avio-context-handler.h"
 #include "ffmpeg-common.h"
 #include <algorithm>
@@ -15,11 +14,11 @@ namespace avioflow
     return fmt_ctx;
   }
 
-  AVFormatContext *AvioContextHandler::open_memory(const uint8_t *data,
-                                                   size_t size,
-                                                   const std::string &format,
-                                                   int sample_rate,
-                                                   int channels)
+  AVFormatContext *AvioContextHandler::create_avio_context(
+      void *opaque,
+      AVIOReadFunction read_packet,
+      AVIOSeekFunction seek,
+      const AudioStreamOptions &options)
   {
     AVFormatContext *fmt_ctx = avformat_alloc_context();
     if (!fmt_ctx)
@@ -28,18 +27,18 @@ namespace avioflow
     uint8_t *avio_ctx_buffer =
         static_cast<uint8_t *>(av_malloc(AVIO_BUFFER_SIZE));
     if (!avio_ctx_buffer)
+    {
+      avformat_free_context(fmt_ctx);
       throw std::runtime_error("Could not allocate AVIO buffer");
-
-    MemoryContext *m_ctx = new MemoryContext{data, size, 0};
+    }
 
     AVIOContext *avio_ctx = avio_alloc_context(
-        avio_ctx_buffer, AVIO_BUFFER_SIZE, 0, m_ctx,
-        &AvioContextHandler::read_packet, nullptr, &AvioContextHandler::seek);
+        avio_ctx_buffer, AVIO_BUFFER_SIZE, 0, opaque,
+        read_packet, nullptr, seek);
 
     if (!avio_ctx)
     {
       av_free(avio_ctx_buffer);
-      delete m_ctx;
       avformat_free_context(fmt_ctx);
       throw std::runtime_error("Could not allocate AVIOContext");
     }
@@ -47,40 +46,60 @@ namespace avioflow
     fmt_ctx->pb = avio_ctx;
     fmt_ctx->flags |= AVFMT_FLAG_CUSTOM_IO;
 
-    AVDictionary *options = nullptr;
+    AVDictionary *av_options = nullptr;
     const AVInputFormat *iformat = nullptr;
 
-    if (!format.empty())
+    if (options.input_format.has_value())
     {
-      iformat = av_find_input_format(format.c_str());
-      if (!iformat)
-      {
-        // Fallback or error? Let's just try to find it.
-      }
+      iformat = av_find_input_format(options.input_format->c_str());
     }
 
-    if (sample_rate > 0)
+    if (options.input_sample_rate.has_value())
     {
-      av_dict_set_int(&options, "sample_rate", sample_rate, 0);
+      av_dict_set_int(&av_options, "sample_rate", *options.input_sample_rate, 0);
     }
-    if (channels > 0)
+    if (options.input_channels.has_value())
     {
-      av_dict_set_int(&options, "channels", channels, 0);
-    }
-
-    // Some formats need to be probed
-    if (avformat_open_input(&fmt_ctx, nullptr, iformat, &options) < 0)
-    {
-      av_dict_free(&options);
-      throw std::runtime_error("Could not open memory input");
+      av_dict_set_int(&av_options, "channels", *options.input_channels, 0);
     }
 
-    av_dict_free(&options);
+    // Attempt to open input
+    if (avformat_open_input(&fmt_ctx, nullptr, iformat, &av_options) < 0)
+    {
+      av_dict_free(&av_options);
+      // Note: avio_ctx will be freed by avformat_close_input if we used unique_ptr,
+      // but here we return raw pointer. The caller (SingleStreamDecoder) manages fmt_ctx_.
+      // If it fails here, we need to clean up manually.
+      av_freep(&avio_ctx->buffer);
+      avio_context_free(&avio_ctx);
+      avformat_free_context(fmt_ctx);
+      throw std::runtime_error("Could not open custom I/O input");
+    }
+
+    av_dict_free(&av_options);
     return fmt_ctx;
   }
 
-  // The signature of this function is defined by FFMPEG.
-  int AvioContextHandler::read_packet(void *opaque, uint8_t *buf, int buf_size)
+  AVFormatContext *AvioContextHandler::open_memory(const uint8_t *data,
+                                                   size_t size,
+                                                   const AudioStreamOptions &options)
+  {
+    MemoryContext *m_ctx = new MemoryContext{data, size, 0};
+    try
+    {
+      return create_avio_context(static_cast<void*>(m_ctx), 
+                            AVIOReadFunction(read_packet_memory),
+                            AVIOSeekFunction(seek_memory), 
+                            options);
+    }
+    catch (...)
+    {
+      delete m_ctx;
+      throw;
+    }
+  }
+
+  int AvioContextHandler::read_packet_memory(void *opaque, uint8_t *buf, int buf_size)
   {
     MemoryContext *m_ctx = static_cast<MemoryContext *>(opaque);
     int read = static_cast<int>(
@@ -92,7 +111,7 @@ namespace avioflow
     return read;
   }
 
-  int64_t AvioContextHandler::seek(void *opaque, int64_t offset, int whence)
+  int64_t AvioContextHandler::seek_memory(void *opaque, int64_t offset, int whence)
   {
     MemoryContext *m_ctx = static_cast<MemoryContext *>(opaque);
     if (whence == AVSEEK_SIZE)
@@ -118,6 +137,44 @@ namespace avioflow
       return -1;
     m_ctx->pos = static_cast<size_t>(new_pos);
     return static_cast<int64_t>(m_ctx->pos);
+  }
+
+  int AvioContextHandler::read_packet_stream(void *opaque, uint8_t *buf, int buf_size)
+  {
+    StreamContext *s_ctx = static_cast<StreamContext *>(opaque);
+    if (s_ctx->avio_read_callback)
+    {
+      int result = s_ctx->avio_read_callback(buf, buf_size);
+      // Translate simple int to FFmpeg error codes:
+      // >0: bytes read (pass through)
+      // 0: EOF
+      // <0: no data available (EAGAIN)
+      if (result == 0)
+        return AVERROR_EOF;
+      if (result < 0)
+        return AVERROR(EAGAIN);
+      return result;
+    }
+    return AVERROR_EOF;
+  }
+
+  AVFormatContext *AvioContextHandler::open_stream(AVIOReadCallback avio_read_callback,
+                                                   const AudioStreamOptions &options)
+  {
+    StreamContext *s_ctx = new StreamContext{std::move(avio_read_callback)};
+    try
+    {
+      // Streaming input typically doesn't support seeking
+      return create_avio_context(static_cast<void*>(s_ctx), 
+                            AVIOReadFunction(read_packet_stream),
+                            nullptr, 
+                            options);
+    }
+    catch (...)
+    {
+      delete s_ctx;
+      throw;
+    }
   }
 
 } // namespace avioflow

@@ -23,10 +23,10 @@ void test_file_decode(const std::string &path)
         int frame_count = 0;
         while (decoder.has_more())
         {
-            auto frame = decoder.decode_next();
-            if (frame.data == nullptr)
+            auto *frame = decoder.decode_next();
+            if (frame == nullptr)
                 break;
-            total_samples += frame.num_samples;
+            total_samples += frame->nb_samples;
             frame_count++;
         }
         std::cout << "Decoded " << total_samples << " samples per channel in "

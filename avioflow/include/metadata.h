@@ -4,9 +4,19 @@
 #include <cstdint>
 #include <string>
 #include <vector>
+#include <optional>
 
 namespace avioflow
 {
+
+  struct AudioStreamOptions
+  {
+    std::optional<int> output_sample_rate;
+    std::optional<int> output_num_channels;
+    std::optional<int> input_sample_rate;
+    std::optional<int> input_channels;
+    std::optional<std::string> input_format;
+  };
 
   struct Metadata
   {
@@ -22,16 +32,6 @@ namespace avioflow
   {
     std::vector<std::vector<float>> data; // Planar float data per channel
     int sample_rate = 0;
-  };
-
-  // Output structure for decoded audio frames (per-frame, zero-copy)
-  struct FrameOutput
-  {
-    uint8_t *data = nullptr; // Pointer to planar float data (FLTP format)
-    size_t size = 0;         // Size in bytes per channel
-    int sample_rate = 0;     // Output sample rate
-    int num_channels = 0;
-    int num_samples = 0; // Samples per channel
   };
 
 } // namespace avioflow
