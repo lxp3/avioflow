@@ -4,6 +4,8 @@ project(avioflow VERSION 0.1.0 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+option(BUILD_SHARED_LIBS "Build using shared libraries" ON)
+
 # Fix for Ninja + MSVC: Use embedded debug info (/Z7) instead of separate PDB (/Zi)
 # This prevents D8050 errors when Ninja compiles multiple files in parallel
 if(CMAKE_GENERATOR MATCHES "Ninja" AND MSVC)
@@ -73,21 +75,23 @@ target_include_directories(avioflow_resample_test PRIVATE
 )
 target_link_libraries(avioflow_resample_test PRIVATE avioflow)
 
-# Copy DLLs to bin (for all test executables)
-add_custom_command(TARGET avioflow_audio_load POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-        "${FFMPEG_BIN_DIR}"
-        "$<TARGET_FILE_DIR:avioflow_audio_load>"
-)
+# Copy DLLs to bin (for all test executables) - Windows Shared only
+if(BUILD_SHARED_LIBS AND WIN32)
+    add_custom_command(TARGET avioflow_audio_load POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${FFMPEG_BIN_DIR}"
+            "$<TARGET_FILE_DIR:avioflow_audio_load>"
+    )
 
-add_custom_command(TARGET avioflow_load_test POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-        "${FFMPEG_BIN_DIR}"
-        "$<TARGET_FILE_DIR:avioflow_load_test>"
-)
+    add_custom_command(TARGET avioflow_load_test POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${FFMPEG_BIN_DIR}"
+            "$<TARGET_FILE_DIR:avioflow_load_test>"
+    )
 
-add_custom_command(TARGET avioflow_resample_test POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-        "${FFMPEG_BIN_DIR}"
-        "$<TARGET_FILE_DIR:avioflow_resample_test>"
-)
+    add_custom_command(TARGET avioflow_resample_test POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${FFMPEG_BIN_DIR}"
+            "$<TARGET_FILE_DIR:avioflow_resample_test>"
+    )
+endif()
