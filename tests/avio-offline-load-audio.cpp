@@ -1,5 +1,5 @@
 
-#include "single-stream-decoder.h"
+#include "avioflow-cxx-api.h"
 #include <fstream>
 #include <iostream>
 #include <vector>
@@ -8,7 +8,7 @@ void test_file_decode(const std::string &path)
 {
     try
     {
-        avioflow::SingleStreamDecoder decoder;
+        avioflow::AudioDecoder decoder;
         decoder.open(path);
 
         const auto &meta = decoder.get_metadata();
@@ -23,10 +23,10 @@ void test_file_decode(const std::string &path)
         int frame_count = 0;
         while (!decoder.is_finished())
         {
-            auto *frame = decoder.decode_next();
-            if (frame == nullptr)
+            auto samples = decoder.decode_next();
+            if (samples.data.empty())
                 break;
-            total_samples += frame->nb_samples;
+            total_samples += samples.data[0].size();
             frame_count++;
         }
         std::cout << "Decoded " << total_samples << " samples per channel in "

@@ -63,6 +63,7 @@ namespace avioflow
 
     // Data provider callback for streaming
     AVIOReadCallback avio_read_callback_;
+    int64_t total_samples_decoded_ = 0;
 
     // static
     static constexpr AVSampleFormat output_sample_format_ = AV_SAMPLE_FMT_FLTP;

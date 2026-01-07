@@ -1,7 +1,7 @@
 // Unit tests for SingleStreamDecoder
 // Tests cover: URL, file path, memory, and streaming decode
 
-#include "single-stream-decoder.h"
+#include "avioflow-cxx-api.h"
 #include "test_framework.h"
 #include <cmath>
 #include <fstream>
@@ -25,7 +25,7 @@ const std::string TEST_URL =
 //=============================================================================
 bool test_decode_from_filepath()
 {
-  SingleStreamDecoder decoder;
+  AudioDecoder decoder;
   decoder.open(TEST_FILE_PATH);
 
   const auto &meta = decoder.get_metadata();
@@ -39,11 +39,11 @@ bool test_decode_from_filepath()
   size_t total_samples = 0;
   while (!decoder.is_finished())
   {
-    auto *frame = decoder.decode_next();
-    if (frame == nullptr)
+    auto samples = decoder.decode_next();
+    if (samples.data.empty())
       break;
-    total_samples += frame->nb_samples;
-    TEST_ASSERT_EQ(EXPECTED_NUM_CHANNELS, frame->ch_layout.nb_channels, "frame channels");
+    total_samples += samples.data[0].size();
+    TEST_ASSERT_EQ(EXPECTED_NUM_CHANNELS, (int)samples.data.size(), "frame channels");
   }
 
   TEST_ASSERT_EQ(EXPECTED_NUM_FRAMES, (int)total_samples, "num_frames");
@@ -56,7 +56,7 @@ bool test_decode_from_filepath()
 //=============================================================================
 bool test_decode_from_url()
 {
-  SingleStreamDecoder decoder;
+  AudioDecoder decoder;
   decoder.open(TEST_URL);
 
   const auto &meta = decoder.get_metadata();
@@ -69,12 +69,12 @@ bool test_decode_from_url()
   int frame_count = 0;
   while (!decoder.is_finished() && frame_count < 10)
   {
-    auto *frame = decoder.decode_next();
-    if (frame == nullptr)
+    auto samples = decoder.decode_next();
+    if (samples.data.empty())
       break;
 
-    TEST_ASSERT_EQ(EXPECTED_NUM_CHANNELS, frame->ch_layout.nb_channels, "frame channels");
-    TEST_ASSERT_GT(frame->nb_samples, 0, "frame samples");
+    TEST_ASSERT_EQ(EXPECTED_NUM_CHANNELS, (int)samples.data.size(), "frame channels");
+    TEST_ASSERT_GT((int)samples.data[0].size(), 0, "frame samples");
     frame_count++;
   }
 
@@ -101,7 +101,7 @@ bool test_decode_from_memory()
   file.close();
 
   // Decode from memory
-  SingleStreamDecoder decoder;
+  AudioDecoder decoder;
   decoder.open_memory(buffer.data(), buffer.size());
 
   const auto &meta = decoder.get_metadata();
@@ -114,10 +114,10 @@ bool test_decode_from_memory()
   size_t total_samples = 0;
   while (!decoder.is_finished())
   {
-    auto *frame = decoder.decode_next();
-    if (frame == nullptr)
+    auto samples = decoder.decode_next();
+    if (samples.data.empty())
       break;
-    total_samples += frame->nb_samples;
+    total_samples += samples.data[0].size();
   }
 
   TEST_ASSERT_EQ(EXPECTED_NUM_FRAMES, (int)total_samples, "num_frames");
@@ -157,21 +157,21 @@ bool test_streaming_decode()
     return to_read;
   };
 
-  SingleStreamDecoder decoder;
+  AudioDecoder decoder;
   decoder.open_stream(avio_read_callback);
 
   size_t total_samples = 0;
 
   while (!decoder.is_finished())
   {
-    auto *frame = decoder.decode_next();
-    if (frame == nullptr)
+    auto samples = decoder.decode_next();
+    if (samples.data.empty())
       break;
 
-    TEST_ASSERT_EQ(EXPECTED_NUM_CHANNELS, frame->ch_layout.nb_channels, "frame channels");
-    TEST_ASSERT_GT(frame->nb_samples, 0, "frame samples count");
+    TEST_ASSERT_EQ(EXPECTED_NUM_CHANNELS, (int)samples.data.size(), "frame channels");
+    TEST_ASSERT_GT((int)samples.data[0].size(), 0, "frame samples count");
 
-    total_samples += frame->nb_samples;
+    total_samples += samples.data[0].size();
   }
 
   // Note: Streaming mode may produce slightly different sample counts due to
@@ -188,7 +188,7 @@ bool test_streaming_decode()
 //=============================================================================
 bool test_metadata_format()
 {
-  SingleStreamDecoder decoder;
+  AudioDecoder decoder;
   decoder.open(TEST_FILE_PATH);
 
   const auto &meta = decoder.get_metadata();

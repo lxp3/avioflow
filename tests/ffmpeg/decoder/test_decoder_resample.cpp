@@ -1,7 +1,7 @@
 // Unit tests for SingleStreamDecoder - Resampling
 // Tests cover: output sample rate conversion to common rates using get_all_samples()
 
-#include "single-stream-decoder.h"
+#include "avioflow-cxx-api.h"
 #include "test_framework.h"
 #include <cmath>
 #include <fstream>
@@ -43,7 +43,7 @@ bool test_resample_8000()
 {
     constexpr int TARGET_RATE = 8000;
 
-    SingleStreamDecoder decoder({TARGET_RATE});
+    AudioDecoder decoder({TARGET_RATE});
     decoder.open(TEST_FILE_PATH);
 
     // Verify source metadata unchanged
@@ -71,7 +71,7 @@ bool test_resample_16000()
 {
     constexpr int TARGET_RATE = 16000;
 
-    SingleStreamDecoder decoder({TARGET_RATE});
+    AudioDecoder decoder({TARGET_RATE});
     decoder.open(TEST_FILE_PATH);
     const auto &meta = decoder.get_metadata();
 
@@ -94,7 +94,7 @@ bool test_resample_32000()
 {
     constexpr int TARGET_RATE = 32000;
 
-    SingleStreamDecoder decoder({TARGET_RATE});
+    AudioDecoder decoder({TARGET_RATE});
     decoder.open(TEST_FILE_PATH);
     const auto &meta = decoder.get_metadata();
 
@@ -117,7 +117,7 @@ bool test_resample_44100()
 {
     constexpr int TARGET_RATE = 44100;
 
-    SingleStreamDecoder decoder({TARGET_RATE});
+    AudioDecoder decoder({TARGET_RATE});
     decoder.open(TEST_FILE_PATH);
     const auto &meta = decoder.get_metadata();
 
@@ -139,7 +139,7 @@ bool test_resample_48000()
 {
     constexpr int TARGET_RATE = 48000;
 
-    SingleStreamDecoder decoder({TARGET_RATE});
+    AudioDecoder decoder({TARGET_RATE});
     decoder.open(TEST_FILE_PATH);
     const auto &meta = decoder.get_metadata();
 
@@ -162,7 +162,7 @@ bool test_resample_audio_quality()
 {
     constexpr int TARGET_RATE = 16000;
 
-    SingleStreamDecoder decoder({TARGET_RATE});
+    AudioDecoder decoder({TARGET_RATE});
     decoder.open(TEST_FILE_PATH);
 
     auto samples = decoder.get_all_samples();

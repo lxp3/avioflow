@@ -62,9 +62,19 @@ namespace avioflow
     // Populate metadata
     metadata_.sample_rate = codec_ctx_->sample_rate;
     metadata_.num_channels = codec_ctx_->ch_layout.nb_channels;
-    metadata_.duration = static_cast<double>(fmt_ctx_->duration) / AV_TIME_BASE;
+    
+    // Safer duration calculation to avoid overflow/garbage values
+    if (fmt_ctx_->duration != AV_NOPTS_VALUE) {
+        metadata_.duration = static_cast<double>(fmt_ctx_->duration) / AV_TIME_BASE;
+    } else if (stream->duration != AV_NOPTS_VALUE) {
+        metadata_.duration = static_cast<double>(stream->duration) * av_q2d(stream->time_base);
+    } else {
+        metadata_.duration = 0.0;
+    }
+
     metadata_.sample_format = fmt_ctx_->iformat->name;
 
+    total_samples_decoded_ = 0;
     eof_reached_ = false;
     resampler_initialized_ = false;
   }
@@ -163,13 +173,22 @@ namespace avioflow
       int ret = avcodec_receive_frame(codec_ctx_.get(), frame_.get());
       if (ret >= 0)
       {
-        // Got a frame, process and return
-        return process_decoded_frame();
+        // Got a frame, process and update total samples
+        AVFrame* decoded = process_decoded_frame();
+        if (decoded) {
+            total_samples_decoded_ += decoded->nb_samples;
+        }
+        return decoded;
       }
       
       // If fully drained (no more frames from codec)
       if (ret == AVERROR_EOF)
       {
+        // Update metadata with actual decoded counts at the end
+        metadata_.num_samples = total_samples_decoded_;
+        if (codec_ctx_->sample_rate > 0) {
+            metadata_.duration = static_cast<double>(total_samples_decoded_) / codec_ctx_->sample_rate;
+        }
         return nullptr;
       }
       else if (ret < 0 && ret != AVERROR(EAGAIN))
