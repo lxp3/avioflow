@@ -219,7 +219,7 @@ namespace avioflow
   AudioSamples SingleStreamDecoder::get_all_samples()
   {
     AudioSamples result;
-    while (has_more())
+    while (!is_finished())
     {
       auto *f = decode_next();
       if (!f)

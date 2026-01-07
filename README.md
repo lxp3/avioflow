@@ -66,7 +66,7 @@ const auto& meta = decoder.get_metadata();
 std::cout << "Sample Rate: " << meta.sample_rate << " Hz\n";
 std::cout << "Channels: " << meta.num_channels << "\n";
 
-while (decoder.has_more())
+while (!decoder.is_finished())
 {
     auto frame = decoder.decode_next();
     if (frame.data == nullptr)

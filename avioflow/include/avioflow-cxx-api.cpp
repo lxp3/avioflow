@@ -78,9 +78,9 @@ namespace avioflow
 
   // --- Status ---
 
-  bool AudioDecoder::has_more() const
+  bool AudioDecoder::is_finished() const
   {
-    return impl_->decoder_.has_more();
+    return impl_->decoder_.is_finished();
   }
 
   const Metadata &AudioDecoder::get_metadata() const

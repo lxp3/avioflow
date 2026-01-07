@@ -48,7 +48,7 @@ namespace avioflow
 
     // --- Status ---
 
-    bool has_more() const;
+    bool is_finished() const;
     const Metadata &get_metadata() const;
 
   private:

@@ -37,7 +37,7 @@ bool test_decode_from_filepath()
 
   // Decode all samples
   size_t total_samples = 0;
-  while (decoder.has_more())
+  while (!decoder.is_finished())
   {
     auto *frame = decoder.decode_next();
     if (frame == nullptr)
@@ -67,7 +67,7 @@ bool test_decode_from_url()
 
   // For URL, just decode first few frames to verify it works
   int frame_count = 0;
-  while (decoder.has_more() && frame_count < 10)
+  while (!decoder.is_finished() && frame_count < 10)
   {
     auto *frame = decoder.decode_next();
     if (frame == nullptr)
@@ -112,7 +112,7 @@ bool test_decode_from_memory()
 
   // Decode all samples
   size_t total_samples = 0;
-  while (decoder.has_more())
+  while (!decoder.is_finished())
   {
     auto *frame = decoder.decode_next();
     if (frame == nullptr)
@@ -162,7 +162,7 @@ bool test_streaming_decode()
 
   size_t total_samples = 0;
 
-  while (decoder.has_more())
+  while (!decoder.is_finished())
   {
     auto *frame = decoder.decode_next();
     if (frame == nullptr)

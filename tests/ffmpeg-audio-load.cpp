@@ -21,7 +21,7 @@ void test_file_decode(const std::string &path)
         // Decode all frames and count samples
         size_t total_samples = 0;
         int frame_count = 0;
-        while (decoder.has_more())
+        while (!decoder.is_finished())
         {
             auto *frame = decoder.decode_next();
             if (frame == nullptr)

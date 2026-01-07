@@ -35,7 +35,7 @@ namespace avioflow
     AudioSamples get_all_samples();
 
     // Check if there are more frames to decode
-    bool has_more() const { return !eof_reached_; }
+    bool is_finished() const { return eof_reached_; }
 
     const Metadata &get_metadata() const { return metadata_; }
 
