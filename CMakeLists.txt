@@ -5,6 +5,7 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 option(BUILD_SHARED_LIBS "Build using shared libraries" ON)
+option(BUILD_TESTS "Build tests and examples" ON)
 
 # Fix for Ninja + MSVC: Use embedded debug info (/Z7) instead of separate PDB (/Zi)
 # This prevents D8050 errors when Ninja compiles multiple files in parallel
@@ -54,37 +55,7 @@ target_link_libraries(avioflow PUBLIC
     ffmpeg::avdevice
 )
 
-# Example/Test app - Offline Load
-add_executable(avioflow_offline_load tests/avio-offline-load-audio.cpp)
-target_link_libraries(avioflow_offline_load PRIVATE avioflow)
-
-# Example/Test app - Online Load
-add_executable(avioflow_online_load tests/avio-online-load-audio.cpp)
-target_link_libraries(avioflow_online_load PRIVATE avioflow)
-
-# Unit tests - Load tests
-add_executable(avioflow_load_test tests/ffmpeg/decoder/test_decoder_load.cpp)
-target_include_directories(avioflow_load_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/tests)
-target_link_libraries(avioflow_load_test PRIVATE avioflow)
-
-# Unit tests - Resample tests
-add_executable(avioflow_resample_test tests/ffmpeg/decoder/test_decoder_resample.cpp)
-target_include_directories(avioflow_resample_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/tests)
-target_link_libraries(avioflow_resample_test PRIVATE avioflow)
-
-# Copy DLLs to bin (for all test executables) - Windows Shared only
-if(BUILD_SHARED_LIBS AND WIN32)
-    set(TEST_TARGETS 
-        avioflow_offline_load 
-        avioflow_online_load 
-        avioflow_load_test 
-        avioflow_resample_test
-    )
-    foreach(target IN LISTS TEST_TARGETS)
-        add_custom_command(TARGET ${target} POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_directory
-                "${FFMPEG_BIN_DIR}"
-                "$<TARGET_FILE_DIR:${target}>"
-        )
-    endforeach()
+# Tests and examples
+if(BUILD_TESTS)
+    add_subdirectory(tests)
 endif()
