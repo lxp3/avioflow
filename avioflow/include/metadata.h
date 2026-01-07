@@ -24,7 +24,10 @@ namespace avioflow
     int64_t num_samples = 0;   // Total number of samples (if known)
     int sample_rate = 0;       // Sampling frequency (Hz)
     int num_channels = 0;      // Number of audio channels
-    std::string sample_format; // Container/Codec format name
+    std::string sample_format; // Sample format name (e.g., "fltp")
+    std::string codec;         // Codec name (e.g., "mp3")
+    int64_t bit_rate = 0;      // Bit rate in bits/s
+    std::string container;     // Container format (e.g., "mp3", "wav")
   };
 
   // Output structure for complete decoded audio (offline decoding)

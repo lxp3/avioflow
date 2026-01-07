@@ -193,9 +193,9 @@ bool test_metadata_format()
 
   const auto &meta = decoder.get_metadata();
 
-  // MP3 format should be detected
-  TEST_ASSERT(meta.sample_format.find("mp3") != std::string::npos,
-              "format should contain 'mp3'");
+  // MP3 container should be detected
+  TEST_ASSERT(meta.container.find("mp3") != std::string::npos,
+              "container should contain 'mp3'");
   TEST_ASSERT_EQ(EXPECTED_SAMPLE_RATE, meta.sample_rate, "sample_rate");
   TEST_ASSERT_EQ(EXPECTED_NUM_CHANNELS, meta.num_channels, "num_channels");
   TEST_ASSERT_GT(meta.duration, 90.0, "duration > 90s");

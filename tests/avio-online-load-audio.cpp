@@ -38,11 +38,14 @@ void test_online_decode(const std::string& path) {
 
         const auto& meta = decoder.get_metadata();
         std::cout << "Successfully opened stream: " << path << "\n";
-        std::cout << "Format: " << meta.sample_format << "\n";
+        std::cout << "Container: " << meta.container << "\n";
+        std::cout << "Codec: " << meta.codec << "\n";
+        std::cout << "Sample Format: " << meta.sample_format << "\n";
         std::cout << "Channels: " << meta.num_channels << "\n";
         std::cout << "Sample Rate: " << meta.sample_rate << " Hz\n";
-        std::cout << "Num Samples: " << meta.num_samples << "\n";
-        std::cout << "Duration: " << meta.duration << " s\n";
+        std::cout << "Bit Rate: " << meta.bit_rate / 1000 << " kbps\n";
+        std::cout << "Initial Num Samples: " << meta.num_samples << "\n";
+        std::cout << "Initial Duration: " << meta.duration << " s\n";
 
         // Decode all frames and count samples
         size_t total_samples = 0;
@@ -56,6 +59,12 @@ void test_online_decode(const std::string& path) {
         }
         std::cout << "Decoded " << total_samples << " samples per channel in "
                   << frame_count << " frames (Chunked Read).\n";
+
+        // Display finalized metadata
+        const auto& final_meta = decoder.get_metadata();
+        std::cout << "--- Finalized Metadata ---\n";
+        std::cout << "Final Num Samples: " << final_meta.num_samples << "\n";
+        std::cout << "Final Duration: " << final_meta.duration << " s\n";
     } catch (const std::exception& e) {
         std::cerr << "Error decoding stream: " << e.what() << "\n";
     }

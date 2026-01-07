@@ -59,20 +59,33 @@ namespace avioflow
     check_av_error(avcodec_open2(codec_ctx_.get(), codec, nullptr),
                    "Could not open codec");
 
-    // Populate metadata
+    // Populate metadata (following torchcodec's approach)
     metadata_.sample_rate = codec_ctx_->sample_rate;
     metadata_.num_channels = codec_ctx_->ch_layout.nb_channels;
+    metadata_.codec = codec->name;
+    metadata_.bit_rate = fmt_ctx_->bit_rate > 0 ? fmt_ctx_->bit_rate : stream->codecpar->bit_rate;
+    metadata_.container = fmt_ctx_->iformat->name;
     
-    // Safer duration calculation to avoid overflow/garbage values
-    if (fmt_ctx_->duration != AV_NOPTS_VALUE) {
-        metadata_.duration = static_cast<double>(fmt_ctx_->duration) / AV_TIME_BASE;
-    } else if (stream->duration != AV_NOPTS_VALUE) {
+    // Get sample format from codec context
+    metadata_.sample_format = av_get_sample_fmt_name(codec_ctx_->sample_fmt);
+
+    // Duration extraction (following torchcodec's approach):
+    // 1. Prefer stream->duration (populated by Xing/VBRI parsing in avformat_find_stream_info)
+    // 2. Fallback to fmt_ctx_->duration (container-level duration)
+    // Note: For non-seekable streams, these may be unavailable and will be updated at EOF
+    if (stream->duration > 0 && stream->time_base.den > 0) {
+        // torchcodec: ptsToSeconds(avStream->duration, avStream->time_base)
         metadata_.duration = static_cast<double>(stream->duration) * av_q2d(stream->time_base);
+    } else if (fmt_ctx_->duration != AV_NOPTS_VALUE && fmt_ctx_->duration > 0) {
+        metadata_.duration = static_cast<double>(fmt_ctx_->duration) / AV_TIME_BASE;
     } else {
         metadata_.duration = 0.0;
     }
 
-    metadata_.sample_format = fmt_ctx_->iformat->name;
+    // Estimate num_samples from duration (will be updated with exact count at EOF)
+    if (metadata_.duration > 0 && metadata_.sample_rate > 0) {
+        metadata_.num_samples = static_cast<int64_t>(metadata_.duration * metadata_.sample_rate);
+    }
 
     total_samples_decoded_ = 0;
     eof_reached_ = false;
@@ -189,6 +202,7 @@ namespace avioflow
         if (codec_ctx_->sample_rate > 0) {
             metadata_.duration = static_cast<double>(total_samples_decoded_) / codec_ctx_->sample_rate;
         }
+        eof_reached_ = true;  // Mark as truly finished
         return nullptr;
       }
       else if (ret < 0 && ret != AVERROR(EAGAIN))

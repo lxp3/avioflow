@@ -85,7 +85,7 @@ namespace avioflow
 
   const Metadata &AudioDecoder::get_metadata() const
   {
-    return impl_->cached_metadata_;
+    return impl_->decoder_.get_metadata();
   }
 
 } // namespace avioflow
