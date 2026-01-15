@@ -22,11 +22,30 @@ if(MSVC)
     set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
 endif()
 
-# Downloads directory for third-party dependencies (persists across rebuilds)
-set(DOWNLOADS_DIR "${CMAKE_SOURCE_DIR}/downloads" CACHE PATH "Directory for downloaded dependencies")
+# FFmpeg Configuration
+set(FFMPEG_ROOT "${CMAKE_SOURCE_DIR}/public/ffmpeg")
+set(FFMPEG_INCLUDE_DIRS "${FFMPEG_ROOT}/include")
+set(FFMPEG_LIB_DIR "${FFMPEG_ROOT}/lib")
+set(FFMPEG_BIN_DIR "${FFMPEG_ROOT}/bin")
 
-# Include FFmpeg configuration
-include(cmake/ffmpeg.cmake)
+set(FFMPEG_LIBS avcodec avformat avutil swresample avdevice)
+foreach(LIB IN LISTS FFMPEG_LIBS)
+    if(NOT TARGET ffmpeg::${LIB})
+        # Find the DLL (e.g., avcodec-62.dll or avcodec-7.dll)
+        file(GLOB FFMPEG_DLL "${FFMPEG_BIN_DIR}/${LIB}-*.dll")
+        if(NOT FFMPEG_DLL)
+            # Fallback if no version suffix
+            set(FFMPEG_DLL "${FFMPEG_BIN_DIR}/${LIB}.dll")
+        endif()
+
+        add_library(ffmpeg::${LIB} SHARED IMPORTED)
+        set_target_properties(ffmpeg::${LIB} PROPERTIES
+            INTERFACE_INCLUDE_DIRECTORIES "${FFMPEG_INCLUDE_DIRS}"
+            IMPORTED_IMPLIB "${FFMPEG_LIB_DIR}/${LIB}.lib"
+            IMPORTED_LOCATION "${FFMPEG_DLL}"
+        )
+    endif()
+endforeach()
 
 # Source files directory
 set(FFMPEG_CORE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/avioflow/core/ffmpeg")

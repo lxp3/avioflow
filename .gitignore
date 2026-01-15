@@ -7,7 +7,7 @@ lib/
 # IDE and editor
 .cache/
 .vs/
-# .vscode/
+.vscode/
 
 # Downloaded dependencies (can be re-downloaded)
 downloads/
@@ -16,8 +16,7 @@ downloads/
 *.log
 
 # Exceptions
-!public/
-!public/**/*
+public/
 
 # Keep CMakeLists.txt
 !CMakeLists.txt

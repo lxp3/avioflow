@@ -5,7 +5,7 @@
 $ErrorActionPreference = "Stop"
 
 # Configuration
-$VCVARS_PATH = "D:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvarsall.bat"
+$VCVARS_PATH = "C:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvarsall.bat"
 $BUILD_DIR = "build"
 
 Write-Host "--- Configuring avioflow (VS 2026) ---" -ForegroundColor Cyan
@@ -14,6 +14,37 @@ if (Test-Path $BUILD_DIR) {
     Write-Host "Cleaning existing build directory..."
     Remove-Item -Path $BUILD_DIR -Recurse -Force
 }
+
+# --- FFmpeg Dependency Management ---
+$FFMPEG_URL = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl-shared.zip"
+$PUBLIC_DIR = "public"
+$FFMPEG_ZIP = "$PUBLIC_DIR/ffmpeg-win64-gpl-shared.zip"
+$FFMPEG_DEST = "$PUBLIC_DIR/ffmpeg"
+$DONE_FILE = "$PUBLIC_DIR/.ffmpeg.done"
+
+if (!(Test-Path $PUBLIC_DIR)) {
+    New-Item -ItemType Directory -Path $PUBLIC_DIR
+}
+
+if (!(Test-Path $FFMPEG_ZIP)) {
+    Write-Host "Downloading FFmpeg from $FFMPEG_URL..." -ForegroundColor Cyan
+    Invoke-WebRequest -Uri $FFMPEG_URL -OutFile $FFMPEG_ZIP -UseBasicParsing
+}
+
+if (!(Test-Path $DONE_FILE)) {
+    Write-Host "Extracting FFmpeg to $FFMPEG_DEST..." -ForegroundColor Cyan
+    if (Test-Path $FFMPEG_DEST) { Remove-Item -Path $FFMPEG_DEST -Recurse -Force }
+    Expand-Archive -Path $FFMPEG_ZIP -DestinationPath "$FFMPEG_DEST-temp"
+    
+    # Move the inner directory to $FFMPEG_DEST
+    $InnerDir = Get-ChildItem -Path "$FFMPEG_DEST-temp" -Directory | Select-Object -First 1
+    Move-Item -Path $InnerDir.FullName -Destination $FFMPEG_DEST
+    Remove-Item -Path "$FFMPEG_DEST-temp" -Recurse -Force
+    
+    New-Item -ItemType File -Path $DONE_FILE
+    Write-Host "FFmpeg extraction complete." -ForegroundColor Green
+}
+
 
 # Run CMake Configuration inside a CMD environment with vcvarsall.bat
 # Using Ninja for faster builds and cleaner output (filters /showIncludes)

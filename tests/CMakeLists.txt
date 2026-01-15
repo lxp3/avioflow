@@ -1,28 +1,33 @@
 # Tests CMakeLists.txt
 
 # Example/Test apps
-add_executable(avioflow_offline_load avioflow-offline-load-audio.cpp)
-target_link_libraries(avioflow_offline_load PRIVATE avioflow)
+add_executable(avioflow-offline-load-audio avioflow-offline-load-audio.cpp)
+target_link_libraries(avioflow-offline-load-audio PRIVATE avioflow)
 
-add_executable(avioflow_online_load avioflow-online-load-audio.cpp)
-target_link_libraries(avioflow_online_load PRIVATE avioflow)
+add_executable(avioflow-online-load-audio avioflow-online-load-audio.cpp)
+target_link_libraries(avioflow-online-load-audio PRIVATE avioflow)
 
 # Unit tests - Decoder tests
-add_executable(avioflow_load_test ffmpeg/decoder/load-test.cpp)
-target_include_directories(avioflow_load_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(avioflow_load_test PRIVATE avioflow)
+add_executable(ffmpeg-decoder-load-test ffmpeg/decoder/load-test.cpp)
+target_include_directories(ffmpeg-decoder-load-test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(ffmpeg-decoder-load-test PRIVATE avioflow)
 
-add_executable(avioflow_resample_test ffmpeg/decoder/resample-test.cpp)
-target_include_directories(avioflow_resample_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(avioflow_resample_test PRIVATE avioflow)
+add_executable(ffmpeg-decoder-resample-test ffmpeg/decoder/resample-test.cpp)
+target_include_directories(ffmpeg-decoder-resample-test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(ffmpeg-decoder-resample-test PRIVATE avioflow)
+
+add_executable(ffmpeg-device-list-test ffmpeg/device-list-test.cpp)
+target_include_directories(ffmpeg-device-list-test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(ffmpeg-device-list-test PRIVATE avioflow)
 
 # Copy FFmpeg DLLs and avioflow.dll to test executables - Windows Shared only
 if(BUILD_SHARED_LIBS AND WIN32)
     set(TEST_TARGETS 
-        avioflow_offline_load 
-        avioflow_online_load 
-        avioflow_load_test 
-        avioflow_resample_test
+        avioflow-offline-load-audio 
+        avioflow-online-load-audio 
+        ffmpeg-decoder-load-test 
+        ffmpeg-decoder-resample-test
+        ffmpeg-device-list-test
     )
     foreach(target IN LISTS TEST_TARGETS)
         # Copy FFmpeg DLLs
