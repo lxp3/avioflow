@@ -6,6 +6,7 @@
     "files.associations": {
         "optional": "cpp",
         "memory": "cpp",
-        "xstring": "cpp"
+        "xstring": "cpp",
+        "functional": "cpp"
     }
 }

@@ -2,7 +2,10 @@
 #pragma once
 
 #include "ffmpeg-common.h"
-#include "../../include/metadata.h"
+#include "metadata.h"
+#ifdef AVIOFLOW_HAS_WASAPI
+#include "wasapi-handler.h"
+#endif
 #include <optional>
 #include <string>
 #include <functional>
@@ -64,6 +67,11 @@ namespace avioflow
     // Data provider callback for streaming
     AVIOReadCallback avio_read_callback_;
     int64_t total_samples_decoded_ = 0;
+
+#ifdef AVIOFLOW_HAS_WASAPI
+    std::unique_ptr<WasapiHandler> wasapi_handler_;
+    bool is_wasapi_mode_ = false;
+#endif
 
     // static
     static constexpr AVSampleFormat output_sample_format_ = AV_SAMPLE_FMT_FLTP;

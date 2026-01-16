@@ -5,7 +5,7 @@
 $ErrorActionPreference = "Stop"
 
 # Configuration
-$VCVARS_PATH = "C:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvarsall.bat"
+$VCVARS_PATH = "D:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvarsall.bat"
 $BUILD_DIR = "build"
 
 Write-Host "--- Configuring avioflow (VS 2026) ---" -ForegroundColor Cyan
@@ -16,9 +16,9 @@ if (Test-Path $BUILD_DIR) {
 }
 
 # --- FFmpeg Dependency Management ---
-$FFMPEG_URL = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl-shared.zip"
+$FFMPEG_URL = "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2025-11-30-12-53/ffmpeg-n7.1.3-7-gf65fc0b137-win64-lgpl-shared-7.1.zip"
 $PUBLIC_DIR = "public"
-$FFMPEG_ZIP = "$PUBLIC_DIR/ffmpeg-win64-gpl-shared.zip"
+$FFMPEG_ZIP = Join-Path $PUBLIC_DIR (Split-Path -Leaf $FFMPEG_URL)
 $FFMPEG_DEST = "$PUBLIC_DIR/ffmpeg"
 $DONE_FILE = "$PUBLIC_DIR/.ffmpeg.done"
 
@@ -47,9 +47,8 @@ if (!(Test-Path $DONE_FILE)) {
 
 
 # Run CMake Configuration inside a CMD environment with vcvarsall.bat
-# Using Ninja for faster builds and cleaner output (filters /showIncludes)
-# CMAKE_EXPORT_COMPILE_COMMANDS generates compile_commands.json for IntelliSense
-$CmakeConfigCmd = "cmake -B $BUILD_DIR -S . -G `"Ninja`" -DCMAKE_BUILD_TYPE=Release -DCMAKE_EXPORT_COMPILE_COMMANDS=ON"
+# Using Ninja generator (CMake 4.2.1 compatible)
+$CmakeConfigCmd = "cmake -B $BUILD_DIR -S . -G Ninja -DCMAKE_BUILD_TYPE=Release -DENABLE_WASAPI=ON"
 cmd.exe /c "`"$VCVARS_PATH`" x64 && $CmakeConfigCmd"
 
 if ($LASTEXITCODE -ne 0) {

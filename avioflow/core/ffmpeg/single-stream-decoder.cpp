@@ -13,6 +13,26 @@ namespace avioflow
 
   void SingleStreamDecoder::open(const std::string &source)
   {
+#ifdef AVIOFLOW_HAS_WASAPI
+    if (source == "wasapi_loopback")
+    {
+      is_wasapi_mode_ = true;
+      wasapi_handler_ = std::make_unique<WasapiHandler>();
+      
+      // Initialize metadata for WASAPI
+      metadata_.sample_rate = wasapi_handler_->get_sample_rate();
+      metadata_.num_channels = wasapi_handler_->get_num_channels();
+      metadata_.codec = "pcm_f32le";
+      metadata_.container = "wasapi_loopback";
+      metadata_.sample_format = "f32";
+      metadata_.duration = 0.0;
+      metadata_.num_samples = 0;
+      
+      wasapi_handler_->start_capture();
+      return;
+    }
+#endif
+
     if (source.find("audio=") == 0 || source.find("video=") == 0)
     {
       fmt_ctx_.reset(DeviceHandler::open_device(source));
@@ -180,6 +200,41 @@ namespace avioflow
 
   AVFrame *SingleStreamDecoder::decode_next()
   {
+#ifdef AVIOFLOW_HAS_WASAPI
+    if (is_wasapi_mode_)
+    {
+      // Prepare a buffer for capture (e.g., 512 frames)
+      const int target_frames = 512;
+      int bytes_per_sample = 4; // f32
+      int channels = wasapi_handler_->get_num_channels();
+      int buf_size = target_frames * channels * bytes_per_sample;
+      
+      std::vector<uint8_t> tmp_buf(buf_size);
+      int read_bytes = wasapi_handler_->read(tmp_buf.data(), buf_size);
+      
+      if (read_bytes <= 0) return nullptr; // No data yet
+
+      int read_frames = read_bytes / (channels * bytes_per_sample);
+      
+      // Wrap into frame_
+      av_frame_unref(frame_.get());
+      frame_->format = AV_SAMPLE_FMT_FLT; // miniaudio f32 is interleaved
+      frame_->sample_rate = wasapi_handler_->get_sample_rate();
+      av_channel_layout_default(&frame_->ch_layout, channels);
+      frame_->nb_samples = read_frames;
+      
+      check_av_error(av_frame_get_buffer(frame_.get(), 0), "Could not allocate frame buffer");
+      std::memcpy(frame_->data[0], tmp_buf.data(), read_bytes);
+      
+      AVFrame* decoded = process_decoded_frame();
+      if (decoded) {
+          total_samples_decoded_ += decoded->nb_samples;
+          metadata_.num_samples = total_samples_decoded_;
+      }
+      return decoded;
+    }
+#endif
+
     while (true)
     {
       // 1. Try to receive frame from decoder first (drain output)

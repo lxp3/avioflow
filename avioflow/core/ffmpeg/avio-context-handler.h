@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 #include "ffmpeg-common.h"
-#include "../../include/metadata.h"
+#include "metadata.h"
 
 struct AVFormatContext;
 

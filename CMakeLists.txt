@@ -6,6 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 option(BUILD_SHARED_LIBS "Build using shared libraries" ON)
 option(BUILD_TESTS "Build tests and examples" ON)
+option(ENABLE_WASAPI "Enable WASAPI loopback capture support" ON)
 
 # Fix for Ninja + MSVC: Use embedded debug info (/Z7) instead of separate PDB (/Zi)
 # This prevents D8050 errors when Ninja compiles multiple files in parallel
@@ -27,6 +28,8 @@ set(FFMPEG_ROOT "${CMAKE_SOURCE_DIR}/public/ffmpeg")
 set(FFMPEG_INCLUDE_DIRS "${FFMPEG_ROOT}/include")
 set(FFMPEG_LIB_DIR "${FFMPEG_ROOT}/lib")
 set(FFMPEG_BIN_DIR "${FFMPEG_ROOT}/bin")
+
+set(MINIAUDIO_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/public/miniaudio")
 
 set(FFMPEG_LIBS avcodec avformat avutil swresample avdevice)
 foreach(LIB IN LISTS FFMPEG_LIBS)
@@ -58,11 +61,20 @@ set(AVIOFLOW_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/avioflow/include/avioflow-cxx-api.cpp"
 )
 
+if(ENABLE_WASAPI AND WIN32)
+    set(AVIOFLOW_SOURCES ${AVIOFLOW_SOURCES}
+        "avioflow/core/wasapi/wasapi-handler.cpp"
+    )
+    add_definitions(-DAVIOFLOW_HAS_WASAPI)
+endif()
+
 add_library(avioflow SHARED ${AVIOFLOW_SOURCES})
 
 target_include_directories(avioflow PUBLIC 
     $<BUILD_INTERFACE:${FFMPEG_CORE_DIR}>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/avioflow/include>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/avioflow/core/wasapi>
+    $<BUILD_INTERFACE:${MINIAUDIO_INCLUDE_DIR}>
     $<INSTALL_INTERFACE:include>
 )
 
@@ -73,6 +85,10 @@ target_link_libraries(avioflow PUBLIC
     ffmpeg::swresample
     ffmpeg::avdevice
 )
+
+if(ENABLE_WASAPI AND WIN32)
+    target_link_libraries(avioflow PRIVATE ole32)
+endif()
 
 # Tests and examples
 if(BUILD_TESTS)
