@@ -1,5 +1,3 @@
-#ifdef AVIOFLOW_HAS_WASAPI
-
 #define MA_IMPLEMENTATION
 #define NOMINMAX
 #include <windows.h> // Ensure NOMINMAX is applied before any windows header
@@ -90,4 +88,4 @@ int WasapiHandler::read(uint8_t* buf, int size) {
 
 } // namespace avioflow
 
-#endif // AVIOFLOW_HAS_WASAPI
+

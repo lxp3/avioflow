@@ -1,7 +1,5 @@
 #pragma once
 
-#ifdef AVIOFLOW_HAS_WASAPI
-
 #include <vector>
 #include <mutex>
 #include <memory>
@@ -45,4 +43,4 @@ private:
 
 } // namespace avioflow
 
-#endif // AVIOFLOW_HAS_WASAPI
+

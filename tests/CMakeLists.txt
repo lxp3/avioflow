@@ -12,6 +12,9 @@ if(ENABLE_WASAPI AND WIN32)
     target_link_libraries(avioflow-wasapi-capture PRIVATE avioflow)
 endif()
 
+add_executable(avioflow-microphone-capture avioflow-microphone-capture.cpp)
+target_link_libraries(avioflow-microphone-capture PRIVATE avioflow)
+
 # Unit tests - Decoder tests
 add_executable(ffmpeg-decoder-load-test ffmpeg/decoder/load-test.cpp)
 target_include_directories(ffmpeg-decoder-load-test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
@@ -33,6 +36,7 @@ if(BUILD_SHARED_LIBS AND WIN32)
         ffmpeg-decoder-load-test 
         ffmpeg-decoder-resample-test
         ffmpeg-device-list-test
+        avioflow-microphone-capture
     )
     if(ENABLE_WASAPI AND WIN32)
         list(APPEND TEST_TARGETS avioflow-wasapi-capture)
