@@ -5,7 +5,7 @@
 $ErrorActionPreference = "Stop"
 
 # Configuration
-$VCVARS_PATH = "D:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvarsall.bat"
+$VCVARS_PATH = "C:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvarsall.bat"
 $BUILD_DIR = "build"
 
 Write-Host "--- Configuring avioflow (VS 2026) ---" -ForegroundColor Cyan

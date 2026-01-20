@@ -19,7 +19,7 @@ set(CMAKE_VERBOSE_MAKEFILE OFF)
 
 # Configure MSVC
 if(MSVC)
-    add_compile_options(/W4 /WX /utf-8)
+    add_compile_options(/W4 /utf-8)
     set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
 endif()
 
@@ -29,7 +29,23 @@ set(FFMPEG_INCLUDE_DIRS "${FFMPEG_ROOT}/include")
 set(FFMPEG_LIB_DIR "${FFMPEG_ROOT}/lib")
 set(FFMPEG_BIN_DIR "${FFMPEG_ROOT}/bin")
 
-set(MINIAUDIO_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/public/miniaudio")
+# miniaudio configuration
+if(ENABLE_WASAPI AND WIN32)
+    include(FetchContent)
+    FetchContent_Declare(
+        miniaudio
+        GIT_REPOSITORY https://github.com/mackron/miniaudio.git
+        GIT_TAG        master
+    )
+    FetchContent_GetProperties(miniaudio)
+    if(NOT miniaudio_POPULATED)
+        FetchContent_Populate(miniaudio)
+    endif()
+    set(MINIAUDIO_INCLUDE_DIR ${miniaudio_SOURCE_DIR})
+else()
+    set(MINIAUDIO_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/public/miniaudio")
+endif()
+
 
 set(FFMPEG_LIBS avcodec avformat avutil swresample avdevice)
 foreach(LIB IN LISTS FFMPEG_LIBS)
@@ -74,7 +90,7 @@ target_include_directories(avioflow PUBLIC
     $<BUILD_INTERFACE:${FFMPEG_CORE_DIR}>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/avioflow/include>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/avioflow/core/wasapi>
-    $<BUILD_INTERFACE:${MINIAUDIO_INCLUDE_DIR}>
+    SYSTEM $<BUILD_INTERFACE:${MINIAUDIO_INCLUDE_DIR}>
     $<INSTALL_INTERFACE:include>
 )
 
