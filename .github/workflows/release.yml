@@ -27,7 +27,7 @@ jobs:
       - name: Install & Package
         shell: pwsh
         run: |
-          $PkgDir = "avioflow-windows-x64"
+          $PkgDir = "avioflow-window-x64"
           cmake --install build --prefix $PkgDir --config Release
           
           # Use editbin (now in PATH thanks to msvc-dev-cmd)
@@ -41,7 +41,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
         with:
-          files: avioflow-windows-x64.zip
+          files: avioflow-window-x64.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

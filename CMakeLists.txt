@@ -59,6 +59,11 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 # FFmpeg Configuration
 include(cmake/ffmpeg.cmake)
 
+# miniaudio Configuration
+if(ENABLE_WASAPI AND WIN32)
+    include(cmake/miniaudio.cmake)
+endif()
+
 # Source files directory
 set(FFMPEG_CORE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/avioflow/core/ffmpeg")
 
@@ -70,7 +75,7 @@ set(AVIOFLOW_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/avioflow/include/avioflow-cxx-api.cpp"
 )
 
-if(WIN32)
+if(ENABLE_WASAPI AND WIN32)
     list(APPEND AVIOFLOW_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/avioflow/core/wasapi/wasapi-handler.cpp")
 endif()
 
@@ -84,6 +89,10 @@ target_include_directories(avioflow PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/avioflow/core/wasapi>
     $<INSTALL_INTERFACE:include>
 )
+
+if(ENABLE_WASAPI AND WIN32)
+    target_include_directories(avioflow PRIVATE "${MINIAUDIO_INCLUDE_DIR}")
+endif()
 
 target_link_libraries(avioflow PRIVATE
     ffmpeg::avcodec
@@ -139,12 +148,18 @@ if(WIN32)
 endif()
 
 # (Optional) Install CLI tools if BUILD_TESTS is on
-# Note: These targets are defined in subdirectories, so we use their names
-install(TARGETS 
+# We check if the target exists before adding to install list to support cross-platform builds
+set(INSTALL_TARGETS 
     avioflow-offline-load-audio
     avioflow-online-load-audio
-    avioflow-wasapi-capture
     avioflow-microphone-capture
+)
+
+if(TARGET avioflow-wasapi-capture)
+    list(APPEND INSTALL_TARGETS avioflow-wasapi-capture)
+endif()
+
+install(TARGETS ${INSTALL_TARGETS}
     DESTINATION bin
     OPTIONAL
 )
