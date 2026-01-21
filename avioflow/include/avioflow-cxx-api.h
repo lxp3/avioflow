@@ -5,6 +5,16 @@
 #include <memory>
 #include <vector>
 
+#ifdef _WIN32
+#ifdef AVIOFLOW_EXPORTS
+#define AVIOFLOW_API __declspec(dllexport)
+#else
+#define AVIOFLOW_API __declspec(dllimport)
+#endif
+#else
+#define AVIOFLOW_API __attribute__((visibility("default")))
+#endif
+
 namespace avioflow {
 
 // AVIO read callback for streaming input
@@ -14,10 +24,10 @@ using AVIOReadCallback = std::function<int(uint8_t *, int)>;
 // Global configuration
 // level: "quiet", "panic", "fatal", "error", "warning", "info", "verbose", "debug", "trace"
 // If level is nullptr, it reads from the environment variable AVIOFLOW_LOG_LEVEL.
-void avioflow_set_log_level(const char *level = nullptr);
+AVIOFLOW_API void avioflow_set_log_level(const char *level = nullptr);
 
 // Audio Decoder - Public API using PIMPL
-class AudioDecoder {
+class AVIOFLOW_API AudioDecoder {
 public:
   explicit AudioDecoder(const AudioStreamOptions &options = {});
   ~AudioDecoder();
@@ -61,7 +71,7 @@ private:
 };
 
 // Device Manager for hardware discovery
-class DeviceManager {
+class AVIOFLOW_API DeviceManager {
 public:
   static std::vector<DeviceInfo> list_audio_devices();
 };

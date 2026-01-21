@@ -14,10 +14,41 @@ set(CMAKE_VERBOSE_MAKEFILE OFF)
 
 # Configure MSVC
 if(MSVC)
-    add_compile_options(/W4 /utf-8)
-    set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
+    add_compile_options(
+        /W4 /utf-8 
+        /GL     # Whole Program Optimization
+        /Gw     # Optimize Global Data
+        /Gy     # Function-Level Linking
+        /experimental:deterministic      # Enable determinism for /pathmap
+        "/pathmap:${CMAKE_SOURCE_DIR}=." # Strip absolute paths from __FILE__
+    )
+    add_link_options(
+        /LTCG   # Link Time Code Generation
+        /OPT:REF # Remove unreferenced data/functions
+        /OPT:ICF # Identical COMDAT Folding
+    )
+    set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS OFF)
     # Use dynamic CRT (/MD or /MDd)
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
+    add_definitions(-D_CRT_SECURE_NO_WARNINGS)
+else()
+    # Linux/GCC/Clang optimizations
+    add_compile_options(
+        -O3 
+        -fvisibility=hidden     # Hide internal symbols by default
+        -ffunction-sections 
+        -fdata-sections
+        "-fdebug-prefix-map=${CMAKE_SOURCE_DIR}=." # Strip absolute paths in debug info
+    )
+    add_link_options(
+        -Wl,--gc-sections       # Remove unused sections
+        -Wl,--exclude-libs,ALL  # Prevent library symbols from being exported
+    )
+    
+    # Strip symbols in Release builds for Linux
+    if(CMAKE_BUILD_TYPE STREQUAL "Release")
+        add_link_options(-s)    # Strip all symbols
+    endif()
 endif()
 
 # Set unified output directory for all executables and libraries
@@ -39,14 +70,13 @@ set(AVIOFLOW_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/avioflow/include/avioflow-cxx-api.cpp"
 )
 
-if(ENABLE_WASAPI AND WIN32)
-    set(AVIOFLOW_SOURCES ${AVIOFLOW_SOURCES}
-        "avioflow/core/wasapi/wasapi-handler.cpp"
-    )
-    add_definitions(-DAVIOFLOW_HAS_WASAPI)
+if(WIN32)
+    list(APPEND AVIOFLOW_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/avioflow/core/wasapi/wasapi-handler.cpp")
 endif()
 
+# Build library
 add_library(avioflow SHARED ${AVIOFLOW_SOURCES})
+target_compile_definitions(avioflow PRIVATE AVIOFLOW_EXPORTS)
 
 target_include_directories(avioflow PUBLIC 
     $<BUILD_INTERFACE:${FFMPEG_CORE_DIR}>
@@ -55,7 +85,7 @@ target_include_directories(avioflow PUBLIC
     $<INSTALL_INTERFACE:include>
 )
 
-target_link_libraries(avioflow PUBLIC 
+target_link_libraries(avioflow PRIVATE
     ffmpeg::avcodec
     ffmpeg::avformat
     ffmpeg::avutil
@@ -63,7 +93,11 @@ target_link_libraries(avioflow PUBLIC
     ffmpeg::avdevice
 )
 
-# Copy FFmpeg DLLs to the unified output directory - Windows only
+if(WIN32)
+    target_link_libraries(avioflow PRIVATE Winmm)
+endif()
+
+# FFmpeg DLLs copy (for convenient local running)
 if(WIN32)
     add_custom_command(TARGET avioflow POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_directory
@@ -73,14 +107,44 @@ if(WIN32)
     )
 endif()
 
-if(ENABLE_WASAPI AND WIN32)
-    target_link_libraries(avioflow PRIVATE ole32)
-endif()
-
-# Tools/Binaries
+# Binaries
 add_subdirectory(avioflow/bin)
 
 # Tests and examples
 if(BUILD_TESTS)
     add_subdirectory(tests)
 endif()
+
+# --- Installation & Packaging ---
+
+# Install public headers
+install(FILES 
+    "avioflow/include/avioflow-cxx-api.h"
+    "avioflow/include/metadata.h"
+    DESTINATION include
+)
+
+# Install library
+install(TARGETS avioflow
+    RUNTIME DESTINATION bin
+    LIBRARY DESTINATION lib
+    ARCHIVE DESTINATION lib
+)
+
+# Install FFmpeg DLLs on Windows
+if(WIN32)
+    # Collect all DLLs from FFMPEG_BIN_DIR
+    file(GLOB FFMPEG_DLLS "${FFMPEG_BIN_DIR}/*.dll")
+    install(FILES ${FFMPEG_DLLS} DESTINATION bin)
+endif()
+
+# (Optional) Install CLI tools if BUILD_TESTS is on
+# Note: These targets are defined in subdirectories, so we use their names
+install(TARGETS 
+    avioflow-offline-load-audio
+    avioflow-online-load-audio
+    avioflow-wasapi-capture
+    avioflow-microphone-capture
+    DESTINATION bin
+    OPTIONAL
+)

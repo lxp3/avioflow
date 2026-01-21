@@ -1,0 +1,78 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Configure CMake
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+          
+      - name: Build
+        run: cmake --build build --config Release -j 4
+          
+      - name: Install & Package
+        shell: pwsh
+        run: |
+          $PkgDir = "avioflow-windows-x64"
+          cmake --install build --prefix $PkgDir --config Release
+          
+          # Strip debug info from our dll (using editbin)
+          $EditBin = (Get-ChildItem -Path "C:\Program Files\Microsoft Visual Studio" -Recurse -Filter "editbin.exe" | Select-Object -First 1).FullName
+          if ($EditBin) {
+              & $EditBin /STRIP:DEBUG "$PkgDir/bin/avioflow.dll"
+              Get-ChildItem -Path "$PkgDir/bin/*.exe" | ForEach-Object { & $EditBin /STRIP:DEBUG $_.FullName }
+          }
+          
+          Compress-Archive -Path "$PkgDir/*" -DestinationPath "$PkgDir.zip"
+
+      - name: Upload Release Asset
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: avioflow-windows-x64.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-linux:
+    runs-on: ubuntu-latest
+    container:
+      image: quay.io/pypa/manylinux2014_x86_64
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install dependencies
+        run: |
+          yum install -y alsa-lib-devel libX11-devel
+          
+      - name: Configure CMake
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+          
+      - name: Build
+        run: cmake --build build --config Release -j $(nproc)
+          
+      - name: Install & Package
+        run: |
+          PKG_DIR="avioflow-linux-x64"
+          cmake --install build --prefix $PKG_DIR
+          
+          # Strip symbols for size and privacy
+          strip --strip-unneeded $PKG_DIR/lib/*.so* || true
+          strip --strip-unneeded $PKG_DIR/bin/* || true
+          
+          tar -czvf $PKG_DIR.tar.gz $PKG_DIR
+
+      - name: Upload Release Asset
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: avioflow-linux-x64.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
