@@ -56,6 +56,15 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 
+# RPATH configuration for Linux
+if(UNIX AND NOT APPLE)
+    # Ensure that installed binaries can find libraries in the relative ../lib directory
+    # $ORIGIN is for libraries in lib/ to find each other
+    # $ORIGIN/../lib is for binaries in bin/ to find libraries in lib/
+    set(CMAKE_INSTALL_RPATH "$ORIGIN:$ORIGIN/../lib")
+    set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
+endif()
+
 # FFmpeg Configuration
 include(cmake/ffmpeg.cmake)
 
@@ -140,11 +149,15 @@ install(TARGETS avioflow
     ARCHIVE DESTINATION lib
 )
 
-# Install FFmpeg DLLs on Windows
+# Install FFmpeg shared libraries
 if(WIN32)
     # Collect all DLLs from FFMPEG_BIN_DIR
     file(GLOB FFMPEG_DLLS "${FFMPEG_BIN_DIR}/*.dll")
     install(FILES ${FFMPEG_DLLS} DESTINATION bin)
+elseif(UNIX AND NOT APPLE)
+    # Collect all shared libraries from FFMPEG_LIB_DIR
+    file(GLOB FFMPEG_SOS "${FFMPEG_LIB_DIR}/lib*.so*")
+    install(FILES ${FFMPEG_SOS} DESTINATION lib)
 endif()
 
 # (Optional) Install CLI tools if BUILD_TESTS is on
