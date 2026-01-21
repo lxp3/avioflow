@@ -64,16 +64,17 @@ namespace avioflow
     }
 
     // Attempt to open input
-    if (avformat_open_input(&fmt_ctx, nullptr, iformat, &av_options) < 0)
+    int err = avformat_open_input(&fmt_ctx, nullptr, iformat, &av_options);
+    if (err < 0)
     {
+      char err_buf[AV_ERROR_MAX_STRING_SIZE];
+      av_strerror(err, err_buf, sizeof(err_buf));
       av_dict_free(&av_options);
-      // Note: avio_ctx will be freed by avformat_close_input if we used unique_ptr,
-      // but here we return raw pointer. The caller (SingleStreamDecoder) manages fmt_ctx_.
-      // If it fails here, we need to clean up manually.
+      
       av_freep(&avio_ctx->buffer);
       avio_context_free(&avio_ctx);
       avformat_free_context(fmt_ctx);
-      throw std::runtime_error("Could not open custom I/O input");
+      throw std::runtime_error("Could not open custom I/O input: " + std::string(err_buf));
     }
 
     av_dict_free(&av_options);

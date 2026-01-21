@@ -49,7 +49,10 @@ public:
   void open_memory(const uint8_t *data, size_t size);
 
   // Open for streaming with read callback
-  void open_stream(AVIOReadCallback avio_read_callback);
+  // Requires explicit format specification for non-seekable streams
+  // Supported formats: aac, opus, pcm_s16le, pcm_f32le, wav
+  // Note: format MUST be specified in options.input_format
+  void open_stream(AVIOReadCallback avio_read_callback, const AudioStreamOptions &options);
 
   // --- Decoding Methods ---
 

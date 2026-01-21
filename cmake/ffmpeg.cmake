@@ -40,12 +40,17 @@ else()
 
     message(STATUS "FFmpeg URL: ${FFMPEG_URL}")
 
+    # Base fetch arguments
     set(FETCH_ARGS 
         URL ${FFMPEG_URL}
         DOWNLOAD_DIR "${CMAKE_SOURCE_DIR}/public/downloads"
-        DOWNLOAD_EXTRACT_TIMESTAMP TRUE
         DOWNLOAD_NO_PROGRESS FALSE
     )
+    
+    # Add DOWNLOAD_EXTRACT_TIMESTAMP only for CMake 3.24+
+    if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.24")
+        list(APPEND FETCH_ARGS DOWNLOAD_EXTRACT_TIMESTAMP TRUE)
+    endif()
     
     # Ensure progress is shown
     set(FETCHCONTENT_QUIET OFF CACHE BOOL "" FORCE)
@@ -53,8 +58,10 @@ else()
         list(APPEND FETCH_ARGS URL_HASH ${FFMPEG_HASH})
     endif()
 
-    # Set policy CMP0135 to NEW to avoid warnings and ensure proper timestamps
-    cmake_policy(SET CMP0135 NEW)
+    # Set policy CMP0135 to NEW if supported (requires CMake 3.24+)
+    if(POLICY CMP0135)
+        cmake_policy(SET CMP0135 NEW)
+    endif()
 
     FetchContent_Declare(
         ffmpeg_bin
@@ -84,18 +91,29 @@ set(FFMPEG_BIN_DIR "${FFMPEG_ROOT}/bin")
 set(FFMPEG_LIBS avcodec avformat avutil swresample avdevice)
 foreach(LIB IN LISTS FFMPEG_LIBS)
     if(NOT TARGET ffmpeg::${LIB})
-        # Find the DLL (e.g., avcodec-62.dll or avcodec-7.dll)
-        file(GLOB FFMPEG_DLL "${FFMPEG_BIN_DIR}/${LIB}-*.dll")
-        if(NOT FFMPEG_DLL)
-            # Fallback if no version suffix
-            set(FFMPEG_DLL "${FFMPEG_BIN_DIR}/${LIB}.dll")
-        endif()
-
         add_library(ffmpeg::${LIB} SHARED IMPORTED)
         set_target_properties(ffmpeg::${LIB} PROPERTIES
             INTERFACE_INCLUDE_DIRECTORIES "${FFMPEG_INCLUDE_DIRS}"
-            IMPORTED_IMPLIB "${FFMPEG_LIB_DIR}/${LIB}.lib"
-            IMPORTED_LOCATION "${FFMPEG_DLL}"
         )
+        
+        if(WIN32)
+            # Windows: Find DLL (e.g., avcodec-62.dll or avcodec-7.dll)
+            file(GLOB FFMPEG_DLL "${FFMPEG_BIN_DIR}/${LIB}-*.dll")
+            if(NOT FFMPEG_DLL)
+                set(FFMPEG_DLL "${FFMPEG_BIN_DIR}/${LIB}.dll")
+            endif()
+            
+            set_target_properties(ffmpeg::${LIB} PROPERTIES
+                IMPORTED_IMPLIB "${FFMPEG_LIB_DIR}/${LIB}.lib"
+                IMPORTED_LOCATION "${FFMPEG_DLL}"
+            )
+        else()
+            # Linux: Use the main .so symlink for linking
+            set(FFMPEG_SO "${FFMPEG_LIB_DIR}/lib${LIB}.so")
+            
+            set_target_properties(ffmpeg::${LIB} PROPERTIES
+                IMPORTED_LOCATION "${FFMPEG_SO}"
+            )
+        endif()
     endif()
 endforeach()

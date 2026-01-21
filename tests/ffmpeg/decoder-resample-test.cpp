@@ -7,7 +7,6 @@
 #include <fstream>
 #include <iostream>
 #include <algorithm>
-#include <format>
 
 using namespace avioflow;
 
@@ -124,7 +123,8 @@ void test_resample_44100()
     auto samples = decoder.get_all_samples();
     size_t num_samples = samples.data.empty() ? 0 : samples.data[0].size();
     auto diff = static_cast<int64_t>(num_samples) - EXPECTED_SAMPLES_44100;
-    std::cout << std::format("sample_rate: {} -> {},  num_samples: {}, diff: {}\n", meta.sample_rate, TARGET_RATE, num_samples, diff);
+    std::cout << "sample_rate: " << meta.sample_rate << " -> " << TARGET_RATE 
+              << ", num_samples: " << num_samples << ", diff: " << diff << std::endl;
 
     assert(samples.sample_rate == TARGET_RATE);
     assert((int)num_samples == EXPECTED_SAMPLES_44100);

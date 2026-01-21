@@ -39,7 +39,22 @@ void AudioDecoder::open_memory(const uint8_t *data, size_t size) {
   impl_->cached_metadata_ = impl_->decoder_.get_metadata();
 }
 
-void AudioDecoder::open_stream(AVIOReadCallback avio_read_callback) {
+void AudioDecoder::open_stream(AVIOReadCallback avio_read_callback, const AudioStreamOptions &options) {
+  // Validate that format is specified
+  if (!options.input_format.has_value()) {
+    throw std::runtime_error("input_format must be specified for streaming (e.g., aac, opus, pcm_s16le, wav)");
+  }
+  
+  // Validate supported streaming formats
+  const std::string& format = options.input_format.value();
+  if (format != "aac" && format != "opus" && format != "pcm_s16le" && 
+      format != "pcm_f32le" && format != "wav" && format != "adts") {
+    throw std::runtime_error("Unsupported streaming format: " + format + 
+                           ". Supported: aac, opus, pcm_s16le, pcm_f32le, wav");
+  }
+  
+  // Recreate impl with streaming options
+  impl_ = std::make_unique<Impl>(options);
   impl_->decoder_.open_stream(std::move(avio_read_callback));
   impl_->cached_metadata_ = impl_->decoder_.get_metadata();
 }

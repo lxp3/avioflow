@@ -4,6 +4,32 @@
 #include <vector>
 #include <cstring>
 #include <algorithm>
+#include <filesystem>
+
+// Get format from file extension
+std::string get_format_from_path(const std::string& path) {
+    std::filesystem::path file_path(path);
+    std::string ext = file_path.extension().string();
+    
+    // Remove leading dot
+    if (!ext.empty() && ext[0] == '.') {
+        ext = ext.substr(1);
+    }
+    
+    // Convert to lowercase
+    std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+    
+    // Map extensions to FFmpeg format names
+    if (ext == "aac" || ext == "m4a") return "aac";
+    if (ext == "opus") return "opus";
+    if (ext == "wav") return "wav";
+    if (ext == "mp3") return "mp3";
+    if (ext == "ogg") return "ogg";
+    if (ext == "flac") return "flac";
+    
+    // Default to extension name
+    return ext;
+}
 
 class ChunkedReader {
 public:
@@ -28,13 +54,21 @@ private:
 
 void test_online_decode(const std::string& path) {
     try {
+        // Get format from file extension
+        std::string format = get_format_from_path(path);
+        std::cout << "Detected format: " << format << "\n";
+        
         // Read in 4KB chunks
         ChunkedReader reader(path, 4096);
+        
+        // Setup streaming options with explicit format
+        avioflow::AudioStreamOptions options;
+        options.input_format = format;
         
         avioflow::AudioDecoder decoder;
         decoder.open_stream([&reader](uint8_t* buf, int size) {
             return reader.read(buf, size);
-        });
+        }, options);
 
         const auto& meta = decoder.get_metadata();
         std::cout << "Successfully opened stream: " << path << "\n";
@@ -73,10 +107,14 @@ void test_online_decode(const std::string& path) {
 int main(int argc, char** argv) {
     if (argc < 2) {
         std::cout << "Usage: avioflow_online_load <audio_file_path>\n";
+        std::cout << "Supported formats: aac, opus, wav, mp3, ogg, flac\n";
+        std::cout << "Example: avioflow_online_load audio.aac\n";
+        std::cout << "Note: Format is auto-detected from file extension\n";
         return 0;
     }
 
     std::string path = argv[1];
+    
     std::cout << "--- Testing Online (Chunked) Decode ---\n";
     test_online_decode(path);
 
