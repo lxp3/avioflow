@@ -14,11 +14,15 @@ extern "C" {
 #include <libavutil/avutil.h>
 #include <libavutil/imgutils.h>
 #include <libavutil/opt.h>
+#include <libavutil/log.h>
 #include <libswresample/swresample.h>
 #include <libavdevice/avdevice.h>
 }
 
 namespace avioflow {
+
+// Global FFmpeg log control
+void avioflow_set_log_level(const char *level);
 
 // Simple macro/function for FFmpeg error checking
 inline void check_av_error(int err, const std::string& msg) {

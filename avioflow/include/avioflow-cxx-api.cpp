@@ -83,4 +83,48 @@ std::vector<DeviceInfo> DeviceManager::list_audio_devices() {
   return DeviceHandler::list_devices();
 }
 
+// Global configuration
+void avioflow_set_log_level(const char *level) {
+  std::string log_level_str;
+
+  if (level == nullptr) {
+    const char *env_level = std::getenv("AVIOFLOW_LOG_LEVEL");
+    if (env_level != nullptr) {
+      log_level_str = env_level;
+    } else {
+      // Default level if neither parameter nor env var is set
+      log_level_str = "info";
+    }
+  } else {
+    log_level_str = level;
+  }
+
+  // Convert to lowercase for comparison
+  for (auto &c : log_level_str) {
+    c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+  }
+
+  int av_level = AV_LOG_INFO;
+  if (log_level_str == "quiet")
+    av_level = AV_LOG_QUIET;
+  else if (log_level_str == "panic")
+    av_level = AV_LOG_PANIC;
+  else if (log_level_str == "fatal")
+    av_level = AV_LOG_FATAL;
+  else if (log_level_str == "error")
+    av_level = AV_LOG_ERROR;
+  else if (log_level_str == "warning")
+    av_level = AV_LOG_WARNING;
+  else if (log_level_str == "info")
+    av_level = AV_LOG_INFO;
+  else if (log_level_str == "verbose")
+    av_level = AV_LOG_VERBOSE;
+  else if (log_level_str == "debug")
+    av_level = AV_LOG_DEBUG;
+  else if (log_level_str == "trace")
+    av_level = AV_LOG_TRACE;
+
+  av_log_set_level(av_level);
+}
+
 } // namespace avioflow

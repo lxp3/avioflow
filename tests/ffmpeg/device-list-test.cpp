@@ -5,6 +5,9 @@
 
 int main() {
   try {
+    // Test global log level configuration (reads from AVIOFLOW_LOG_LEVEL env var if nullptr)
+    avioflow::avioflow_set_log_level(nullptr);
+
     std::cout << "--- Audio Device Enumeration ---" << std::endl;
     auto devices = avioflow::DeviceManager::list_audio_devices();
 

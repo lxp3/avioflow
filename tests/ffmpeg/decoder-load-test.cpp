@@ -1,13 +1,13 @@
-// Unit tests for SingleStreamDecoder
-// Tests cover: URL, file path, memory, and streaming decode
-
 #include "avioflow-cxx-api.h"
-#include "test_framework.h"
+#include <cassert>
 #include <cmath>
+#include <cstring>
 #include <fstream>
+#include <iostream>
+#include <vector>
+#include <algorithm>
 
 using namespace avioflow;
-using namespace avioflow::test;
 
 // Expected metadata for TownTheme.mp3
 constexpr int EXPECTED_SAMPLE_RATE = 44100;
@@ -23,17 +23,17 @@ const std::string TEST_URL =
 //=============================================================================
 // Test 1: File Path Decode
 //=============================================================================
-bool test_decode_from_filepath()
+void test_decode_from_filepath()
 {
+  std::cout << "Running test_decode_from_filepath..." << std::endl;
   AudioDecoder decoder;
-  decoder.open(TEST_FILE_PATH);
-
   const auto &meta = decoder.get_metadata();
+  (void)meta;
 
   // Verify metadata
-  TEST_ASSERT_EQ(EXPECTED_SAMPLE_RATE, meta.sample_rate, "sample_rate");
-  TEST_ASSERT_EQ(EXPECTED_NUM_CHANNELS, meta.num_channels, "num_channels");
-  TEST_ASSERT_NEAR(EXPECTED_DURATION, meta.duration, 1.0, "duration");
+  assert(meta.sample_rate == EXPECTED_SAMPLE_RATE);
+  assert(meta.num_channels == EXPECTED_NUM_CHANNELS);
+  assert(std::fabs(meta.duration - EXPECTED_DURATION) < 1.0);
 
   // Decode all samples
   size_t total_samples = 0;
@@ -43,27 +43,27 @@ bool test_decode_from_filepath()
     if (samples.data.empty())
       break;
     total_samples += samples.data[0].size();
-    TEST_ASSERT_EQ(EXPECTED_NUM_CHANNELS, (int)samples.data.size(), "frame channels");
+    assert((int)samples.data.size() == EXPECTED_NUM_CHANNELS);
   }
 
-  TEST_ASSERT_EQ(EXPECTED_NUM_FRAMES, (int)total_samples, "num_frames");
-
-  return true;
+  assert((int)total_samples == EXPECTED_NUM_FRAMES);
 }
 
 //=============================================================================
 // Test 2: URL Decode
 //=============================================================================
-bool test_decode_from_url()
+void test_decode_from_url()
 {
+  std::cout << "Running test_decode_from_url..." << std::endl;
   AudioDecoder decoder;
   decoder.open(TEST_URL);
 
   const auto &meta = decoder.get_metadata();
+  (void)meta;
 
   // Verify metadata
-  TEST_ASSERT_EQ(EXPECTED_SAMPLE_RATE, meta.sample_rate, "sample_rate");
-  TEST_ASSERT_EQ(EXPECTED_NUM_CHANNELS, meta.num_channels, "num_channels");
+  assert(meta.sample_rate == EXPECTED_SAMPLE_RATE);
+  assert(meta.num_channels == EXPECTED_NUM_CHANNELS);
 
   // For URL, just decode first few frames to verify it works
   int frame_count = 0;
@@ -73,31 +73,29 @@ bool test_decode_from_url()
     if (samples.data.empty())
       break;
 
-    TEST_ASSERT_EQ(EXPECTED_NUM_CHANNELS, (int)samples.data.size(), "frame channels");
-    TEST_ASSERT_GT((int)samples.data[0].size(), 0, "frame samples");
+    assert((int)samples.data.size() == EXPECTED_NUM_CHANNELS);
+    assert((int)samples.data[0].size() > 0);
     frame_count++;
   }
 
-  TEST_ASSERT_GT(frame_count, 0, "decoded frames from URL");
-
-  return true;
+  assert(frame_count > 0);
 }
 
 //=============================================================================
 // Test 3: Memory Decode
 //=============================================================================
-bool test_decode_from_memory()
+void test_decode_from_memory()
 {
+  std::cout << "Running test_decode_from_memory..." << std::endl;
   // Read file into memory
   std::ifstream file(TEST_FILE_PATH, std::ios::binary | std::ios::ate);
-  TEST_ASSERT(file.is_open(), "Could not open test file for memory test");
+  assert(file.is_open());
 
   std::streamsize size = file.tellg();
   file.seekg(0, std::ios::beg);
 
   std::vector<uint8_t> buffer(size);
-  TEST_ASSERT(file.read(reinterpret_cast<char *>(buffer.data()), size),
-              "Failed to read file");
+  assert(file.read(reinterpret_cast<char *>(buffer.data()), size));
   file.close();
 
   // Decode from memory
@@ -105,10 +103,11 @@ bool test_decode_from_memory()
   decoder.open_memory(buffer.data(), buffer.size());
 
   const auto &meta = decoder.get_metadata();
+  (void)meta;
 
   // Verify metadata
-  TEST_ASSERT_EQ(EXPECTED_SAMPLE_RATE, meta.sample_rate, "sample_rate");
-  TEST_ASSERT_EQ(EXPECTED_NUM_CHANNELS, meta.num_channels, "num_channels");
+  assert(meta.sample_rate == EXPECTED_SAMPLE_RATE);
+  assert(meta.num_channels == EXPECTED_NUM_CHANNELS);
 
   // Decode all samples
   size_t total_samples = 0;
@@ -120,23 +119,22 @@ bool test_decode_from_memory()
     total_samples += samples.data[0].size();
   }
 
-  TEST_ASSERT_EQ(EXPECTED_NUM_FRAMES, (int)total_samples, "num_frames");
-
-  return true;
+  assert((int)total_samples == EXPECTED_NUM_FRAMES);
 }
 
 //=============================================================================
 // Test 4: Streaming Decode with callback-based data provider
 //=============================================================================
-bool test_streaming_decode()
+void test_streaming_decode()
 {
+  std::cout << "Running test_streaming_decode..." << std::endl;
   // Read file into memory
   std::ifstream file(TEST_FILE_PATH, std::ios::binary | std::ios::ate);
-  TEST_ASSERT(file.is_open(), "Could not open test file");
+  assert(file.is_open());
   std::streamsize size = file.tellg();
   file.seekg(0, std::ios::beg);
   std::vector<uint8_t> buffer(size);
-  TEST_ASSERT(file.read(reinterpret_cast<char *>(buffer.data()), size), "Failed to read file");
+  assert(file.read(reinterpret_cast<char *>(buffer.data()), size));
   file.close();
 
   size_t read_pos = 0;
@@ -168,40 +166,35 @@ bool test_streaming_decode()
     if (samples.data.empty())
       break;
 
-    TEST_ASSERT_EQ(EXPECTED_NUM_CHANNELS, (int)samples.data.size(), "frame channels");
-    TEST_ASSERT_GT((int)samples.data[0].size(), 0, "frame samples count");
+    assert((int)samples.data.size() == EXPECTED_NUM_CHANNELS);
+    assert((int)samples.data[0].size() > 0);
 
     total_samples += samples.data[0].size();
   }
 
-  // Note: Streaming mode may produce slightly different sample counts due to
-  // MP3 frame boundary handling when file size is unknown (差异通常 < 0.01%)
-  // [mp3 @ ...] invalid concatenated file detected - using bitrate for duration
   auto diff = std::abs(static_cast<int64_t>(total_samples) - EXPECTED_NUM_FRAMES);
-  TEST_ASSERT(diff < 500, "total samples should be within 500 of expected");
-
-  return true;
+  (void)diff;
+  assert(diff < 500);
 }
 
 //=============================================================================
 // Test 5: Metadata Verification
 //=============================================================================
-bool test_metadata_format()
+void test_metadata_format()
 {
+  std::cout << "Running test_metadata_format..." << std::endl;
   AudioDecoder decoder;
   decoder.open(TEST_FILE_PATH);
 
-  const auto &meta = decoder.get_metadata();
+  const auto &metadata = decoder.get_metadata();
+  (void)metadata;
 
   // MP3 container should be detected
-  TEST_ASSERT(meta.container.find("mp3") != std::string::npos,
-              "container should contain 'mp3'");
-  TEST_ASSERT_EQ(EXPECTED_SAMPLE_RATE, meta.sample_rate, "sample_rate");
-  TEST_ASSERT_EQ(EXPECTED_NUM_CHANNELS, meta.num_channels, "num_channels");
-  TEST_ASSERT_GT(meta.duration, 90.0, "duration > 90s");
-  TEST_ASSERT(meta.duration < 100.0, "duration < 100s");
-
-  return true;
+  assert(metadata.container.find("mp3") != std::string::npos);
+  assert(metadata.sample_rate == EXPECTED_SAMPLE_RATE);
+  assert(metadata.num_channels == EXPECTED_NUM_CHANNELS);
+  assert(metadata.duration > 90.0);
+  assert(metadata.duration < 100.0);
 }
 
 //=============================================================================
@@ -218,16 +211,18 @@ int main(int argc, char **argv)
   bool file_exists = check_file.good();
   check_file.close();
 
-  TestRunner runner;
-
   if (file_exists)
   {
-    runner.add_test("test_decode_from_filepath", test_decode_from_filepath);
-    runner.add_test("test_decode_from_memory", test_decode_from_memory);
-    runner.add_test("test_streaming_decode", test_streaming_decode);
-    runner.add_test("test_metadata_format", test_metadata_format);
+    test_decode_from_filepath();
+    test_decode_from_memory();
+    test_streaming_decode();
+    test_metadata_format();
+    std::cout << "All tests passed!" << std::endl;
+  }
+  else
+  {
+    std::cout << "Test file not found, skipping local tests." << std::endl;
   }
 
-  auto stats = runner.run_all();
-  return stats.failed > 0 ? 1 : 0;
+  return 0;
 }

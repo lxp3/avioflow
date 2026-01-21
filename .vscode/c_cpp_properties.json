@@ -2,10 +2,15 @@
     "configurations": [
         {
             "name": "Win32",
-            "compileCommands": "${workspaceFolder}/build/compile_commands.json",
+            "configurationProvider": "ms-vscode.cmake-tools",
             "intelliSenseMode": "windows-msvc-x64",
-            "cppStandard": "c++20",
-            "cStandard": "c17"
+            "includePath": [
+                "${default}",
+                "${workspaceFolder}/avioflow/include",
+                "${workspaceFolder}/avioflow/core/ffmpeg",
+                "${workspaceFolder}/avioflow/core/wasapi",
+                "${workspaceFolder}/build/_deps/ffmpeg_bin-src/include"
+            ]
         }
     ],
     "version": 4

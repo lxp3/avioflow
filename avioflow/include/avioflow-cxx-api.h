@@ -11,6 +11,11 @@ namespace avioflow {
 // Returns: >0 (bytes read), 0 (EOF), <0 (no data available, try again)
 using AVIOReadCallback = std::function<int(uint8_t *, int)>;
 
+// Global configuration
+// level: "quiet", "panic", "fatal", "error", "warning", "info", "verbose", "debug", "trace"
+// If level is nullptr, it reads from the environment variable AVIOFLOW_LOG_LEVEL.
+void avioflow_set_log_level(const char *level = nullptr);
+
 // Audio Decoder - Public API using PIMPL
 class AudioDecoder {
 public:
