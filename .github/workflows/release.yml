@@ -6,12 +6,18 @@ on:
       - 'v*'
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build-windows:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
       
+      - name: Set up MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+        
       - name: Configure CMake
         run: cmake -B build -DCMAKE_BUILD_TYPE=Release
           
@@ -24,12 +30,10 @@ jobs:
           $PkgDir = "avioflow-windows-x64"
           cmake --install build --prefix $PkgDir --config Release
           
-          # Strip debug info from our dll (using editbin)
-          $EditBin = (Get-ChildItem -Path "C:\Program Files\Microsoft Visual Studio" -Recurse -Filter "editbin.exe" | Select-Object -First 1).FullName
-          if ($EditBin) {
-              & $EditBin /STRIP:DEBUG "$PkgDir/bin/avioflow.dll"
-              Get-ChildItem -Path "$PkgDir/bin/*.exe" | ForEach-Object { & $EditBin /STRIP:DEBUG $_.FullName }
-          }
+          # Use editbin (now in PATH thanks to msvc-dev-cmd)
+          Write-Host "Stripping debug info using editbin..."
+          & editbin /STRIP:DEBUG "$PkgDir/bin/avioflow.dll"
+          Get-ChildItem -Path "$PkgDir/bin/*.exe" | ForEach-Object { & editbin /STRIP:DEBUG $_.FullName }
           
           Compress-Archive -Path "$PkgDir/*" -DestinationPath "$PkgDir.zip"
 
@@ -44,13 +48,13 @@ jobs:
   build-linux:
     runs-on: ubuntu-latest
     container:
-      image: quay.io/pypa/manylinux2014_x86_64
+      image: quay.io/pypa/manylinux_2_28_x86_64
     steps:
       - uses: actions/checkout@v4
       
       - name: Install dependencies
         run: |
-          yum install -y alsa-lib-devel libX11-devel
+          dnf install -y alsa-lib-devel libX11-devel cmake
           
       - name: Configure CMake
         run: cmake -B build -DCMAKE_BUILD_TYPE=Release
