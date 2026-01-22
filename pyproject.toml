@@ -29,7 +29,8 @@ classifiers = [
 cmake.args = [
     "-DENABLE_PYTHON=ON",
     "-DENABLE_WASAPI=ON",
-    "-DBUILD_TESTS=OFF"
+    "-DBUILD_TESTS=OFF",
+    "-DCMAKE_OSX_DEPLOYMENT_TARGET=10.15"
 ]
 
 # Ensure the build directory is separate

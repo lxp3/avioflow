@@ -101,10 +101,11 @@ jobs:
       - name: Build wheels
         uses: pypa/cibuildwheel@v2.22.0
         env:
+          MACOSX_DEPLOYMENT_TARGET: "10.15"
           # Only build 64-bit architectures
           CIBW_ARCHS_LINUX: x86_64
           CIBW_ARCHS_WINDOWS: AMD64
-          CIBW_ARCHS_MACOS: x86_64 arm64 universal2
+          CIBW_ARCHS_MACOS: native
           # Build only for modern Python
           CIBW_SKIP: "cp36-* cp37-* pp* *-win32 *-i686 *-musllinux*"
           # Linux-specific config (install dependencies in manylinux container)
