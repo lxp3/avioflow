@@ -4,14 +4,13 @@ build/
 # IDE and editor
 .cache/
 .vs/
-.vscode/
 
 # Downloaded dependencies (can be re-downloaded)
 downloads/
-torchcodec/
 
 # Logs
 *.log
+*.txt
 
 # Exceptions
 public/

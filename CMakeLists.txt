@@ -91,6 +91,9 @@ endif()
 # Build library
 add_library(avioflow SHARED ${AVIOFLOW_SOURCES})
 target_compile_definitions(avioflow PRIVATE AVIOFLOW_EXPORTS)
+if(ENABLE_WASAPI AND WIN32)
+    target_compile_definitions(avioflow PRIVATE AVIOFLOW_HAS_WASAPI)
+endif()
 
 target_include_directories(avioflow PUBLIC 
     $<BUILD_INTERFACE:${FFMPEG_CORE_DIR}>
