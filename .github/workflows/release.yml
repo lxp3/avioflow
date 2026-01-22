@@ -106,6 +106,10 @@ jobs:
           CIBW_BEFORE_BUILD_LINUX: "yum install -y alsa-lib-devel libX11-devel xz"
           CIBW_MANYLINUX_X86_64_IMAGE: manylinux_2_28
           # Repair wheels (bundle DLLs/SOs/dylibs)
+          # We need to point auditwheel to the FFmpeg libraries downloaded by CMake
+          CIBW_REPAIR_WHEEL_COMMAND_LINUX: >
+            export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$(find /project -name "libavformat.so*" -exec dirname {} \; | head -n 1) &&
+            auditwheel repair -w {dest_dir} {wheel}
           CIBW_TEST_COMMAND: "python {project}/tests/python/test_audio_load.py {project}/public/TownTheme.mp3"
           
       - uses: actions/upload-artifact@v4

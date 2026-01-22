@@ -65,6 +65,27 @@ install(TARGETS avioflow
     LIBRARY DESTINATION "${PYTHON_INSTALL_DESTINATION}/${PY_PACKAGE_NAME}"
 )
 
+# Install FFmpeg shared libraries into the package directory so they are included in the wheel
+if(UNIX AND NOT APPLE)
+    # On Linux, FFmpeg libs are in the lib directory
+    file(GLOB FFMPEG_SOS "${FFMPEG_ROOT}/lib/lib*.so*")
+    if(FFMPEG_SOS)
+        install(FILES ${FFMPEG_SOS} DESTINATION "${PYTHON_INSTALL_DESTINATION}/${PY_PACKAGE_NAME}")
+    endif()
+elseif(APPLE)
+    # On macOS, FFmpeg libs are in the lib directory as .dylib
+    file(GLOB FFMPEG_DYLIBS "${FFMPEG_ROOT}/lib/*.dylib")
+    if(FFMPEG_DYLIBS)
+        install(FILES ${FFMPEG_DYLIBS} DESTINATION "${PYTHON_INSTALL_DESTINATION}/${PY_PACKAGE_NAME}")
+    endif()
+elseif(WIN32)
+    # On Windows, FFmpeg DLLs are in the bin directory
+    file(GLOB FFMPEG_DLLS "${FFMPEG_ROOT}/bin/*.dll")
+    if(FFMPEG_DLLS)
+        install(FILES ${FFMPEG_DLLS} DESTINATION "${PYTHON_INSTALL_DESTINATION}/${PY_PACKAGE_NAME}")
+    endif()
+endif()
+
 install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/${PY_PACKAGE_NAME}/__init__.py"
     DESTINATION "${PYTHON_INSTALL_DESTINATION}/${PY_PACKAGE_NAME}"
 )
