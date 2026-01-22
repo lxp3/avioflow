@@ -88,6 +88,7 @@ jobs:
     name: Build wheels on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         os: [windows-latest, ubuntu-latest, macos-latest]
     steps:
@@ -100,6 +101,10 @@ jobs:
       - name: Build wheels
         uses: pypa/cibuildwheel@v2.22.0
         env:
+          # Only build 64-bit architectures
+          CIBW_ARCHS_LINUX: x86_64
+          CIBW_ARCHS_WINDOWS: AMD64
+          CIBW_ARCHS_MACOS: x86_64 arm64 universal2
           # Build only for modern Python
           CIBW_SKIP: "cp36-* cp37-* pp* *-win32 *-i686 *-musllinux*"
           # Linux-specific config (install dependencies in manylinux container)
@@ -111,6 +116,10 @@ jobs:
             export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$(find /project -name "libavformat.so*" -exec dirname {} \; | head -n 1) &&
             auditwheel repair -w {dest_dir} {wheel}
           CIBW_TEST_COMMAND: "python {project}/tests/python/test_audio_load.py {project}/public/TownTheme.mp3"
+          # macOS repair: ensure delocate can find libavioflow.dylib
+          CIBW_REPAIR_WHEEL_COMMAND_MACOS: >
+            export DYLD_LIBRARY_PATH=$DYLD_LIBRARY_PATH:$(find . -name "libavioflow.dylib" -exec dirname {} \; | head -n 1) &&
+            delocate-wheel --require-archs {delocate_archs} -w {dest_dir} -v {wheel}
           
       - uses: actions/upload-artifact@v4
         with:

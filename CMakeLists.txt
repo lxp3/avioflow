@@ -69,13 +69,18 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 
-# RPATH configuration for Linux
-if(UNIX AND NOT APPLE)
-    # Ensure that installed binaries can find libraries in the relative ../lib directory
-    # $ORIGIN is for libraries in lib/ to find each other
-    # $ORIGIN/../lib is for binaries in bin/ to find libraries in lib/
-    set(CMAKE_INSTALL_RPATH "$ORIGIN:$ORIGIN/../lib")
-    set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
+# RPATH configuration for Linux and macOS
+if(UNIX)
+    if(APPLE)
+        set(CMAKE_MACOSX_RPATH ON)
+        set(CMAKE_INSTALL_RPATH "@loader_path;@loader_path/../avioflow;@loader_path/../lib")
+    else()
+        # Ensure that installed binaries can find libraries in the relative ../lib directory
+        # $ORIGIN is for libraries in lib/ to find each other
+        # $ORIGIN/../lib is for binaries in bin/ to find libraries in lib/
+        set(CMAKE_INSTALL_RPATH "$ORIGIN:$ORIGIN/../lib")
+        set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
+    endif()
 endif()
 
 # FFmpeg Configuration
