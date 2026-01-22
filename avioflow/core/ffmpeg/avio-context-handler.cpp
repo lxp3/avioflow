@@ -2,6 +2,7 @@
 #include "ffmpeg-common.h"
 #include <algorithm>
 #include <cstring>
+#include <iostream>
 
 namespace avioflow
 {
@@ -43,41 +44,49 @@ namespace avioflow
       throw std::runtime_error("Could not allocate AVIOContext");
     }
 
+    // Mark as seekable only if a seek callback is provided
+    avio_ctx->seekable = (seek != nullptr) ? AVIO_SEEKABLE_NORMAL : 0;
+
     fmt_ctx->pb = avio_ctx;
-    fmt_ctx->flags |= AVFMT_FLAG_CUSTOM_IO;
-
-    AVDictionary *av_options = nullptr;
+    
+    // Allow explicitly specifying input format if auto-detection fails
     const AVInputFormat *iformat = nullptr;
-
     if (options.input_format.has_value())
     {
       iformat = av_find_input_format(options.input_format->c_str());
     }
 
+    // Set format-specific options if provided (crucial for raw PCM)
+    AVDictionary *format_opts = nullptr;
     if (options.input_sample_rate.has_value())
     {
-      av_dict_set_int(&av_options, "sample_rate", *options.input_sample_rate, 0);
+      av_dict_set_int(&format_opts, "sample_rate", options.input_sample_rate.value(), 0);
     }
     if (options.input_channels.has_value())
     {
-      av_dict_set_int(&av_options, "channels", *options.input_channels, 0);
+      av_dict_set_int(&format_opts, "channels", options.input_channels.value(), 0);
     }
 
-    // Attempt to open input
-    int err = avformat_open_input(&fmt_ctx, nullptr, iformat, &av_options);
+    // Attempt to open input using the custom I/O.
+    // Passing format_opts allows FFmpeg to know parameters for raw streams.
+    int err = avformat_open_input(&fmt_ctx, nullptr, iformat, &format_opts);
+    
+    // Clean up options (FFmpeg consumes recognized options, but we still need to free the dictionary)
+    if (format_opts) {
+      av_dict_free(&format_opts);
+    }
     if (err < 0)
     {
       char err_buf[AV_ERROR_MAX_STRING_SIZE];
       av_strerror(err, err_buf, sizeof(err_buf));
-      av_dict_free(&av_options);
+      std::cerr << "[ERROR] avformat_open_input failed: " << err_buf << " (code: " << err << ")" << std::endl;
       
       av_freep(&avio_ctx->buffer);
       avio_context_free(&avio_ctx);
       avformat_free_context(fmt_ctx);
       throw std::runtime_error("Could not open custom I/O input: " + std::string(err_buf));
     }
-
-    av_dict_free(&av_options);
+    
     return fmt_ctx;
   }
 
@@ -103,10 +112,16 @@ namespace avioflow
   int AvioContextHandler::read_packet_memory(void *opaque, uint8_t *buf, int buf_size)
   {
     MemoryContext *m_ctx = static_cast<MemoryContext *>(opaque);
-    int read = static_cast<int>(
-        std::min(static_cast<size_t>(buf_size), m_ctx->size - m_ctx->pos));
+    if (m_ctx->pos >= m_ctx->size) {
+        return AVERROR_EOF;
+    }
+    
+    size_t available = m_ctx->size - m_ctx->pos;
+    int read = std::min(static_cast<int>(available), buf_size);
+    
     if (read <= 0)
       return AVERROR_EOF;
+
     std::memcpy(buf, m_ctx->data + m_ctx->pos, read);
     m_ctx->pos += read;
     return read;
@@ -115,29 +130,22 @@ namespace avioflow
   int64_t AvioContextHandler::seek_memory(void *opaque, int64_t offset, int whence)
   {
     MemoryContext *m_ctx = static_cast<MemoryContext *>(opaque);
-    if (whence == AVSEEK_SIZE)
-      return static_cast<int64_t>(m_ctx->size);
+    int64_t ret = -1;
 
-    int64_t new_pos = 0;
     switch (whence)
     {
+    case AVSEEK_SIZE:
+      ret = static_cast<int64_t>(m_ctx->size);
+      break;
     case SEEK_SET:
-      new_pos = offset;
-      break;
-    case SEEK_CUR:
-      new_pos = static_cast<int64_t>(m_ctx->pos) + offset;
-      break;
-    case SEEK_END:
-      new_pos = static_cast<int64_t>(m_ctx->size) + offset;
+      m_ctx->pos = static_cast<size_t>(offset);
+      ret = offset;
       break;
     default:
-      return -1;
+      break;  // Return -1 for unsupported operations
     }
 
-    if (new_pos < 0 || static_cast<size_t>(new_pos) > m_ctx->size)
-      return -1;
-    m_ctx->pos = static_cast<size_t>(new_pos);
-    return static_cast<int64_t>(m_ctx->pos);
+    return ret;
   }
 
   int AvioContextHandler::read_packet_stream(void *opaque, uint8_t *buf, int buf_size)
