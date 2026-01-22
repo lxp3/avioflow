@@ -36,23 +36,8 @@ add_custom_command(TARGET ${PY_EXT_NAME} POST_BUILD
 
 # --- Installation ---
 
-# Determine Python site-packages directory for "global" installation
-execute_process(
-    COMMAND ${Python_EXECUTABLE} -c "import site; print(site.getsitepackages()[0])"
-    OUTPUT_VARIABLE PYTHON_SITE_PACKAGES
-    OUTPUT_STRIP_TRAILING_WHITESPACE
-)
-
-# Option to install to site-packages or just use the default CMAKE_INSTALL_PREFIX
-option(INSTALL_PYTHON_PACKAGE_TO_SITE_PACKAGES "Install the Python package directly to site-packages" OFF)
-
-if(INSTALL_PYTHON_PACKAGE_TO_SITE_PACKAGES)
-    set(PYTHON_INSTALL_DESTINATION "${PYTHON_SITE_PACKAGES}")
-else()
-    set(PYTHON_INSTALL_DESTINATION "lib/python/site-packages") # Default relative path
-endif()
-
-message(STATUS "Python package will be installed to: ${PYTHON_INSTALL_DESTINATION}")
+# Set destination to "." so that the package is installed at the root of the wheel
+set(PYTHON_INSTALL_DESTINATION ".")
 
 # Install the package
 install(TARGETS ${PY_EXT_NAME}
