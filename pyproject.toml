@@ -30,7 +30,7 @@ cmake.args = [
     "-DENABLE_PYTHON=ON",
     "-DENABLE_WASAPI=ON",
     "-DBUILD_TESTS=OFF",
-    "-DCMAKE_OSX_DEPLOYMENT_TARGET=12.0"
+    "-DCMAKE_OSX_DEPLOYMENT_TARGET=15.0"
 ]
 
 # Ensure the build directory is separate
