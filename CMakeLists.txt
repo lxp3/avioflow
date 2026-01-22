@@ -35,6 +35,15 @@ if(MSVC)
     # Use dynamic CRT (/MD or /MDd)
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
     add_definitions(-D_CRT_SECURE_NO_WARNINGS)
+elseif(APPLE)
+    # macOS specific optimizations
+    add_compile_options(
+        -O3 
+        -fvisibility=hidden
+    )
+    add_link_options(
+        -Wl,-dead_strip       # macOS equivalent of --gc-sections
+    )
 else()
     # Linux/GCC/Clang optimizations
     add_compile_options(

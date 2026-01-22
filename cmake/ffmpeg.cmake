@@ -36,6 +36,7 @@ else()
         set(FFMPEG_HASH "SHA256=fae0426856211d183d30a8029c3d2cc0a24e9b0302bb5eb2cbc2e529034f3f35")
     elseif(UNIX)
         set(FFMPEG_URL "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2025-11-30-12-53/ffmpeg-n7.1.3-7-gf65fc0b137-linux64-lgpl-shared-7.1.tar.xz")
+        set(FFMPEG_HASH "SHA256=c5825395f42f761ed9c9bd1a43b05c8378bb0e1550776f4b9d76781020b5225b")
     endif()
 
     message(STATUS "FFmpeg URL: ${FFMPEG_URL}")
@@ -106,6 +107,12 @@ foreach(LIB IN LISTS FFMPEG_LIBS)
             set_target_properties(ffmpeg::${LIB} PROPERTIES
                 IMPORTED_IMPLIB "${FFMPEG_LIB_DIR}/${LIB}.lib"
                 IMPORTED_LOCATION "${FFMPEG_DLL}"
+            )
+        elseif(APPLE)
+            # macOS: Use .dylib
+            set(FFMPEG_DYLIB "${FFMPEG_LIB_DIR}/lib${LIB}.dylib")
+            set_target_properties(ffmpeg::${LIB} PROPERTIES
+                IMPORTED_LOCATION "${FFMPEG_DYLIB}"
             )
         else()
             # Linux: Use the main .so symlink for linking

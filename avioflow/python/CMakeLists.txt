@@ -1,38 +1,70 @@
 include(../../cmake/pybind11.cmake)
+find_package(Python REQUIRED COMPONENTS Interpreter Development.Module)
 
-# Ensure pybind11 macros are available locally
-# find_package(pybind11 REQUIRED) or adding tools to module path is usually needed
-# Since FetchContent was used, we need to point to the tools directory
 FetchContent_GetProperties(pybind11)
-list(APPEND CMAKE_MODULE_PATH "${pybind11_SOURCE_DIR}/tools")
-include(pybind11Tools)
+include(${pybind11_SOURCE_DIR}/tools/pybind11Tools.cmake)
 
-set(PY_TARGET_NAME _avioflow)
-pybind11_add_module(${PY_TARGET_NAME} bindings.cpp)
+# Define the package name
+set(PY_PACKAGE_NAME avioflow)
+set(PY_EXT_NAME _avioflow)
+
+# Build the extension
+pybind11_add_module(${PY_EXT_NAME} bindings.cpp)
 
 # Header include paths
-target_include_directories(${PY_TARGET_NAME} PRIVATE ../include)
+target_include_directories(${PY_EXT_NAME} PRIVATE ../include)
 
 # Link main target
-target_link_libraries(${PY_TARGET_NAME} PRIVATE avioflow)
+target_link_libraries(${PY_EXT_NAME} PRIVATE avioflow)
 
-# --- Integrated Package Generation (for scikit-build-core / cmake --install) ---
+# --- Automatic Package Structure in Build Directory ---
+# This avoids manual directory creation and makes 'import avioflow' work if build/bin is in PYTHONPATH
 
-# Install the binary extension
-install(TARGETS ${PY_TARGET_NAME}
-    DESTINATION avioflow
+# Set output directory to bin/avioflow
+set_target_properties(${PY_EXT_NAME} PROPERTIES
+    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin/${PY_PACKAGE_NAME}"
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin/${PY_PACKAGE_NAME}"
 )
 
-# Install the __init__.py
-install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/avioflow/__init__.py"
-    DESTINATION avioflow
+# Copy __init__.py to the same directory
+add_custom_command(TARGET ${PY_EXT_NAME} POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy
+        "${CMAKE_CURRENT_SOURCE_DIR}/${PY_PACKAGE_NAME}/__init__.py"
+        "$<TARGET_FILE_DIR:${PY_EXT_NAME}>/__init__.py"
+    COMMENT "Copying __init__.py to package directory"
 )
 
-# Optionally install the main library and FFmpeg DLLs alongside the extension
-# This is mainly for local dev/testing; for wheels, tools like auditwheel/delocate 
-# will bundle these into the package.
-if(WIN32)
-    install(TARGETS avioflow RUNTIME DESTINATION avioflow)
-    file(GLOB FFMPEG_DLLS "${FFMPEG_BIN_DIR}/*.dll")
-    install(FILES ${FFMPEG_DLLS} DESTINATION avioflow)
+# --- Installation ---
+
+# Determine Python site-packages directory for "global" installation
+execute_process(
+    COMMAND ${Python_EXECUTABLE} -c "import site; print(site.getsitepackages()[0])"
+    OUTPUT_VARIABLE PYTHON_SITE_PACKAGES
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+
+# Option to install to site-packages or just use the default CMAKE_INSTALL_PREFIX
+option(INSTALL_PYTHON_PACKAGE_TO_SITE_PACKAGES "Install the Python package directly to site-packages" OFF)
+
+if(INSTALL_PYTHON_PACKAGE_TO_SITE_PACKAGES)
+    set(PYTHON_INSTALL_DESTINATION "${PYTHON_SITE_PACKAGES}")
+else()
+    set(PYTHON_INSTALL_DESTINATION "lib/python/site-packages") # Default relative path
 endif()
+
+message(STATUS "Python package will be installed to: ${PYTHON_INSTALL_DESTINATION}")
+
+# Install the package
+install(TARGETS ${PY_EXT_NAME}
+    DESTINATION "${PYTHON_INSTALL_DESTINATION}/${PY_PACKAGE_NAME}"
+)
+
+# Also install the main library so auditwheel/delocate can find it for bundling
+install(TARGETS avioflow
+    RUNTIME DESTINATION "${PYTHON_INSTALL_DESTINATION}/${PY_PACKAGE_NAME}"
+    LIBRARY DESTINATION "${PYTHON_INSTALL_DESTINATION}/${PY_PACKAGE_NAME}"
+)
+
+install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/${PY_PACKAGE_NAME}/__init__.py"
+    DESTINATION "${PYTHON_INSTALL_DESTINATION}/${PY_PACKAGE_NAME}"
+)

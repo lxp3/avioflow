@@ -43,7 +43,7 @@ jobs:
       - name: Install dependencies
         run: sudo apt-get update && sudo apt-get install -y libasound2-dev libx11-dev
       - name: Configure CMake
-        run: cmake -B build -DCMAKE_BUILD_TYPE=Release -DENABLE_WASAPI=ON -DENABLE_PYTHON=OFF
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release -DENABLE_WASAPI=OFF -DENABLE_PYTHON=OFF
       - name: Build
         run: cmake --build build --config Release -j $(nproc)
       - name: Package
@@ -67,7 +67,7 @@ jobs:
       - name: Install dependencies
         run: brew install ffmpeg
       - name: Configure CMake
-        run: cmake -B build -DCMAKE_BUILD_TYPE=Release -DENABLE_PYTHON=OFF
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release -DENABLE_WASAPI=OFF -DENABLE_PYTHON=OFF
       - name: Build
         run: cmake --build build --config Release -j $(sysctl -n hw.ncpu)
       - name: Package
@@ -101,11 +101,12 @@ jobs:
         uses: pypa/cibuildwheel@v2.22.0
         env:
           # Build only for modern Python
-          CIBW_SKIP: "cp36-* cp37-* cp38-* pp*"
+          CIBW_SKIP: "cp36-* cp37-* pp* *-win32 *-i686 *-musllinux*"
           # Linux-specific config (install dependencies in manylinux container)
-          CIBW_BEFORE_BUILD_LINUX: "yum install -y alsa-lib-devel libX11-devel"
+          CIBW_BEFORE_BUILD_LINUX: "yum install -y alsa-lib-devel libX11-devel xz"
+          CIBW_MANYLINUX_X86_64_IMAGE: manylinux_2_28
           # Repair wheels (bundle DLLs/SOs/dylibs)
-          CIBW_TEST_COMMAND: "python {project}/avioflow/python/test_audio_load.py {project}/public/TownTheme.mp3"
+          CIBW_TEST_COMMAND: "python {project}/tests/python/test_audio_load.py {project}/public/TownTheme.mp3"
           
       - uses: actions/upload-artifact@v4
         with:
@@ -133,8 +134,6 @@ jobs:
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
-        if: env.PYPI_TOKEN != ''
-        env:
-          PYPI_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
-        # with:
-        #   repository-url: https://test.pypi.org/legacy/ # Uncomment for TestPyPI
+        with:
+          password: ${{ secrets.PYPI_API_TOKEN }}
+          # skip-existing: true # 如果发布中断可以跳过已存在的版本
