@@ -2,20 +2,33 @@ if(APPLE)
     # On macOS, we prefer using the system-installed FFmpeg (via Homebrew)
     find_program(BREW_EXECUTABLE brew)
     if(BREW_EXECUTABLE)
+        # Try to find ffmpeg@7 first for better compatibility
         execute_process(
-            COMMAND ${BREW_EXECUTABLE} --prefix ffmpeg
+            COMMAND ${BREW_EXECUTABLE} --prefix ffmpeg@7
             OUTPUT_VARIABLE FFMPEG_BREW_PREFIX
             OUTPUT_STRIP_TRAILING_WHITESPACE
             ERROR_QUIET
         )
+        
+        # Fallback to default ffmpeg if ffmpeg@7 is not found
+        if(NOT FFMPEG_BREW_PREFIX OR NOT IS_DIRECTORY "${FFMPEG_BREW_PREFIX}")
+            execute_process(
+                COMMAND ${BREW_EXECUTABLE} --prefix ffmpeg
+                OUTPUT_VARIABLE FFMPEG_BREW_PREFIX
+                OUTPUT_STRIP_TRAILING_WHITESPACE
+                ERROR_QUIET
+            )
+        endif()
     endif()
 
     if(FFMPEG_BREW_PREFIX AND IS_DIRECTORY "${FFMPEG_BREW_PREFIX}")
         set(FFMPEG_ROOT "${FFMPEG_BREW_PREFIX}" CACHE PATH "FFmpeg root directory" FORCE)
         message(STATUS "Found FFmpeg via Homebrew: ${FFMPEG_ROOT}")
     else()
-        # Fallback to check common paths if brew prefix failed
-        if(EXISTS "/opt/homebrew/opt/ffmpeg")
+        # Fallback to check common paths
+        if(EXISTS "/opt/homebrew/opt/ffmpeg@7")
+            set(FFMPEG_ROOT "/opt/homebrew/opt/ffmpeg@7" CACHE PATH "FFmpeg root directory" FORCE)
+        elseif(EXISTS "/opt/homebrew/opt/ffmpeg")
             set(FFMPEG_ROOT "/opt/homebrew/opt/ffmpeg" CACHE PATH "FFmpeg root directory" FORCE)
         elseif(EXISTS "/usr/local/opt/ffmpeg")
             set(FFMPEG_ROOT "/usr/local/opt/ffmpeg" CACHE PATH "FFmpeg root directory" FORCE)
