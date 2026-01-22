@@ -1,107 +1,128 @@
-# avioflow
+# AvioFlow
 
-A C++20 audio decoder library powered by FFmpeg 7.
+AvioFlow is a high-performance audio decoding and capture library powered by FFmpeg. It provides a modern C++20 API and seamless Python bindings for efficient audio processing, including file decoding, URL streaming, and low-latency system audio capture (WASAPI/DirectShow).
 
 ## Features
 
-- Decode audio from files, URLs, memory buffers
-- Automatic resampling to float planar format (FLTP)
-- Optional sample rate and channel count conversion
-- Simple `FrameOutput` interface for zero-copy access
+- **Multi-format Support**: Decodes any format supported by FFmpeg (MP3, WAV, AAC, FLAC, etc.).
+- **Flexible Input**: Load audio from files, memory buffers, network URLs, or custom streams.
+- **Hardware Capture**: 
+    - **WASAPI Loopback**: Capture system output (what you hear).
+    - **DirectShow**: Capture from microphones and other input devices.
+- **Resampling**: Built-in support for target sample rate and channel conversion.
+- **Python Bindings**: High-performance Python module using `pybind11`.
 
-## Requirements
+---
 
-- Windows 10/11
-- Visual Studio 2022+ (with C++20 support)
-- CMake 3.20+
-- Ninja (optional, for faster builds)
+## 🛠 Build Instructions
 
-## Build
+### Prerequisites
+- **Windows**: Visual Studio 2022+, CMake 3.20+.
+- **Linux**: GCC 11+, CMake 3.20+, FFmpeg development headers.
 
-Run the build script from PowerShell:
-
+### Build and Run
+Use the provided PowerShell script for automated setup on Windows:
 ```powershell
 .\build.ps1
 ```
 
-This will:
-1. Download FFmpeg 7.1 shared libraries automatically
-2. Configure and build the project
-3. Output binaries to `build/`
-
-## Test
-
-### Basic Test
-
-```powershell
-.\build\avioflow_test.exe <audio_file>
+Or manually with CMake:
+```bash
+cmake -B build -DENABLE_PYTHON=ON -DENABLE_WASAPI=ON
+cmake --build build --config Release
 ```
 
-Example:
-```powershell
-.\build\avioflow_test.exe .\TownTheme.mp3
-```
+---
 
-### Unit Tests
+## 🚀 C++ Usage
 
-```powershell
-.\build\avioflow_load_test.exe
-.\build\avioflow_resample_test.exe
-```
-
-Use `--skip-network` to skip URL-based tests:
-```powershell
-.\build\avioflow_load_test.exe --skip-network
-```
-
-## Usage
-
+### Offline File Decoding
 ```cpp
-#include "single-stream-decoder.h"
+#include "avioflow-cxx-api.h"
+#include <iostream>
 
-avioflow::SingleStreamDecoder decoder;
-decoder.open("audio.mp3");
+int main() {
+    avioflow::AudioStreamOptions options;
+    options.output_sample_rate = 16000; // Resample to 16kHz
+    options.output_num_channels = 1;    // Convert to Mono
 
-const auto& meta = decoder.get_metadata();
-std::cout << "Sample Rate: " << meta.sample_rate << " Hz\n";
-std::cout << "Channels: " << meta.num_channels << "\n";
+    avioflow::AudioDecoder decoder(options);
+    decoder.open("audio.mp3");
 
-while (!decoder.is_finished())
-{
-    auto frame = decoder.decode_next();
-    if (frame.data == nullptr)
-        break;
+    auto meta = decoder.get_metadata();
+    std::cout << "Codec: " << meta.codec << " Duration: " << meta.duration << "s" << std::endl;
 
-    // frame.data: pointer to planar float data (FLTP format)
-    // frame.num_samples: samples per channel
-    // frame.num_channels: number of channels
+    // Decode all at once
+    auto samples = decoder.get_all_samples();
+    std::cout << "Decoded " << samples.data[0].size() << " samples." << std::endl;
 
-    const float* channel0 = reinterpret_cast<const float*>(frame.data);
-    // Process audio data...
+    return 0;
 }
 ```
 
-## API
+### System Audio Capture (WASAPI)
+```cpp
+decoder.open("wasapi_loopback");
+while (!decoder.is_finished()) {
+    auto frame = decoder.decode_next();
+    if (!frame.data.empty()) {
+        // Process real-time float samples...
+    }
+}
+```
 
-### SingleStreamDecoder
+---
 
-| Method | Description |
-|--------|-------------|
-| `open(path)` | Open audio file, URL, or device |
-| `open(data, size)` | Open from memory buffer |
-| `decode_next()` | Decode next frame, returns `FrameOutput` |
-| `has_more()` | Check if more frames available |
-| `get_metadata()` | Get audio metadata (sample rate, channels, duration) |
+## 🐍 Python Usage
 
-### FrameOutput
+The Python package is built into `build/bin/Release/avioflow`. Add this path to your `PYTHONPATH` or copy the folder to your project.
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `data` | `uint8_t*` | Pointer to planar float audio data |
-| `size` | `size_t` | Size in bytes per channel |
-| `num_channels` | `int` | Number of audio channels |
-| `num_samples` | `int` | Samples per channel |
+### Basic Decoding
+```python
+import avioflow as av
+
+# Set log level for debugging
+av.set_log_level("warning")
+
+# Initialize and open
+decoder = av.AudioDecoder()
+decoder.open("music.wav")
+
+# Get info
+meta = decoder.get_metadata()
+print(f"Format: {meta.container}, {meta.sample_rate}Hz")
+
+# Get all samples as nested lists [[ch1...], [ch2...]]
+samples = decoder.get_all_samples()
+print(f"Total samples: {len(samples.data[0])}")
+```
+
+### Real-time Capture
+```python
+# List available devices
+devices = av.DeviceManager.list_audio_devices()
+for d in devices:
+    print(f"ID: {d.name}, Desc: {d.description}")
+
+decoder = av.AudioDecoder()
+decoder.open("audio=@device_cm_...") # Open microphone via DirectShow string
+
+while True:
+    frame = decoder.decode_next()
+    if frame:
+        # data is planar float32
+        process(frame.data)
+```
+
+### Installation for Developers
+To use the local build in your script:
+```python
+import sys
+sys.path.append("path/to/avioflow/build/bin/Release")
+import avioflow
+```
+
+---
 
 ## License
-
-This project uses FFmpeg (LGPL).
+MIT License

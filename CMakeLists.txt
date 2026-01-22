@@ -7,10 +7,14 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 option(BUILD_SHARED_LIBS "Build using shared libraries" ON)
 option(BUILD_TESTS "Build tests and examples" ON)
 option(ENABLE_WASAPI "Enable WASAPI loopback capture support" ON)
+option(ENABLE_PYTHON "Enable Python bindings" OFF)
 
 
 # Reduce verbose output - disable detailed makefile output
 set(CMAKE_VERBOSE_MAKEFILE OFF)
+
+# Add cmake directory to module path for easy includes
+list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 
 # Configure MSVC
 if(MSVC)
@@ -135,6 +139,12 @@ add_subdirectory(avioflow/bin)
 if(BUILD_TESTS)
     add_subdirectory(tests)
 endif()
+
+# --- Python Bindings ---
+if(ENABLE_PYTHON)
+    add_subdirectory(avioflow/python)
+endif()
+
 
 # --- Installation & Packaging ---
 
