@@ -1,30 +1,7 @@
 import sys
 import os
 
-# Add the binary directory to sys.path for the .pyd module
-# Assuming running from the avioflow/python directory or project root
-script_dir = os.path.dirname(os.path.abspath(__file__))
-module_path = os.path.abspath(os.path.join(script_dir, "../../build/bin/Release"))
-
-if os.path.exists(module_path):
-    sys.path.append(module_path)
-    if os.name == 'nt':
-        # On Windows, we need to add the DLL path (where the .pyd and ffmpeg DLLs are)
-        os.add_dll_directory(module_path)
-else:
-    # Try root build path if above fails
-    module_path = os.path.abspath("build/bin/Release")
-    if os.path.exists(module_path):
-        sys.path.append(module_path)
-        if os.name == 'nt':
-            os.add_dll_directory(module_path)
-
-try:
-    import avioflow as av
-except ImportError as e:
-    print(f"Error: Could not import avioflow. Ensure it is built in {module_path}")
-    print(f"Details: {e}")
-    sys.exit(1)
+import avioflow as av
 
 def main():
     if len(sys.argv) < 2:

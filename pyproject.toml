@@ -1,0 +1,33 @@
+[build-system]
+requires = ["scikit-build-core>=0.10", "pybind11>=2.13"]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "avioflow"
+version = "0.1.0"
+description = "High-performance audio decoding with FFmpeg and C++"
+readme = "README.md"
+authors = [{name = "Your Name", email = "your@email.com"}]
+requires-python = ">=3.8"
+license = {text = "MIT"}
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: C++",
+    "Topic :: Multimedia :: Sound/Audio",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
+]
+
+[tool.scikit-build]
+# Pass options to CMake
+cmake.args = [
+    "-DENABLE_PYTHON=ON",
+    "-DENABLE_WASAPI=ON",
+    "-DBUILD_TESTS=OFF"
+]
+
+# Ensure the build directory is separate
+build-dir = "build/{wheel_tag}"
+
+# We only want to include the files that are installed via CMake
+# scikit-build-core handles this automatically when using build-backend

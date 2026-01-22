@@ -16,25 +16,23 @@ target_include_directories(${PY_TARGET_NAME} PRIVATE ../include)
 # Link main target
 target_link_libraries(${PY_TARGET_NAME} PRIVATE avioflow)
 
-# --- Integrated Package Generation ---
-# The package will be created in the bin/Release/avioflow directory
-set(PACKAGE_OUTPUT_DIR "$<TARGET_FILE_DIR:${PY_TARGET_NAME}>/avioflow")
+# --- Integrated Package Generation (for scikit-build-core / cmake --install) ---
 
-add_custom_command(TARGET ${PY_TARGET_NAME} POST_BUILD
-    # Ensure package directory exists
-    COMMAND ${CMAKE_COMMAND} -E make_directory "${PACKAGE_OUTPUT_DIR}"
-    
-    # Copy the compiled extension (.pyd/.so) into the package
-    COMMAND ${CMAKE_COMMAND} -E copy "$<TARGET_FILE:${PY_TARGET_NAME}>" "${PACKAGE_OUTPUT_DIR}/"
-    
-    # Copy the __init__.py from our source tree
-    COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_CURRENT_SOURCE_DIR}/avioflow/__init__.py" "${PACKAGE_OUTPUT_DIR}/"
-    
-    # Copy main library (avioflow.dll)
-    COMMAND ${CMAKE_COMMAND} -E copy "$<TARGET_FILE:avioflow>" "${PACKAGE_OUTPUT_DIR}/"
-    
-    # Copy all FFmpeg dependencies
-    COMMAND ${CMAKE_COMMAND} -E copy_directory "${FFMPEG_BIN_DIR}" "${PACKAGE_OUTPUT_DIR}"
-    
-    COMMENT "Building avioflow Python package at ${PACKAGE_OUTPUT_DIR}"
+# Install the binary extension
+install(TARGETS ${PY_TARGET_NAME}
+    DESTINATION avioflow
 )
+
+# Install the __init__.py
+install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/avioflow/__init__.py"
+    DESTINATION avioflow
+)
+
+# Optionally install the main library and FFmpeg DLLs alongside the extension
+# This is mainly for local dev/testing; for wheels, tools like auditwheel/delocate 
+# will bundle these into the package.
+if(WIN32)
+    install(TARGETS avioflow RUNTIME DESTINATION avioflow)
+    file(GLOB FFMPEG_DLLS "${FFMPEG_BIN_DIR}/*.dll")
+    install(FILES ${FFMPEG_DLLS} DESTINATION avioflow)
+endif()
