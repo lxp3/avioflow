@@ -125,11 +125,13 @@ if(ENABLE_WASAPI AND WIN32)
 endif()
 
 target_link_libraries(avioflow PRIVATE
-    ffmpeg::avcodec
-    ffmpeg::avformat
-    ffmpeg::avutil
-    ffmpeg::swresample
     ffmpeg::avdevice
+    ffmpeg::avformat
+    ffmpeg::avfilter
+    ffmpeg::avcodec
+    ffmpeg::swscale
+    ffmpeg::swresample
+    ffmpeg::avutil
 )
 
 if(WIN32)

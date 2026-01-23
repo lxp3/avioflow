@@ -7,14 +7,14 @@ $ErrorActionPreference = "Stop"
 # Configuration
 $BUILD_DIR = "build"
 
-# if (Test-Path $BUILD_DIR) {
-#     Write-Host "Cleaning existing build directory..."
-#     try {
-#         Remove-Item -Path $BUILD_DIR -Recurse -Force -ErrorAction Stop
-#     } catch {
-#         Write-Warning "Could not fully clean build directory (some files might be in use). Continuing anyway..."
-#     }
-# }
+if (Test-Path $BUILD_DIR) {
+    Write-Host "Cleaning existing build directory..."
+    try {
+        Remove-Item -Path $BUILD_DIR -Recurse -Force -ErrorAction Stop
+    } catch {
+        Write-Warning "Could not fully clean build directory (some files might be in use). Continuing anyway..."
+    }
+}
 # FFmpeg is now managed via CMake (FetchContent)
 
 
