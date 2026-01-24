@@ -5,15 +5,12 @@ build/
 .cache/
 .vs/
 
-# Downloaded dependencies (can be re-downloaded)
-downloads/
-
 # Logs
 *.log
 *.txt
 
 # Exceptions
-public/
+public/downloads/miniaudio.h
 
 # Keep CMakeLists.txt
 !CMakeLists.txt
