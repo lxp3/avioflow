@@ -57,24 +57,25 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  # 2. Build C++ Standalone Binaries (Linux)
+  # 2. Build C++ Standalone Binaries (Linux - glibc 2.28 compatible)
   build-cpp-linux:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
+    container: quay.io/pypa/manylinux_2_28_x86_64
     steps:
       - uses: actions/checkout@v4
 
       - name: Install dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libasound2-dev libx11-dev ccache
+          yum install -y epel-release
+          yum install -y alsa-lib-devel libX11-devel xz ccache
 
       - name: Cache ccache
         uses: actions/cache@v4
         with:
           path: ~/.cache/ccache
-          key: ccache-linux-${{ github.run_id }}
+          key: ccache-linux-standalone-${{ github.run_id }}
           restore-keys: |
-            ccache-linux-
+            ccache-linux-standalone-
 
       - name: Configure CMake
         run: |
