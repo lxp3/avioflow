@@ -1,8 +1,13 @@
-include(../../cmake/pybind11.cmake)
-find_package(Python REQUIRED COMPONENTS Interpreter Development.Module)
+# 1. Try to find pybind11 in the current environment (e.g., provided by scikit-build-core or pip)
+find_package(pybind11 CONFIG QUIET)
 
-FetchContent_GetProperties(pybind11)
-include(${pybind11_SOURCE_DIR}/tools/pybind11Tools.cmake)
+# 2. If not found, fall back to downloading it via FetchContent
+if(NOT pybind11_FOUND)
+    message(STATUS "pybind11 not found in environment, falling back to FetchContent...")
+    include(../../cmake/pybind11.cmake)
+endif()
+
+find_package(Python REQUIRED COMPONENTS Interpreter Development.Module)
 
 # Define the package name
 set(PY_PACKAGE_NAME avioflow)
