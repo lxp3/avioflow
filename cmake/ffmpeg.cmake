@@ -89,8 +89,14 @@ foreach(LIB IN LISTS FFMPEG_LIBS)
                 IMPORTED_LOCATION "${FFMPEG_DLL}"
             )
         else()
-            # Linux: Use the main .so symlink for linking
-            set(FFMPEG_SO "${FFMPEG_LIB_DIR}/lib${LIB}.so")
+            # Linux: Find the actual .so file (since symlinks were removed)
+            file(GLOB FFMPEG_SO_PATH "${FFMPEG_LIB_DIR}/lib${LIB}.so*")
+            if(FFMPEG_SO_PATH)
+                list(GET FFMPEG_SO_PATH 0 FFMPEG_SO)
+                message(STATUS "Found FFmpeg ${LIB}: ${FFMPEG_SO}")
+            else()
+                message(FATAL_ERROR "Could not find FFmpeg library: lib${LIB}.so in ${FFMPEG_LIB_DIR}")
+            endif()
             
             set_target_properties(ffmpeg::${LIB} PROPERTIES
                 IMPORTED_LOCATION "${FFMPEG_SO}"
