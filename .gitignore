@@ -5,7 +5,7 @@ build_*/
 # IDE and editor
 .cache/
 .vs/
-
+__pycache__/
 # Logs
 *.log
 *.txt

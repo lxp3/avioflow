@@ -1,25 +1,22 @@
+#! /usr/bin/env python3
 import sys
-import os
 
-import avioflow as av
+import avioflow
+
+"""
+Usage:
+cd tests/python
+python test_audio_load.py
+"""
+
+avioflow.set_log_level("info")
 
 
 def main():
-    if len(sys.argv) < 2:
-        print(f"Usage: python {sys.argv[0]} <audio_file_path>")
-        sys.exit(1)
-
-    audio_path = sys.argv[1]
-    if not os.path.exists(audio_path):
-        print(f"Error: File not found: {audio_path}")
-        sys.exit(1)
-
-    print(f"--- Audio Load Test (Python) ---")
-    print(f"Target: {audio_path}")
-
+    audio_path = "../../public/wavs/TownTheme.mp3"
     try:
         # 1. Initialize Decoder
-        decoder = av.AudioDecoder()
+        decoder = avioflow.AudioDecoder()
 
         # 2. Open File
         decoder.open(audio_path)
