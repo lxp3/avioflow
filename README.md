@@ -75,36 +75,41 @@ while (!decoder.is_finished()) {
 
 ## 🐍 Python Usage
 
-The Python package is built into `build/bin/Release/avioflow`. Add this path to your `PYTHONPATH` or copy the folder to your project.
+install command:
+```
+pip install avioflow
+```
 
 ### Basic Decoding
 ```python
-import avioflow as av
-
-# Set log level for debugging
-av.set_log_level("warning")
+import avioflow 
 
 # Initialize and open
-decoder = av.AudioDecoder()
+decoder = avioflow.AudioDecoder()
 decoder.open("music.wav")
 
 # Get info
 meta = decoder.get_metadata()
-print(f"Format: {meta.container}, {meta.sample_rate}Hz")
+print(f"Container:    {meta.container}")
+print(f"Codec:        {meta.codec}")
+print(f"Sample Rate:  {meta.sample_rate} Hz")
+print(f"Channels:     {meta.num_channels}")
+print(f"Duration:     {meta.duration:.3f} s")
+print(f"Num Samples:  {meta.num_samples}")
 
-# Get all samples as nested lists [[ch1...], [ch2...]]
+# Decode all samples, with multi-channels
+print(f"\nDecoding all samples...")
 samples = decoder.get_all_samples()
-print(f"Total samples: {len(samples.data[0])}")
 ```
 
 ### Real-time Capture
 ```python
 # List available devices
-devices = av.DeviceManager.list_audio_devices()
+devices = avioflow.DeviceManager.list_audio_devices()
 for d in devices:
     print(f"ID: {d.name}, Desc: {d.description}")
 
-decoder = av.AudioDecoder()
+decoder = avioflow.AudioDecoder()
 decoder.open("audio=@device_cm_...") # Open microphone via DirectShow string
 
 while True:
@@ -113,16 +118,6 @@ while True:
         # data is planar float32
         process(frame.data)
 ```
-
-### Installation for Developers
-To use the local build in your script:
-```python
-import sys
-sys.path.append("path/to/avioflow/build/bin/Release")
-import avioflow
-```
-
----
 
 ## License
 MIT License

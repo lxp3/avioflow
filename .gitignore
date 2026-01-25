@@ -1,6 +1,7 @@
 # Build directories
 build/
 build_*/
+dist/
 
 # IDE and editor
 .cache/

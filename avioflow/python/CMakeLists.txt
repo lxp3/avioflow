@@ -62,12 +62,6 @@ if(UNIX AND NOT APPLE)
     if(FFMPEG_SOS)
         install(FILES ${FFMPEG_SOS} DESTINATION "${PYTHON_INSTALL_DESTINATION}/${PY_PACKAGE_NAME}")
     endif()
-elseif(APPLE)
-    # On macOS, FFmpeg libs are in the lib directory as .dylib
-    file(GLOB FFMPEG_DYLIBS "${FFMPEG_ROOT}/lib/*.dylib")
-    if(FFMPEG_DYLIBS)
-        install(FILES ${FFMPEG_DYLIBS} DESTINATION "${PYTHON_INSTALL_DESTINATION}/${PY_PACKAGE_NAME}")
-    endif()
 elseif(WIN32)
     # On Windows, FFmpeg DLLs are in the bin directory
     file(GLOB FFMPEG_DLLS "${FFMPEG_ROOT}/bin/*.dll")
