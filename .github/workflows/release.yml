@@ -15,121 +15,141 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+
       - name: Set up MSVC
         uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Install ccache
+        run: choco install ccache
+
+      - name: Cache ccache
+        uses: actions/cache@v4
+        with:
+          path: $HOME/AppData/Local/ccache
+          key: ccache-windows-${{ github.run_id }}
+          restore-keys: |
+            ccache-windows-
+
       - name: Configure CMake
-        run: cmake -B build -DCMAKE_BUILD_TYPE=Release -DENABLE_WASAPI=ON -DENABLE_PYTHON=OFF
+        run: |
+          cmake -B build `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DENABLE_WASAPI=ON `
+            -DENABLE_PYTHON=OFF `
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+        shell: pwsh
+
       - name: Build
         run: cmake --build build --config Release -j 4
+
       - name: Package
         shell: pwsh
         run: |
-          $PkgDir = "avioflow-cpp-win-x64"
+          $PkgDir = "avioflow-shared-win-x64"
           cmake --install build --prefix $PkgDir --config Release
           Compress-Archive -Path "$PkgDir/*" -DestinationPath "$PkgDir.zip"
+
       - name: Upload Release Asset
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
         with:
-          files: avioflow-cpp-win-x64.zip
+          files: avioflow-shared-win-x64.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # 2. Build C++ Standalone Binaries (Linux)
   build-cpp-linux:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
+
       - name: Install dependencies
-        run: sudo apt-get update && sudo apt-get install -y libasound2-dev libx11-dev
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev libx11-dev ccache
+
+      - name: Cache ccache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ccache
+          key: ccache-linux-${{ github.run_id }}
+          restore-keys: |
+            ccache-linux-
+
       - name: Configure CMake
-        run: cmake -B build -DCMAKE_BUILD_TYPE=Release -DENABLE_WASAPI=OFF -DENABLE_PYTHON=OFF
+        run: |
+          cmake -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DENABLE_WASAPI=OFF \
+            -DENABLE_PYTHON=OFF \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+
       - name: Build
         run: cmake --build build --config Release -j $(nproc)
+
       - name: Package
         run: |
-          PKG_DIR="avioflow-cpp-linux-x64"
+          PKG_DIR="avioflow-shared-linux-x64"
           cmake --install build --prefix $PKG_DIR
           tar -czvf $PKG_DIR.tar.gz $PKG_DIR
+
       - name: Upload Release Asset
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
         with:
-          files: avioflow-cpp-linux-x64.tar.gz
+          files: avioflow-shared-linux-x64.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  # 3. Build C++ Standalone Binaries (macOS)
-  build-cpp-macos:
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install dependencies
-        run: brew install ffmpeg@7
-      - name: Configure CMake
-        run: cmake -B build -DCMAKE_BUILD_TYPE=Release -DENABLE_WASAPI=OFF -DENABLE_PYTHON=OFF -DCMAKE_OSX_DEPLOYMENT_TARGET=15.0
-      - name: Build
-        run: cmake --build build --config Release -j $(sysctl -n hw.ncpu)
-      - name: Package
-        run: |
-          PKG_DIR="avioflow-cpp-macos-universal"
-          cmake --install build --prefix $PKG_DIR
-          tar -czvf $PKG_DIR.tar.gz $PKG_DIR
-      - name: Upload Release Asset
-        uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/')
-        with:
-          files: avioflow-cpp-macos-universal.tar.gz
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  # 4. Build Python Wheels (Multi-platform)
+  # 3. Build Python Wheels (Windows & Linux)
   build-python-wheels:
     name: Build wheels on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, ubuntu-latest, macos-latest]
+        os: [windows-latest, ubuntu-latest]
     steps:
       - uses: actions/checkout@v4
-      
-      - name: Install dependencies (macOS)
-        if: runner.os == 'macOS'
-        run: brew install ffmpeg@7
+
+      - name: Set up ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: ${{ matrix.os }}-ccache-${{ github.run_id }}
+          restore-keys: ${{ matrix.os }}-ccache-
 
       - name: Build wheels
         uses: pypa/cibuildwheel@v2.22.0
         env:
-          MACOSX_DEPLOYMENT_TARGET: "15.0"
-          # Only build 64-bit architectures
+          # Architectures
           CIBW_ARCHS_LINUX: x86_64
           CIBW_ARCHS_WINDOWS: AMD64
-          CIBW_ARCHS_MACOS: native
-          # Build only for modern Python
+          
+          # Build only for modern Python (3.8+)
           CIBW_SKIP: "cp36-* cp37-* pp* *-win32 *-i686 *-musllinux*"
-          # Linux-specific config (install dependencies in manylinux container)
-          CIBW_BEFORE_BUILD_LINUX: "yum install -y alsa-lib-devel libX11-devel xz"
+          
+          # Linux specific (manylinux 2.28 toolchain for glibc 2.28 compatibility)
           CIBW_MANYLINUX_X86_64_IMAGE: manylinux_2_28
-          # Repair wheels (bundle DLLs/SOs/dylibs)
-          # We need to point auditwheel to the FFmpeg libraries downloaded by CMake
+          CIBW_BEFORE_BUILD_LINUX: "yum install -y alsa-lib-devel libX11-devel xz ccache"
+          CIBW_ENVIRONMENT_LINUX: "PATH=/usr/lib64/ccache:$PATH CMAKE_CXX_COMPILER_LAUNCHER=ccache"
+          
+          # Windows specific
+          CIBW_ENVIRONMENT_WINDOWS: "CMAKE_CXX_COMPILER_LAUNCHER=ccache"
+          
+          # Repair wheels (bundle DLLs/SOs)
           CIBW_REPAIR_WHEEL_COMMAND_LINUX: >
             export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$(find /project -name "libavformat.so*" -exec dirname {} \; | head -n 1) &&
             auditwheel repair -w {dest_dir} {wheel}
           CIBW_TEST_COMMAND: "python {project}/tests/python/test_audio_load.py {project}/public/TownTheme.mp3"
-          # macOS repair: ensure delocate can find libavioflow.dylib
-          CIBW_REPAIR_WHEEL_COMMAND_MACOS: >
-            export DYLD_LIBRARY_PATH=$DYLD_LIBRARY_PATH:$(find . -name "libavioflow.dylib" -exec dirname {} \; | head -n 1) &&
-            delocate-wheel --require-archs {delocate_archs} -w {dest_dir} -v {wheel}
-          
+
       - uses: actions/upload-artifact@v4
         with:
           name: cibw-wheels-${{ matrix.os }}-${{ strategy.job-index }}
           path: ./wheelhouse/*.whl
 
-  # 5. Publish to PyPI and GitHub Release
+  # 4. Publish to PyPI and GitHub Release
   publish:
-    needs: [build-cpp-windows, build-cpp-linux, build-cpp-macos, build-python-wheels]
+    needs: [build-cpp-windows, build-cpp-linux, build-python-wheels]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
     steps:
@@ -150,4 +170,3 @@ jobs:
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           password: ${{ secrets.PYPI_API_TOKEN }}
-          # skip-existing: true # 如果发布中断可以跳过已存在的版本
