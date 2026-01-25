@@ -35,15 +35,6 @@ if(MSVC)
     # Use dynamic CRT (/MD or /MDd)
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
     add_definitions(-D_CRT_SECURE_NO_WARNINGS)
-elseif(APPLE)
-    # macOS specific optimizations
-    add_compile_options(
-        -O3 
-        -fvisibility=hidden
-    )
-    add_link_options(
-        -Wl,-dead_strip       # macOS equivalent of --gc-sections
-    )
 else()
     # Linux/GCC/Clang optimizations
     add_compile_options(
@@ -71,16 +62,11 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 
 # RPATH configuration for Linux and macOS
 if(UNIX)
-    if(APPLE)
-        set(CMAKE_MACOSX_RPATH ON)
-        set(CMAKE_INSTALL_RPATH "@loader_path;@loader_path/../avioflow;@loader_path/../lib")
-    else()
-        # Ensure that installed binaries can find libraries in the relative ../lib directory
-        # $ORIGIN is for libraries in lib/ to find each other
-        # $ORIGIN/../lib is for binaries in bin/ to find libraries in lib/
-        set(CMAKE_INSTALL_RPATH "$ORIGIN:$ORIGIN/../lib")
-        set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
-    endif()
+    # Ensure that installed binaries can find libraries in the relative ../lib directory
+    # $ORIGIN is for libraries in lib/ to find each other
+    # $ORIGIN/../lib is for binaries in bin/ to find libraries in lib/
+    set(CMAKE_INSTALL_RPATH "$ORIGIN:$ORIGIN/../lib")
+    set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 endif()
 
 # FFmpeg Configuration
@@ -163,45 +149,46 @@ endif()
 
 
 # --- Installation & Packaging ---
+# Only perform regular C++ installation if NOT building a Python wheel
+if(NOT SKBUILD)
+    # Install public headers
+    install(FILES 
+        "avioflow/include/avioflow-cxx-api.h"
+        "avioflow/include/metadata.h"
+        DESTINATION include
+    )
 
-# Install public headers
-install(FILES 
-    "avioflow/include/avioflow-cxx-api.h"
-    "avioflow/include/metadata.h"
-    DESTINATION include
-)
+    # Install library
+    install(TARGETS avioflow
+        RUNTIME DESTINATION bin
+        LIBRARY DESTINATION lib
+        ARCHIVE DESTINATION lib
+    )
 
-# Install library
-install(TARGETS avioflow
-    RUNTIME DESTINATION bin
-    LIBRARY DESTINATION lib
-    ARCHIVE DESTINATION lib
-)
+    # Install FFmpeg shared libraries
+    if(WIN32)
+        # Collect all DLLs from FFMPEG_BIN_DIR
+        file(GLOB FFMPEG_DLLS "${FFMPEG_BIN_DIR}/*.dll")
+        install(FILES ${FFMPEG_DLLS} DESTINATION bin)
+    elseif(UNIX)
+        # Collect all shared libraries from FFMPEG_LIB_DIR
+        file(GLOB FFMPEG_SOS "${FFMPEG_LIB_DIR}/lib*.so*")
+        install(FILES ${FFMPEG_SOS} DESTINATION lib)
+    endif()
 
-# Install FFmpeg shared libraries
-if(WIN32)
-    # Collect all DLLs from FFMPEG_BIN_DIR
-    file(GLOB FFMPEG_DLLS "${FFMPEG_BIN_DIR}/*.dll")
-    install(FILES ${FFMPEG_DLLS} DESTINATION bin)
-elseif(UNIX AND NOT APPLE)
-    # Collect all shared libraries from FFMPEG_LIB_DIR
-    file(GLOB FFMPEG_SOS "${FFMPEG_LIB_DIR}/lib*.so*")
-    install(FILES ${FFMPEG_SOS} DESTINATION lib)
+    # (Optional) Install CLI tools if BUILD_TESTS is on
+    set(INSTALL_TARGETS 
+        avioflow-offline-load-audio
+        avioflow-online-load-audio
+        avioflow-microphone-capture
+    )
+
+    if(TARGET avioflow-wasapi-capture)
+        list(APPEND INSTALL_TARGETS avioflow-wasapi-capture)
+    endif()
+
+    install(TARGETS ${INSTALL_TARGETS}
+        DESTINATION bin
+        OPTIONAL
+    )
 endif()
-
-# (Optional) Install CLI tools if BUILD_TESTS is on
-# We check if the target exists before adding to install list to support cross-platform builds
-set(INSTALL_TARGETS 
-    avioflow-offline-load-audio
-    avioflow-online-load-audio
-    avioflow-microphone-capture
-)
-
-if(TARGET avioflow-wasapi-capture)
-    list(APPEND INSTALL_TARGETS avioflow-wasapi-capture)
-endif()
-
-install(TARGETS ${INSTALL_TARGETS}
-    DESTINATION bin
-    OPTIONAL
-)
