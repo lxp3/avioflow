@@ -16,7 +16,7 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/lxp3/avioflow.git"
+    "url": "git+https://github.com/lxp3/avioflow.git"
   },
   "bugs": {
     "url": "https://github.com/lxp3/avioflow/issues"
