@@ -230,6 +230,7 @@ jobs:
         with:
           packages-dir: pypi_dist/
           password: ${{ secrets.PYPI_API_TOKEN }}
+          skip-existing: true
 
       # Publish to NPM
       - name: Prepare NPM package

@@ -1,6 +1,6 @@
 {
   "name": "avioflow",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "High-performance audio decoding and device discovery library using FFmpeg",
   "author": "lxp3",
   "license": "MIT",
