@@ -2,6 +2,8 @@
 #include <pybind11/stl.h>
 #include <pybind11/functional.h>
 #include <pybind11/numpy.h>
+#include <sstream>
+#include <iomanip>
 #include "avioflow-cxx-api.h"
 #include "metadata.h"
 
@@ -24,14 +26,36 @@ PYBIND11_MODULE(_avioflow, m) {
         .def_readwrite("output_num_channels", &AudioStreamOptions::output_num_channels, "(int or None): Target output channel count. If null, keeps original.")
         .def_readwrite("input_sample_rate", &AudioStreamOptions::input_sample_rate, "(int or None): Force input sample rate (only for raw PCM).")
         .def_readwrite("input_channels", &AudioStreamOptions::input_channels, "(int or None): Force input channel count (only for raw PCM).")
-        .def_readwrite("input_format", &AudioStreamOptions::input_format, "(str or None): Force input format hint (e.g., 'wav', 'mp3', 's16le').");
+        .def_readwrite("input_format", &AudioStreamOptions::input_format, "(str or None): Force input format hint (e.g., 'wav', 'mp3', 's16le').")
+        .def("__repr__", [](const AudioStreamOptions& self) {
+            std::stringstream ss;
+            ss << "<avioflow.AudioStreamOptions"
+               << " output_sample_rate=" << (self.output_sample_rate ? std::to_string(*self.output_sample_rate) : "None")
+               << " output_num_channels=" << (self.output_num_channels ? std::to_string(*self.output_num_channels) : "None")
+               << " input_sample_rate=" << (self.input_sample_rate ? std::to_string(*self.input_sample_rate) : "None")
+               << " input_channels=" << (self.input_channels ? std::to_string(*self.input_channels) : "None")
+               << " input_format=" << (self.input_format ? *self.input_format : "None")
+               << ">";
+            return ss.str();
+        });
 
     py::class_<DeviceInfo>(m, "DeviceInfo", "Information about a system audio device")
+        .def(py::init<>())
         .def_readonly("name", &DeviceInfo::name, "(str): DirectShow/WASAPI device name identifier")
         .def_readonly("description", &DeviceInfo::description, "(str): Human-readable device description")
-        .def_readonly("is_output", &DeviceInfo::is_output, "(bool): True if this is an output/loopback device");
+        .def_readonly("is_output", &DeviceInfo::is_output, "(bool): True if this is an output/loopback device")
+        .def("__repr__", [](const DeviceInfo& self) {
+            std::stringstream ss;
+            ss << "<avioflow.DeviceInfo"
+               << " name='" << self.name << "'"
+               << " description='" << self.description << "'"
+               << " is_output=" << (self.is_output ? "True" : "False")
+               << ">";
+            return ss.str();
+        });
 
     py::class_<Metadata>(m, "Metadata", "Audio stream information")
+        .def(py::init<>())
         .def_readonly("duration", &Metadata::duration, "(float): Duration in seconds")
         .def_readonly("num_samples", &Metadata::num_samples, "(int): Total number of samples (if known)")
         .def_readonly("sample_rate", &Metadata::sample_rate, "(int): Original sampling rate (Hz)")
@@ -39,11 +63,33 @@ PYBIND11_MODULE(_avioflow, m) {
         .def_readonly("sample_format", &Metadata::sample_format, "(str): Original sample format (e.g., 'fltp', 's16')")
         .def_readonly("codec", &Metadata::codec, "(str): Codec name (e.g., 'mp3', 'aac')")
         .def_readonly("bit_rate", &Metadata::bit_rate, "(int): Bit rate in bits per second")
-        .def_readonly("container", &Metadata::container, "(str): Format container name");
+        .def_readonly("container", &Metadata::container, "(str): Format container name")
+        .def("__repr__", [](const Metadata& self) {
+            std::stringstream ss;
+            ss << "<avioflow.Metadata"
+               << " duration=" << std::fixed << std::setprecision(2) << self.duration
+               << " sample_rate=" << self.sample_rate
+               << " num_channels=" << self.num_channels
+               << " codec='" << self.codec << "'"
+               << " bit_rate=" << self.bit_rate
+               << " container='" << self.container << "'"
+               << ">";
+            return ss.str();
+        });
 
     py::class_<AudioSamples>(m, "AudioSamples", "Buffer containing decoded audio data")
+        .def(py::init<>())
         .def_readonly("data", &AudioSamples::data, "(list[list[float]]): Planar float data: (channels, samples)")
-        .def_readonly("sample_rate", &AudioSamples::sample_rate, "(int): The sample rate of this data");
+        .def_readonly("sample_rate", &AudioSamples::sample_rate, "(int): The sample rate of this data")
+        .def("__repr__", [](const AudioSamples& self) {
+            std::stringstream ss;
+            ss << "<avioflow.AudioSamples"
+               << " channels=" << self.data.size()
+               << " samples_per_channel=" << (self.data.empty() ? 0 : self.data[0].size())
+               << " sample_rate=" << self.sample_rate
+               << ">";
+            return ss.str();
+        });
 
     // --- Main Decoder Class ---
     py::class_<AudioDecoder>(m, "AudioDecoder", "Main class for audio decoding and device capture")
