@@ -30,7 +30,9 @@ Use the provided PowerShell script for a full build (includes Node.js and Python
 
 Or for a specific Node.js build:
 ```powershell
-npx cmake-js compile
+npm install
+# npx cmake-js compile
+npm run prebuild
 ```
 
 ### Linux

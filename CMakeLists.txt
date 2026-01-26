@@ -50,6 +50,7 @@ else()
     # Linux/GCC/Clang optimizations
     add_compile_options(
         -O3 
+        -fPIC                   # Required for linking static lib into shared object (Python bindings)
         -fvisibility=hidden     # Hide internal symbols by default
         -ffunction-sections 
         -fdata-sections
