@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: write
+  id-token: write # Required for provenance
 
 jobs:
   # ============================================================
@@ -237,6 +238,6 @@ jobs:
           ls -la prebuilds/
 
       - name: Publish to NPM
-        run: npm publish --access public
+        run: npm publish --access public --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
