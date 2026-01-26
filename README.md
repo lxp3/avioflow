@@ -10,7 +10,9 @@ AvioFlow is a high-performance audio decoding and capture library powered by FFm
     - **WASAPI Loopback**: Capture system output (what you hear).
     - **DirectShow**: Capture from microphones and other input devices.
 - **Resampling**: Built-in support for target sample rate and channel conversion.
+- **Node-API Support**: Modern ESM-ready Node.js bindings for real-time audio processing.
 - **Python Bindings**: High-performance Python module using `pybind11`.
+- **Static Linking**: Fully static build support (FFmpeg + CRT) for easy distribution without external DLL dependencies.
 
 ---
 
@@ -20,17 +22,30 @@ AvioFlow is a high-performance audio decoding and capture library powered by FFm
 - **Windows**: Visual Studio 2022+, CMake 3.20+.
 - **Linux**: GCC 11+, CMake 3.20+, FFmpeg development headers.
 
-### Build and Run
-Use the provided PowerShell script for automated setup on Windows:
+### Windows
+Use the provided PowerShell script for a full build (includes Node.js and Python):
 ```powershell
 .\build.ps1
 ```
 
-Or manually with CMake:
+Or for a specific Node.js build:
+```powershell
+npx cmake-js compile
+```
+
+### Linux
+Compile with shared or static FFmpeg (default is shared):
 ```bash
 cmake -B build -DENABLE_PYTHON=ON -DENABLE_WASAPI=ON
 cmake --build build --config Release
 ```
+
+### 📦 Prebuildify (Node.js)
+Generate prebuilt binaries for all Node.js versions:
+```bash
+npm run prebuild
+```
+This will strip symbols and tag them for compatibility (Node >= 16).
 
 ---
 
@@ -117,6 +132,57 @@ while True:
     if frame:
         # data is planar float32
         process(frame.data)
+```
+
+---
+
+## 📦 Node.js Usage
+
+### Installation
+Directly from npm:
+```bash
+npm install avioflow
+```
+
+### ESM Example
+```javascript
+import avioflow from 'avioflow';
+
+const decoder = new avioflow.AudioDecoder();
+decoder.open("TownTheme.mp3");
+
+const meta = decoder.getMetadata();
+console.log(`Codec: ${meta.codec}, Duration: ${meta.duration}s`);
+
+while (!decoder.isFinished()) {
+    const frame = decoder.decodeNext();
+    if (frame) {
+        // frame.data is an array of Float32Arrays (one per channel)
+        console.log(`Decoded ${frame.channels} channels`);
+    }
+}
+```
+
+### Device Discovery
+```javascript
+const devices = avioflow.listAudioDevices();
+devices.forEach(dev => {
+    console.log(`${dev.isOutput ? 'Output' : 'Input'}: ${dev.name}`);
+});
+```
+
+---
+
+## ⚙️ Static Compilation Details
+
+AvioFlow supports fully static builds on Windows to eliminate external dependencies:
+- **FFmpeg**: Statically linked into the binary.
+- **CRT**: Using `/MT` to statically link the C Runtime Library, avoiding the "VC++ Redistributable" requirement.
+
+To enable this in your own CMake project:
+```cmake
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+# Link to avioflow (which should be built with BUILD_SHARED_LIBS=OFF)
 ```
 
 ## License
