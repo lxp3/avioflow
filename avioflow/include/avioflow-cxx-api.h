@@ -5,6 +5,9 @@
 #include <memory>
 #include <vector>
 
+#ifdef AVIOFLOW_STATIC
+#define AVIOFLOW_API
+#else
 #ifdef _WIN32
 #ifdef AVIOFLOW_EXPORTS
 #define AVIOFLOW_API __declspec(dllexport)
@@ -13,6 +16,7 @@
 #endif
 #else
 #define AVIOFLOW_API __attribute__((visibility("default")))
+#endif
 #endif
 
 namespace avioflow {
