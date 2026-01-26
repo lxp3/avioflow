@@ -10,134 +10,86 @@ permissions:
   contents: write
 
 jobs:
-  # 1. Build C++ Standalone Binaries (Windows)
-  build-cpp-windows:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up MSVC
-        uses: ilammy/msvc-dev-cmd@v1
-
-      - name: Install ccache
-        run: choco install ccache
-
-      - name: Cache ccache
-        uses: actions/cache@v4
-        with:
-          path: $HOME/AppData/Local/ccache
-          key: ccache-windows-${{ github.run_id }}
-          restore-keys: |
-            ccache-windows-
-
-      - name: Configure CMake
-        run: |
-          cmake -B build `
-            -DCMAKE_BUILD_TYPE=Release `
-            -DENABLE_WASAPI=ON `
-            -DENABLE_PYTHON=OFF `
-            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
-        shell: pwsh
-
-      - name: Build
-        run: cmake --build build --config Release -j 4
-
-      - name: Package
-        shell: pwsh
-        run: |
-          $PkgDir = "avioflow-shared-win-x64"
-          cmake --install build --prefix $PkgDir --config Release
-          Compress-Archive -Path "$PkgDir/*" -DestinationPath "$PkgDir.zip"
-
-      - name: Upload Release Asset
-        uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/')
-        with:
-          files: avioflow-shared-win-x64.zip
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  # 2. Build C++ Standalone Binaries (Linux - glibc 2.28 compatible)
-  build-cpp-linux:
+  # ============================================================
+  # Linux Build (C++ + Node.js + Python Wheels)
+  # ============================================================
+  build-linux:
     runs-on: ubuntu-latest
     container: quay.io/pypa/manylinux_2_28_x86_64
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install dependencies
-        run: |
-          yum install -y epel-release
-          yum install -y alsa-lib-devel libX11-devel xz ccache
-
-      - name: Cache ccache
+      - name: Cache System Dependencies
+        id: cache-deps
         uses: actions/cache@v4
         with:
-          path: ~/.cache/ccache
-          key: ccache-linux-standalone-${{ github.run_id }}
-          restore-keys: |
-            ccache-linux-standalone-
+          path: /var/cache/yum
+          key: linux-deps-${{ hashFiles('.github/workflows/release.yml') }}
 
-      - name: Configure CMake
+      - name: Install System Dependencies
+        if: steps.cache-deps.outputs.cache-hit != 'true'
         run: |
-          cmake -B build \
+          yum install -y epel-release
+          yum install -y alsa-lib-devel libX11-devel xz zlib-devel bzip2-devel
+
+      - name: Install Node.js 20
+        run: |
+          curl -fsSL https://rpm.nodesource.com/setup_20.x | bash -
+          yum install -y nodejs
+
+      # --- Build C++ Shared Binaries ---
+      - name: Build C++ Shared Binaries
+        run: |
+          cmake -B build_shared \
             -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_SHARED_LIBS=ON \
             -DENABLE_WASAPI=OFF \
             -DENABLE_PYTHON=OFF \
-            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+            -DENABLE_NODE_JS=OFF
+          cmake --build build_shared --config Release -j $(nproc)
 
-      - name: Build
-        run: cmake --build build --config Release -j $(nproc)
-
-      - name: Package
+      - name: Package C++ Binaries
         run: |
           PKG_DIR="avioflow-shared-linux-x64"
-          cmake --install build --prefix $PKG_DIR
+          cmake --install build_shared --prefix $PKG_DIR
           tar -czvf $PKG_DIR.tar.gz $PKG_DIR
 
-      - name: Upload Release Asset
-        uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/')
-        with:
-          files: avioflow-shared-linux-x64.tar.gz
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # --- Build Node.js Addon (Static) ---
+      - name: Build Node.js Addon (Static)
+        run: |
+          npm install
+          npx cmake-js compile --CDCMAKE_BUILD_TYPE=Release
+          mkdir -p prebuilds/linux-x64
+          cp build/bin/Release/avioflow.node prebuilds/linux-x64/avioflow.napi.node
 
-  # 3. Build Python Wheels (Windows & Linux)
-  build-python-wheels:
-    name: Build wheels on ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [windows-latest, ubuntu-latest]
+      # --- Upload Artifacts ---
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-cpp-binaries
+          path: avioflow-shared-linux-x64.tar.gz
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-nodejs-prebuilds
+          path: prebuilds/
+
+  # --- Build Python Wheels (Linux, Shared) ---
+  build-python-linux:
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Set up ccache
-        uses: hendrikmuhs/ccache-action@v1.2
-        with:
-          key: ${{ matrix.os }}-ccache-${{ github.run_id }}
-          restore-keys: ${{ matrix.os }}-ccache-
 
       - name: Build wheels
         uses: pypa/cibuildwheel@v2.22.0
         env:
-          # Architectures
           CIBW_ARCHS_LINUX: x86_64
-          CIBW_ARCHS_WINDOWS: AMD64
-          
-          # Build only for modern Python (3.8+)
-          CIBW_SKIP: "cp36-* cp37-* pp* *-win32 *-i686 *-musllinux*"
-          
-          # Linux specific (manylinux 2.28 toolchain for glibc 2.28 compatibility)
+          CIBW_BUILD: "cp38-* cp39-* cp310-* cp311-* cp312-* cp313-* cp314-*"
+          CIBW_SKIP: "pp* *-musllinux*"
           CIBW_MANYLINUX_X86_64_IMAGE: manylinux_2_28
-          CIBW_BEFORE_BUILD_LINUX: "yum install -y epel-release && yum install -y alsa-lib-devel libX11-devel xz ccache"
-          CIBW_ENVIRONMENT_LINUX: "PATH=/usr/lib64/ccache:$PATH CMAKE_CXX_COMPILER_LAUNCHER=ccache"
-          
-          # Windows specific
-          CIBW_ENVIRONMENT_WINDOWS: "CMAKE_CXX_COMPILER_LAUNCHER=ccache"
-          
-          # Repair wheels (bundle DLLs/SOs)
+          CIBW_BEFORE_BUILD_LINUX: >
+            yum install -y epel-release &&
+            yum install -y alsa-lib-devel libX11-devel xz zlib-devel bzip2-devel
+          CIBW_ENVIRONMENT_LINUX: "CMAKE_ARGS=-DBUILD_SHARED_LIBS=ON"
           CIBW_REPAIR_WHEEL_COMMAND_LINUX: >
             export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$(find /project -name "libavformat.so*" -exec dirname {} \; | head -n 1) &&
             auditwheel repair -w {dest_dir} {wheel}
@@ -145,29 +97,142 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: cibw-wheels-${{ matrix.os }}-${{ strategy.job-index }}
+          name: linux-python-wheels
           path: ./wheelhouse/*.whl
 
-  # 4. Publish to PyPI and GitHub Release
+  # ============================================================
+  # Windows Build (C++ + Node.js + Python Wheels)
+  # ============================================================
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # --- Build C++ Shared Binaries ---
+      - name: Build C++ Shared Binaries
+        shell: pwsh
+        run: |
+          cmake -B build_shared `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DBUILD_SHARED_LIBS=ON `
+            -DENABLE_WASAPI=ON `
+            -DENABLE_PYTHON=OFF `
+            -DENABLE_NODE_JS=OFF
+          cmake --build build_shared --config Release -j 4
+
+      - name: Package C++ Binaries
+        shell: pwsh
+        run: |
+          $PkgDir = "avioflow-shared-win-x64"
+          cmake --install build_shared --prefix $PkgDir --config Release
+          Compress-Archive -Path "$PkgDir/*" -DestinationPath "$PkgDir.zip"
+
+      # --- Build Node.js Addon (Static) ---
+      - name: Build Node.js Addon (Static)
+        shell: pwsh
+        run: |
+          npm install
+          npx cmake-js compile
+          New-Item -ItemType Directory -Path prebuilds/win32-x64 -Force
+          Copy-Item build/bin/Release/avioflow.node prebuilds/win32-x64/avioflow.napi.node
+
+      # --- Upload Artifacts ---
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-cpp-binaries
+          path: avioflow-shared-win-x64.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-nodejs-prebuilds
+          path: prebuilds/
+
+  # --- Build Python Wheels (Windows, Shared) ---
+  build-python-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build wheels
+        uses: pypa/cibuildwheel@v2.22.0
+        env:
+          CIBW_ARCHS_WINDOWS: AMD64
+          CIBW_BUILD: "cp38-* cp39-* cp310-* cp311-* cp312-* cp313-* cp314-*"
+          CIBW_SKIP: "pp* *-win32"
+          CIBW_ENVIRONMENT_WINDOWS: "CMAKE_ARGS=-DBUILD_SHARED_LIBS=ON"
+          CIBW_TEST_COMMAND: "python {project}/tests/python/test_audio_load.py {project}/public/wavs/TownTheme.mp3"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-python-wheels
+          path: ./wheelhouse/*.whl
+
+  # ============================================================
+  # Publish to GitHub, PyPI, and NPM
+  # ============================================================
   publish:
-    needs: [build-cpp-windows, build-cpp-linux, build-python-wheels]
+    needs: [build-linux, build-python-linux, build-windows, build-python-windows]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
     steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      # Download all artifacts
       - uses: actions/download-artifact@v4
         with:
-          pattern: cibw-wheels-*
-          path: dist
-          merge-multiple: true
+          path: artifacts
 
-      - name: Upload Wheels to GitHub Release
+      # Prepare directories
+      - name: Prepare release files
+        run: |
+          mkdir -p dist prebuilds
+          # C++ binaries
+          cp artifacts/linux-cpp-binaries/* dist/ || true
+          cp artifacts/windows-cpp-binaries/* dist/ || true
+          # Python wheels
+          cp artifacts/linux-python-wheels/*.whl dist/ || true
+          cp artifacts/windows-python-wheels/*.whl dist/ || true
+          # Node.js prebuilds
+          cp -r artifacts/linux-nodejs-prebuilds/* prebuilds/ || true
+          cp -r artifacts/windows-nodejs-prebuilds/* prebuilds/ || true
+
+      # Upload to GitHub Release
+      - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/*.whl
+          files: |
+            dist/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      # Publish to PyPI
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
+          packages-dir: dist/
           password: ${{ secrets.PYPI_API_TOKEN }}
+
+      # Publish to NPM
+      - name: Prepare NPM package
+        run: |
+          npm install
+          ls -la prebuilds/
+
+      - name: Publish to NPM
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
