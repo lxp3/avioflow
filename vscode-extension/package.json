@@ -1,0 +1,77 @@
+{
+    "name": "avioflow-previewer",
+    "displayName": "Avioflow Audio Previewer",
+    "description": "High-performance audio previewer using avioflow engine",
+    "version": "0.1.0",
+    "publisher": "lxp3",
+    "engines": {
+        "vscode": "^1.75.0"
+    },
+    "categories": [
+        "Other"
+    ],
+    "main": "./out/src/extension.js",
+    "activationEvents": [],
+    "contributes": {
+        "viewsContainers": {
+            "activitybar": [
+                {
+                    "id": "avioflow-explorer",
+                    "title": "Avioflow",
+                    "icon": "$(music)"
+                }
+            ]
+        },
+        "views": {
+            "avioflow-explorer": [
+                {
+                    "type": "webview",
+                    "id": "avioflow.homeView",
+                    "name": "Avioflow Home"
+                }
+            ]
+        },
+        "customEditors": [
+            {
+                "viewType": "avioflow.audioPreview",
+                "displayName": "Avioflow Audio Preview",
+                "selector": [
+                    {
+                        "filenamePattern": "*.{mp3,wav,flac,m4a,ogg,aac}"
+                    }
+                ],
+                "priority": "default"
+            }
+        ]
+    },
+    "scripts": {
+        "vscode:prepublish": "pnpm run compile",
+        "compile": "pnpm run build:webview && tsc -p ./",
+        "watch": "tsc -watch -p ./",
+        "pretest": "pnpm run compile",
+        "test": "node ./out/test/runTest.js",
+        "build:webview": "vite build webview"
+    },
+    "devDependencies": {
+        "@sveltejs/vite-plugin-svelte": "^3.0.0",
+        "@tsconfig/svelte": "^5.0.0",
+        "@types/glob": "^8.1.0",
+        "@types/mocha": "^10.0.1",
+        "@types/node": "~20.19.30",
+        "@types/vscode": "^1.75.0",
+        "@typescript-eslint/eslint-plugin": "^5.59.1",
+        "@typescript-eslint/parser": "^5.59.1",
+        "eslint": "^8.39.0",
+        "glob": "^8.1.0",
+        "mocha": "^10.2.0",
+        "svelte": "^4.0.0",
+        "svelte-check": "^3.6.0",
+        "svelte-preprocess": "^5.1.0",
+        "tslib": "^2.6.0",
+        "typescript": "^5.0.0",
+        "vite": "^5.0.0"
+    },
+    "dependencies": {
+        "avioflow": "^0.1.4"
+    }
+}
