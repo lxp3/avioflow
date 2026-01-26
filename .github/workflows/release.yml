@@ -30,7 +30,7 @@ jobs:
         if: steps.cache-deps.outputs.cache-hit != 'true'
         run: |
           yum install -y epel-release
-          yum install -y alsa-lib-devel libX11-devel xz zlib-devel bzip2-devel
+          yum install -y alsa-lib-devel libX11-devel zlib-devel bzip2-devel xz-devel libva-devel libdrm-devel
 
       - name: Install Node.js 20
         run: |
@@ -88,7 +88,7 @@ jobs:
           CIBW_MANYLINUX_X86_64_IMAGE: manylinux_2_28
           CIBW_BEFORE_BUILD_LINUX: >
             yum install -y epel-release &&
-            yum install -y alsa-lib-devel libX11-devel xz zlib-devel bzip2-devel
+            yum install -y alsa-lib-devel libX11-devel zlib-devel bzip2-devel xz-devel libva-devel libdrm-devel
           CIBW_ENVIRONMENT_LINUX: "CMAKE_ARGS=-DBUILD_SHARED_LIBS=ON"
           CIBW_REPAIR_WHEEL_COMMAND_LINUX: >
             export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$(find /project -name "libavformat.so*" -exec dirname {} \; | head -n 1) &&
