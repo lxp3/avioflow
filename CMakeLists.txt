@@ -9,6 +9,7 @@ option(BUILD_TESTS "Build tests and examples" ON)
 option(ENABLE_WASAPI "Enable WASAPI loopback capture support" ON)
 option(ENABLE_PYTHON "Enable Python bindings" OFF)
 option(ENABLE_NODE_JS "Enable Node.js bindings" OFF)
+option(ENABLE_BINARY "Whether to build binaries" OFF)
 
 # Logic to force static build if Node.js is enabled
 if(CMAKE_JS_VERSION)
@@ -156,7 +157,9 @@ if(WIN32 AND BUILD_SHARED_LIBS)
 endif()
 
 # Binaries
-add_subdirectory(avioflow/bin)
+if(ENABLE_BINARY)
+    add_subdirectory(avioflow/bin)
+endif()
 
 # Tests and examples
 if(BUILD_TESTS)
@@ -204,19 +207,20 @@ if(NOT SKBUILD)
         endif()
     endif()
 
-    # (Optional) Install CLI tools if BUILD_TESTS is on
-    set(INSTALL_TARGETS 
-        avioflow-offline-load-audio
-        avioflow-online-load-audio
-        avioflow-microphone-capture
-    )
+    # (Optional) Install CLI tools if ENABLE_BINARY is on
+    if(ENABLE_BINARY)
+        set(INSTALL_TARGETS 
+            avioflow-offline-load-audio
+            avioflow-online-load-audio
+            avioflow-microphone-capture
+        )
 
-    if(TARGET avioflow-wasapi-capture)
-        list(APPEND INSTALL_TARGETS avioflow-wasapi-capture)
+        if(TARGET avioflow-wasapi-capture)
+            list(APPEND INSTALL_TARGETS avioflow-wasapi-capture)
+        endif()
+
+        install(TARGETS ${INSTALL_TARGETS}
+            DESTINATION bin
+        )
     endif()
-
-    install(TARGETS ${INSTALL_TARGETS}
-        DESTINATION bin
-        OPTIONAL
-    )
 endif()
