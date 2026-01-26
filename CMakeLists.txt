@@ -4,10 +4,21 @@ project(avioflow VERSION 0.1.0 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-option(BUILD_SHARED_LIBS "Build using shared libraries" ON)
+option(BUILD_SHARED_LIBS "Whether to build shared libraries" OFF)
 option(BUILD_TESTS "Build tests and examples" ON)
 option(ENABLE_WASAPI "Enable WASAPI loopback capture support" ON)
 option(ENABLE_PYTHON "Enable Python bindings" OFF)
+option(ENABLE_NODE_JS "Enable Node.js bindings" OFF)
+
+# Logic to force static build if Node.js is enabled
+if(CMAKE_JS_VERSION)
+    set(ENABLE_NODE_JS ON CACHE BOOL "Auto-enable Node.js for cmake-js" FORCE)
+endif()
+
+if(ENABLE_NODE_JS)
+    message(STATUS "Node.js bindings enabled, forcing static build for core.")
+    set(BUILD_SHARED_LIBS "OFF" CACHE BOOL "Force static build for Node.js" FORCE)
+endif()
 
 
 # Reduce verbose output - disable detailed makefile output
@@ -32,8 +43,8 @@ if(MSVC)
         /OPT:ICF # Identical COMDAT Folding
     )
     set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS OFF)
-    # Use dynamic CRT (/MD or /MDd)
-    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
+    # Use static CRT (/MT or /MTd)
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
     add_definitions(-D_CRT_SECURE_NO_WARNINGS)
 else()
     # Linux/GCC/Clang optimizations
@@ -93,8 +104,17 @@ if(ENABLE_WASAPI AND WIN32)
 endif()
 
 # Build library
-add_library(avioflow SHARED ${AVIOFLOW_SOURCES})
+if(BUILD_SHARED_LIBS STREQUAL "ON")
+    set(AVIOFLOW_TYPE SHARED)
+else()
+    set(AVIOFLOW_TYPE STATIC)
+endif()
+
+add_library(avioflow ${AVIOFLOW_TYPE} ${AVIOFLOW_SOURCES})
 target_compile_definitions(avioflow PRIVATE AVIOFLOW_EXPORTS)
+if(NOT BUILD_SHARED_LIBS STREQUAL "ON")
+    target_compile_definitions(avioflow PUBLIC AVIOFLOW_STATIC)
+endif()
 if(ENABLE_WASAPI AND WIN32)
     target_compile_definitions(avioflow PRIVATE AVIOFLOW_HAS_WASAPI)
 endif()
@@ -110,22 +130,22 @@ if(ENABLE_WASAPI AND WIN32)
     target_include_directories(avioflow PRIVATE "${MINIAUDIO_INCLUDE_DIR}")
 endif()
 
-target_link_libraries(avioflow PRIVATE
-    ffmpeg::avdevice
-    ffmpeg::avformat
-    ffmpeg::avfilter
-    ffmpeg::avcodec
-    ffmpeg::swscale
-    ffmpeg::swresample
-    ffmpeg::avutil
-)
+# Helper to link only existing FFmpeg targets
+set(FFMPEG_TARGETS "")
+foreach(LIB IN ITEMS avdevice avformat avfilter avcodec swscale swresample avutil)
+    if(TARGET ffmpeg::${LIB})
+        list(APPEND FFMPEG_TARGETS ffmpeg::${LIB})
+    endif()
+endforeach()
+
+target_link_libraries(avioflow PUBLIC ${FFMPEG_TARGETS})
 
 if(WIN32)
     target_link_libraries(avioflow PRIVATE Winmm)
 endif()
 
 # FFmpeg DLLs copy (for convenient local running)
-if(WIN32)
+if(WIN32 AND BUILD_SHARED_LIBS)
     add_custom_command(TARGET avioflow POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_directory
             "${FFMPEG_BIN_DIR}"
@@ -147,6 +167,11 @@ if(ENABLE_PYTHON)
     add_subdirectory(avioflow/python)
 endif()
 
+# --- Node.js Bindings ---
+if(ENABLE_NODE_JS)
+    add_subdirectory(avioflow/nodejs)
+endif()
+
 
 # --- Installation & Packaging ---
 # Only perform regular C++ installation if NOT building a Python wheel
@@ -166,14 +191,16 @@ if(NOT SKBUILD)
     )
 
     # Install FFmpeg shared libraries
-    if(WIN32)
-        # Collect all DLLs from FFMPEG_BIN_DIR
-        file(GLOB FFMPEG_DLLS "${FFMPEG_BIN_DIR}/*.dll")
-        install(FILES ${FFMPEG_DLLS} DESTINATION bin)
-    elseif(UNIX)
-        # Collect all shared libraries from FFMPEG_LIB_DIR
-        file(GLOB FFMPEG_SOS "${FFMPEG_LIB_DIR}/lib*.so*")
-        install(FILES ${FFMPEG_SOS} DESTINATION lib)
+    if(BUILD_SHARED_LIBS)
+        if(WIN32)
+            # Collect all DLLs from FFMPEG_BIN_DIR
+            file(GLOB FFMPEG_DLLS "${FFMPEG_BIN_DIR}/*.dll")
+            install(FILES ${FFMPEG_DLLS} DESTINATION bin)
+        elseif(UNIX)
+            # Collect all shared libraries from FFMPEG_LIB_DIR
+            file(GLOB FFMPEG_SOS "${FFMPEG_LIB_DIR}/lib*.so*")
+            install(FILES ${FFMPEG_SOS} DESTINATION lib)
+        endif()
     endif()
 
     # (Optional) Install CLI tools if BUILD_TESTS is on

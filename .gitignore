@@ -2,6 +2,7 @@
 build/
 build_*/
 dist/
+node_modules/
 
 # IDE and editor
 .cache/
