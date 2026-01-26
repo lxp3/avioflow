@@ -45,7 +45,8 @@ jobs:
             -DBUILD_SHARED_LIBS=ON \
             -DENABLE_WASAPI=OFF \
             -DENABLE_PYTHON=OFF \
-            -DENABLE_NODE_JS=OFF
+            -DENABLE_NODE_JS=OFF \
+            -DENABLE_BINARY=ON
           cmake --build build_shared --config Release -j $(nproc)
 
       - name: Package C++ Binaries
@@ -125,7 +126,8 @@ jobs:
             -DBUILD_SHARED_LIBS=ON `
             -DENABLE_WASAPI=ON `
             -DENABLE_PYTHON=OFF `
-            -DENABLE_NODE_JS=OFF
+            -DENABLE_NODE_JS=OFF `
+            -DENABLE_BINARY=ON
           cmake --build build_shared --config Release -j 4
 
       - name: Package C++ Binaries
