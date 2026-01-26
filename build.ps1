@@ -28,7 +28,7 @@ if (Test-Path $BUILD_DIR) {
 # Removing -G Ninja allows CMake to use the default Visual Studio generator, 
 # which automatically finds the compiler without needing VCVARS_PATH.
 Write-Host "Configuring project ($BUILD_DIR)..." -ForegroundColor Cyan
-cmake -G "Visual Studio 18 2026" -A x64 -B $BUILD_DIR -S . "-DENABLE_WASAPI=ON" "-DENABLE_PYTHON=ON" "-DBUILD_SHARED_LIBS=$BUILD_SHARED_LIBS" "-DENABLE_NODE_JS=ON"
+cmake -G "Visual Studio 18 2026" -A x64 -B $BUILD_DIR -S . "-DENABLE_WASAPI=ON" "-DENABLE_PYTHON=ON" "-DBUILD_SHARED_LIBS=$BUILD_SHARED_LIBS" "-DENABLE_NODE_JS=OFF"
 
 if ($LASTEXITCODE -ne 0) {
     Write-Error "CMake configuration failed!"
