@@ -201,13 +201,15 @@ jobs:
       # Prepare directories
       - name: Prepare release files
         run: |
-          mkdir -p dist prebuilds
-          # C++ binaries
+          mkdir -p dist pypi_dist prebuilds
+          # C++ binaries (GitHub Release only)
           cp artifacts/linux-cpp-binaries/* dist/ || true
           cp artifacts/windows-cpp-binaries/* dist/ || true
-          # Python wheels
+          # Python wheels (GitHub Release & PyPI)
           cp artifacts/linux-python-wheels/*.whl dist/ || true
           cp artifacts/windows-python-wheels/*.whl dist/ || true
+          cp artifacts/linux-python-wheels/*.whl pypi_dist/ || true
+          cp artifacts/windows-python-wheels/*.whl pypi_dist/ || true
           # Node.js prebuilds
           cp -r artifacts/linux-nodejs-prebuilds/* prebuilds/ || true
           cp -r artifacts/windows-nodejs-prebuilds/* prebuilds/ || true
@@ -225,7 +227,7 @@ jobs:
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          packages-dir: dist/
+          packages-dir: pypi_dist/
           password: ${{ secrets.PYPI_API_TOKEN }}
 
       # Publish to NPM
