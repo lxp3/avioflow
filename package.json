@@ -1,6 +1,6 @@
 {
   "name": "avioflow",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "High-performance audio decoding and device discovery library using FFmpeg",
   "author": "lxp3",
   "license": "MIT",
@@ -33,12 +33,14 @@
     "node": ">=16"
   },
   "scripts": {
-    "test": "node tests/nodejs/test.js",
+    "test": "node tests/nodejs/test-local.js",
     "build": "cmake-js compile",
-    "prebuild": "prebuildify --napi --strip --tag-libc --build-command \"npx cmake-js compile\""
+    "prebuild": "prebuildify --napi --strip --tag-libc --build-command \"npx cmake-js compile\"",
+    "prepare-publish": "powershell -ExecutionPolicy Bypass -File ./prepare-publish.ps1"
   },
   "dependencies": {
-    "node-addon-api": "^8.0.0"
+    "node-addon-api": "^8.0.0",
+    "node-gyp-build": "^4.6.0"
   },
   "devDependencies": {
     "cmake-js": "^7.3.0",
