@@ -78,6 +78,10 @@ private:
     obj.Set("sampleRate", meta.sample_rate);
     obj.Set("numChannels", meta.num_channels);
     obj.Set("codec", meta.codec);
+    obj.Set("numSamples", meta.num_samples);
+    obj.Set("sampleFormat", meta.sample_format);
+    obj.Set("bitRate", meta.bit_rate);
+    obj.Set("container", meta.container);
     return obj;
   }
 

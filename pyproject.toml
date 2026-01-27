@@ -4,7 +4,7 @@ build-backend = "scikit_build_core.build"
 
 [project]
 name = "avioflow"
-version = "0.1.4"
+version = "0.1.6"
 description = "High-performance audio decoding with FFmpeg and C++"
 readme = "README.md"
 authors = [{name = "lxp3"}]
