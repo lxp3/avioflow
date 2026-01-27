@@ -9,6 +9,7 @@ on:
 permissions:
   contents: write
   id-token: write # Required for provenance
+  actions: write # Required for cancelling other jobs
 
 jobs:
   # ============================================================
@@ -134,6 +135,15 @@ jobs:
           name: linux-nodejs-prebuilds
           path: prebuilds/
 
+      - name: Cancel workflow on failure
+        if: failure()
+        run: |
+          curl -X POST -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/cancel"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   # --- Build Python Wheels (Linux, Shared) ---
   build-python-linux:
     needs: check-tag
@@ -162,6 +172,12 @@ jobs:
         with:
           name: linux-python-wheels
           path: ./wheelhouse/*.whl
+
+      - name: Cancel workflow on failure
+        if: failure()
+        run: gh run cancel ${{ github.run_id }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # ============================================================
   # Windows Build (C++ + Node.js + Python Wheels)
@@ -221,6 +237,12 @@ jobs:
           name: windows-nodejs-prebuilds
           path: prebuilds/
 
+      - name: Cancel workflow on failure
+        if: failure()
+        run: gh run cancel ${{ github.run_id }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   # --- Build Python Wheels (Windows, Shared) ---
   build-python-windows:
     needs: check-tag
@@ -243,13 +265,19 @@ jobs:
           name: windows-python-wheels
           path: ./wheelhouse/*.whl
 
+      - name: Cancel workflow on failure
+        if: failure()
+        run: gh run cancel ${{ github.run_id }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   # ============================================================
   # Publish to GitHub, PyPI, and NPM
   # ============================================================
   publish:
     needs: [check-tag, build-linux, build-python-linux, build-windows, build-python-windows]
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/') && always() && !cancelled()
+    if: startsWith(github.ref, 'refs/tags/') && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
     steps:
       - uses: actions/checkout@v4
 
@@ -317,15 +345,15 @@ jobs:
           password: ${{ secrets.PYPI_API_TOKEN }}
           skip-existing: true
 
-      # Publish to NPM
-      - name: Prepare NPM package
-        if: needs.check-tag.outputs.build-npm == 'true'
-        run: |
-          npm install
-          ls -la prebuilds/
-
       - name: Publish to NPM
         if: needs.check-tag.outputs.build-npm == 'true'
-        run: npm publish --access public --provenance
+        run: |
+          PACKAGE_NAME=$(node -p "require('./package.json').name")
+          PACKAGE_VERSION=$(node -p "require('./package.json').version")
+          if npm view "$PACKAGE_NAME@$PACKAGE_VERSION" version > /dev/null 2>&1; then
+            echo "Version $PACKAGE_VERSION of $PACKAGE_NAME already exists on NPM. Skipping publish."
+          else
+            npm publish --access public --provenance
+          fi
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
