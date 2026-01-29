@@ -1,5 +1,4 @@
 from avioflow import AudioDecoder
-import numpy as np
 
 def test_load():
     decoder = AudioDecoder(output_sample_rate=44100)
