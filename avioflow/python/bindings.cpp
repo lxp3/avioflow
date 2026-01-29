@@ -70,7 +70,8 @@ PYBIND11_MODULE(_avioflow, m) {
         
         // Convert to numpy array
         if (samples.empty()) {
-            auto arr = py::array_t<float>({0, 0});
+            std::vector<py::ssize_t> shape = {0, 0};
+            auto arr = py::array_t<float>(shape);
             return py::make_tuple(meta, arr);
         }
         
