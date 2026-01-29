@@ -50,9 +50,9 @@ def main():
 
         # Verify sample count matches metadata
         if samples.shape[1] == meta.num_samples:
-            print(f"  ✓ Sample count matches metadata")
+            print(f"  [OK] Sample count matches metadata")
         else:
-            print(f"  ⚠ Sample count mismatch: {samples.shape[1]} vs {meta.num_samples}")
+            print(f"  [WARN] Sample count mismatch: {samples.shape[1]} vs {meta.num_samples}")
 
         print("\nSUCCESS: Python audio loading is working correctly.")
 
