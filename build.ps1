@@ -12,15 +12,15 @@ if ($BUILD_SHARED_LIBS -eq "ON") {
     $BUILD_DIR = "build_static"
 }
 
-if (Test-Path $BUILD_DIR) {
-    Write-Host "Cleaning existing build directory: $BUILD_DIR"
-    try {
-        Remove-Item -Path $BUILD_DIR -Recurse -Force -ErrorAction Stop
-    }
-    catch {
-        Write-Warning "Could not fully clean build directory (some files might be in use). Continuing anyway..."
-    }
-}
+# if (Test-Path $BUILD_DIR) {
+#     Write-Host "Cleaning existing build directory: $BUILD_DIR"
+#     try {
+#         Remove-Item -Path $BUILD_DIR -Recurse -Force -ErrorAction Stop
+#     }
+#     catch {
+#         Write-Warning "Could not fully clean build directory (some files might be in use). Continuing anyway..."
+#     }
+# }
 # FFmpeg is now managed via CMake (FetchContent)
 
 

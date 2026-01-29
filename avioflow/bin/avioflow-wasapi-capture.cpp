@@ -28,9 +28,9 @@ int main() {
         int frame_count = 0;
 
         while (std::chrono::steady_clock::now() - start < std::chrono::seconds(3)) {
-            auto samples = decoder.decode_next();
-            if (!samples.data.empty()) {
-                total_samples += samples.data[0].size();
+            auto frame = decoder.decode_next();
+            if (frame) {
+                total_samples += frame.num_samples;
                 frame_count++;
                 if (frame_count % 10 == 0) {
                     std::cout << "\rCaptured " << total_samples << " samples in " << frame_count << " frames..." << std::flush;

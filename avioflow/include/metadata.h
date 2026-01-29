@@ -34,10 +34,4 @@ struct Metadata {
   std::string container;     // Container format (e.g., "mp3", "wav")
 };
 
-// Output structure for complete decoded audio (offline decoding)
-struct AudioSamples {
-  std::vector<std::vector<float>> data; // Planar float data per channel
-  int sample_rate = 0;
-};
-
 } // namespace avioflow

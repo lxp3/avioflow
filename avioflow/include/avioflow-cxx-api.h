@@ -1,7 +1,6 @@
 #pragma once
 
 #include "metadata.h"
-#include <functional>
 #include <memory>
 #include <vector>
 
@@ -21,16 +20,50 @@
 
 namespace avioflow {
 
-// AVIO read callback for streaming input
-// Returns: >0 (bytes read), 0 (EOF), <0 (no data available, try again)
-using AVIOReadCallback = std::function<int(uint8_t *, int)>;
-
 // Global configuration
 // level: "quiet", "panic", "fatal", "error", "warning", "info", "verbose", "debug", "trace"
-// If level is nullptr, it reads from the environment variable AVIOFLOW_LOG_LEVEL.
 AVIOFLOW_API void avioflow_set_log_level(const char *level = nullptr);
 
-// Audio Decoder - Public API using PIMPL
+/**
+ * @brief Raw audio frame data returned from decoder.
+ * 
+ * Points directly to internal AVFrame buffers - zero allocation overhead.
+ * 
+ * @warning Data is only valid until the next decode call. Copy immediately if needed.
+ * @note No manual memory management required - owned by AudioDecoder.
+ */
+struct FrameData {
+  float** data;        ///< Planar channel pointers (data[channel][sample])
+  int num_channels;    ///< Number of audio channels
+  int num_samples;     ///< Number of samples per channel
+  
+  /// @brief Check if frame contains valid data
+  explicit operator bool() const { return data != nullptr && num_samples > 0; }
+};
+
+/**
+ * @brief High-performance audio decoder powered by FFmpeg.
+ * 
+ * Supports two modes:
+ * - **File mode**: Load from file path, URL, or device via open()
+ * - **Stream mode**: Push raw bytes via push() for real-time decoding
+ * 
+ * Example (File mode):
+ * @code
+ * AudioDecoder decoder({.output_sample_rate = 44100});
+ * decoder.open("audio.mp3");
+ * while (auto frame = decoder.decode_next()) {
+ *   process(frame.data, frame.num_channels, frame.num_samples);
+ * }
+ * @endcode
+ * 
+ * Example (Stream mode):
+ * @code
+ * AudioDecoder decoder({.input_format = "s16le", .input_sample_rate = 48000});
+ * decoder.push(raw_bytes, size);
+ * while (auto frame = decoder.decode_next()) { ... }
+ * @endcode
+ */
 class AVIOFLOW_API AudioDecoder {
 public:
   explicit AudioDecoder(const AudioStreamOptions &options = {});
@@ -44,30 +77,49 @@ public:
   AudioDecoder(AudioDecoder &&) noexcept;
   AudioDecoder &operator=(AudioDecoder &&) noexcept;
 
-  // --- Input Methods ---
+  // === Input Methods ===
 
-  // Open from file path, URL, or device
+  /**
+   * @brief Open audio from file path, URL, or device.
+   * @param source File path, URL, or device identifier (e.g., "audio=Microphone")
+   * @throws std::runtime_error if source cannot be opened
+   */
   void open(const std::string &source);
 
-  // Open from memory buffer
-  void open_memory(const uint8_t *data, size_t size);
+  /**
+   * @brief Push raw bytes for streaming decode.
+   * 
+   * First call auto-initializes the streaming context using constructor options.
+   * Requires input_format to be set in options.
+   * 
+   * @param data Pointer to raw encoded audio bytes
+   * @param size Number of bytes to push
+   * @throws std::runtime_error if input_format not specified or decoder in file mode
+   */
+  void push(const uint8_t *data, size_t size);
 
-  // Open for streaming with read callback
-  // Requires explicit format specification for non-seekable streams
-  // Supported formats: aac, opus, pcm_s16le, pcm_f32le, wav
-  // Note: format MUST be specified in options.input_format
-  void open_stream(AVIOReadCallback avio_read_callback, const AudioStreamOptions &options);
+  // === Decoding Methods ===
 
-  // --- Decoding Methods ---
+  /**
+   * @brief Decode next audio frame.
+   * 
+   * Returns raw pointers to internal buffers for zero-copy access.
+   * 
+   * @return FrameData with valid pointers, or empty FrameData (bool() == false) on EOF/no data
+   * @warning Returned data is only valid until next decode_next() call!
+   */
+  FrameData decode_next();
 
-  // Decode next frame and return as AudioSamples
-  // Returns empty AudioSamples if no data available or EOF
-  AudioSamples decode_next();
+  /**
+   * @brief Decode entire audio source at once (offline mode).
+   * 
+   * Convenience method that calls decode_next() in a loop and collects all samples.
+   * 
+   * @return All samples as vector[channel][sample]
+   */
+  std::vector<std::vector<float>> get_all_samples();
 
-  // Decode entire audio at once (offline mode)
-  AudioSamples get_all_samples();
-
-  // --- Status ---
+  // === Status ===
 
   bool is_finished() const;
   const Metadata &get_metadata() const;
