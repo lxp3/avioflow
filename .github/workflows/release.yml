@@ -166,6 +166,7 @@ jobs:
           CIBW_REPAIR_WHEEL_COMMAND_LINUX: >
             export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$(find /project -name "libavformat.so*" -exec dirname {} \; | head -n 1) &&
             auditwheel repair -w {dest_dir} {wheel}
+          CIBW_TEST_REQUIRES: numpy
           CIBW_TEST_COMMAND: "python {project}/tests/python/test_offline_load.py {project}/public/wavs/TownTheme.mp3"
 
       - uses: actions/upload-artifact@v4
@@ -258,6 +259,7 @@ jobs:
           CIBW_BUILD: "cp38-* cp39-* cp310-* cp311-* cp312-* cp313-* cp314-*"
           CIBW_SKIP: "pp* *-win32"
           CIBW_ENVIRONMENT_WINDOWS: "CMAKE_ARGS=-DBUILD_SHARED_LIBS=ON"
+          CIBW_TEST_REQUIRES: numpy
           CIBW_TEST_COMMAND: "python {project}/tests/python/test_offline_load.py {project}/public/wavs/TownTheme.mp3"
 
       - uses: actions/upload-artifact@v4
