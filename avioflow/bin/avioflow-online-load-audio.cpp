@@ -31,44 +31,32 @@ std::string get_format_from_path(const std::string& path) {
     return ext;
 }
 
-class ChunkedReader {
-public:
-    ChunkedReader(const std::string& path, size_t chunk_size)
-        : file_(path, std::ios::binary), chunk_size_(chunk_size) {}
-
-    int read(uint8_t* buf, int buf_size) {
-        if (!file_.is_open() || file_.eof()) {
-            return 0; // EOF
-        }
-
-        // Simulating network delay or block reading
-        int to_read = std::min(static_cast<int>(chunk_size_), buf_size);
-        file_.read(reinterpret_cast<char*>(buf), to_read);
-        return static_cast<int>(file_.gcount());
-    }
-
-private:
-    std::ifstream file_;
-    size_t chunk_size_;
-};
-
 void test_online_decode(const std::string& path) {
     try {
         // Get format from file extension
         std::string format = get_format_from_path(path);
         std::cout << "Detected format: " << format << "\n";
         
-        // Read in 4KB chunks
-        ChunkedReader reader(path, 4096);
+        // Read file into memory first
+        std::ifstream file(path, std::ios::binary | std::ios::ate);
+        if (!file.is_open()) {
+            std::cerr << "Could not open file: " << path << "\n";
+            return;
+        }
+        std::streamsize size = file.tellg();
+        file.seekg(0, std::ios::beg);
+        std::vector<uint8_t> buffer(size);
+        file.read(reinterpret_cast<char*>(buffer.data()), size);
+        file.close();
         
         // Setup streaming options with explicit format
         avioflow::AudioStreamOptions options;
         options.input_format = format;
         
-        avioflow::AudioDecoder decoder;
-        decoder.open_stream([&reader](uint8_t* buf, int size) {
-            return reader.read(buf, size);
-        }, options);
+        avioflow::AudioDecoder decoder(options);
+        
+        // Push all data at once (simulating chunked reads could be done with multiple push calls)
+        decoder.push(buffer.data(), buffer.size());
 
         const auto& meta = decoder.get_metadata();
         std::cout << "Successfully opened stream: " << path << "\n";
@@ -85,10 +73,10 @@ void test_online_decode(const std::string& path) {
         size_t total_samples = 0;
         int frame_count = 0;
         while (!decoder.is_finished()) {
-            auto samples = decoder.decode_next();
-            if (samples.data.empty())
+            auto frame = decoder.decode_next();
+            if (!frame)
                 break;
-            total_samples += samples.data[0].size();
+            total_samples += frame.num_samples;
             frame_count++;
         }
         std::cout << "Decoded " << total_samples << " samples per channel in "
@@ -115,7 +103,7 @@ int main(int argc, char** argv) {
 
     std::string path = argv[1];
     
-    std::cout << "--- Testing Online (Chunked) Decode ---\n";
+    std::cout << "--- Testing Online (Push-based) Decode ---\n";
     test_online_decode(path);
 
     return 0;

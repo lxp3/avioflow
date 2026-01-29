@@ -18,19 +18,12 @@ void test_file_decode(const std::string &path)
         std::cout << "Sample Rate: " << meta.sample_rate << " Hz\n";
         std::cout << "Duration: " << meta.duration << " s\n";
 
-        // Decode all frames and count samples
-        size_t total_samples = 0;
-        int frame_count = 0;
-        while (!decoder.is_finished())
-        {
-            auto samples = decoder.decode_next();
-            if (samples.data.empty())
-                break;
-            total_samples += samples.data[0].size();
-            frame_count++;
-        }
-        std::cout << "Decoded " << total_samples << " samples per channel in "
-                  << frame_count << " frames.\n";
+        // Decode all samples at once (offline mode)
+        auto samples = decoder.get_all_samples();
+        size_t total_samples = samples.empty() ? 0 : samples[0].size();
+        
+        std::cout << "Decoded " << total_samples << " samples per channel across "
+                  << meta.num_channels << " channels.\n";
     }
     catch (const std::exception &e)
     {

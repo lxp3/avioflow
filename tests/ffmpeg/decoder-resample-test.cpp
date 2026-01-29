@@ -11,7 +11,7 @@
 using namespace avioflow;
 
 // Test file paths
-const std::string TEST_FILE_PATH = "./public/TownTheme.mp3";
+const std::string TEST_FILE_PATH = "public/wavs/TownTheme.mp3";
 
 // Original file parameters
 constexpr int ORIGINAL_SAMPLE_RATE = 44100;
@@ -54,13 +54,12 @@ void test_resample_8000()
     assert(meta.num_channels == EXPECTED_NUM_CHANNELS);
 
     auto samples = decoder.get_all_samples();
-    size_t num_samples = samples.data.empty() ? 0 : samples.data[0].size();
+    size_t num_samples = samples.empty() ? 0 : samples[0].size();
     auto diff = static_cast<int64_t>(num_samples) - EXPECTED_SAMPLES_8000;
     std::cout << "sample_rate: " << meta.sample_rate << " -> " << TARGET_RATE 
               << ", num_samples: " << num_samples << ", diff: " << diff << std::endl;
 
-    assert(samples.sample_rate == TARGET_RATE);
-    assert((int)samples.data.size() == EXPECTED_NUM_CHANNELS);
+    assert((int)samples.size() == EXPECTED_NUM_CHANNELS);
     assert(is_within_tolerance(num_samples, EXPECTED_SAMPLES_8000));
 }
 
@@ -77,12 +76,11 @@ void test_resample_16000()
     const auto &meta = decoder.get_metadata();
 
     auto samples = decoder.get_all_samples();
-    size_t num_samples = samples.data.empty() ? 0 : samples.data[0].size();
+    size_t num_samples = samples.empty() ? 0 : samples[0].size();
     auto diff = static_cast<int64_t>(num_samples) - EXPECTED_SAMPLES_16000;
     std::cout << "sample_rate: " << meta.sample_rate << " -> " << TARGET_RATE 
               << ", num_samples: " << num_samples << ", diff: " << diff << std::endl;
 
-    assert(samples.sample_rate == TARGET_RATE);
     assert(is_within_tolerance(num_samples, EXPECTED_SAMPLES_16000));
 }
 
@@ -99,12 +97,11 @@ void test_resample_32000()
     const auto &meta = decoder.get_metadata();
 
     auto samples = decoder.get_all_samples();
-    size_t num_samples = samples.data.empty() ? 0 : samples.data[0].size();
+    size_t num_samples = samples.empty() ? 0 : samples[0].size();
     auto diff = static_cast<int64_t>(num_samples) - EXPECTED_SAMPLES_32000;
     std::cout << "sample_rate: " << meta.sample_rate << " -> " << TARGET_RATE 
               << ", num_samples: " << num_samples << ", diff: " << diff << std::endl;
 
-    assert(samples.sample_rate == TARGET_RATE);
     assert(is_within_tolerance(num_samples, EXPECTED_SAMPLES_32000));
 }
 
@@ -121,12 +118,11 @@ void test_resample_44100()
     const auto &meta = decoder.get_metadata();
 
     auto samples = decoder.get_all_samples();
-    size_t num_samples = samples.data.empty() ? 0 : samples.data[0].size();
+    size_t num_samples = samples.empty() ? 0 : samples[0].size();
     auto diff = static_cast<int64_t>(num_samples) - EXPECTED_SAMPLES_44100;
     std::cout << "sample_rate: " << meta.sample_rate << " -> " << TARGET_RATE 
               << ", num_samples: " << num_samples << ", diff: " << diff << std::endl;
 
-    assert(samples.sample_rate == TARGET_RATE);
     assert((int)num_samples == EXPECTED_SAMPLES_44100);
 }
 
@@ -143,12 +139,11 @@ void test_resample_48000()
     const auto &meta = decoder.get_metadata();
 
     auto samples = decoder.get_all_samples();
-    size_t num_samples = samples.data.empty() ? 0 : samples.data[0].size();
+    size_t num_samples = samples.empty() ? 0 : samples[0].size();
     auto diff = static_cast<int64_t>(num_samples) - EXPECTED_SAMPLES_48000;
     std::cout << "sample_rate: " << meta.sample_rate << " -> " << TARGET_RATE 
               << ", num_samples: " << num_samples << ", diff: " << diff << std::endl;
 
-    assert(samples.sample_rate == TARGET_RATE);
     assert(is_within_tolerance(num_samples, EXPECTED_SAMPLES_48000));
 }
 
@@ -164,17 +159,17 @@ void test_resample_audio_quality()
     decoder.open(TEST_FILE_PATH);
 
     auto samples = decoder.get_all_samples();
-    size_t num_samples = samples.data.empty() ? 0 : samples.data[0].size();
+    size_t num_samples = samples.empty() ? 0 : samples[0].size();
 
-    assert((int)samples.data.size() == EXPECTED_NUM_CHANNELS);
+    assert((int)samples.size() == EXPECTED_NUM_CHANNELS);
     assert(num_samples > 0);
 
     // Check first 1000 samples of each channel
-    for (size_t c = 0; c < samples.data.size(); ++c)
+    for (size_t c = 0; c < samples.size(); ++c)
     {
         for (size_t i = 0; i < std::min(num_samples, (size_t)1000); ++i)
         {
-            float sample = samples.data[c][i];
+            float sample = samples[c][i];
             (void)sample;
             assert(!std::isnan(sample));
             assert(!std::isinf(sample));

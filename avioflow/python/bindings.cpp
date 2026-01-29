@@ -1,3 +1,11 @@
+/**
+ * @file bindings.cpp
+ * @brief Python bindings for avioflow audio decoding library.
+ * 
+ * This module provides high-performance audio decoding capabilities powered by FFmpeg.
+ * Audio data is returned as numpy arrays with shape (channels, samples).
+ */
+
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 #include <pybind11/functional.h>
@@ -11,107 +19,359 @@ namespace py = pybind11;
 using namespace avioflow;
 
 PYBIND11_MODULE(_avioflow, m) {
-    m.doc() = "avioflow: High-performance audio decoding library powered by FFmpeg";
+    m.doc() = R"pbdoc(
+        avioflow: High-performance audio decoding library powered by FFmpeg.
+        
+        This module provides:
+        - AudioDecoder: Main class for decoding audio files and streams
+        - DeviceManager: System audio device discovery
+        - Metadata: Audio stream metadata container
+        
+        Example:
+            >>> import avioflow
+            >>> decoder = avioflow.AudioDecoder(output_sample_rate=44100)
+            >>> meta = decoder.load("audio.mp3")
+            >>> samples = decoder.get_all_samples()  # shape: (channels, samples)
+    )pbdoc";
 
-    // --- Global Functions ---
+    // --- Module-level functions ---
+    
     m.def("set_log_level", [](const std::string& level) {
         avioflow_set_log_level(level.c_str());
-    }, py::arg("level") = "info", 
-       "Set FFmpeg log level. Options: quiet, fatal, error, warning, info, debug, trace");
+    }, 
+    py::arg("level") = "info",
+    R"pbdoc(
+        Set FFmpeg logging verbosity level.
+        
+        Args:
+            level (str): Log level, one of:
+                - "quiet": No output
+                - "fatal": Only fatal errors
+                - "error": All errors
+                - "warning": Errors and warnings
+                - "info": General information (default)
+                - "debug": Detailed debugging info
+                - "trace": Maximum verbosity
+    )pbdoc");
 
-    // --- Structs ---
-    py::class_<AudioStreamOptions>(m, "AudioStreamOptions", "Configuration options for audio decoding and resampling")
-        .def(py::init<>())
-        .def_readwrite("output_sample_rate", &AudioStreamOptions::output_sample_rate, "(int or None): Target output sample rate (Hz). If null, keeps original.")
-        .def_readwrite("output_num_channels", &AudioStreamOptions::output_num_channels, "(int or None): Target output channel count. If null, keeps original.")
-        .def_readwrite("input_sample_rate", &AudioStreamOptions::input_sample_rate, "(int or None): Force input sample rate (only for raw PCM).")
-        .def_readwrite("input_channels", &AudioStreamOptions::input_channels, "(int or None): Force input channel count (only for raw PCM).")
-        .def_readwrite("input_format", &AudioStreamOptions::input_format, "(str or None): Force input format hint (e.g., 'wav', 'mp3', 's16le').")
-        .def("__repr__", [](const AudioStreamOptions& self) {
-            std::stringstream ss;
-            ss << "<avioflow.AudioStreamOptions"
-               << " output_sample_rate=" << (self.output_sample_rate ? std::to_string(*self.output_sample_rate) : "None")
-               << " output_num_channels=" << (self.output_num_channels ? std::to_string(*self.output_num_channels) : "None")
-               << " input_sample_rate=" << (self.input_sample_rate ? std::to_string(*self.input_sample_rate) : "None")
-               << " input_channels=" << (self.input_channels ? std::to_string(*self.input_channels) : "None")
-               << " input_format=" << (self.input_format ? *self.input_format : "None")
-               << ">";
-            return ss.str();
-        });
+    // Quick offline loading helper
+    m.def("load", [](const std::string& path,
+                     std::optional<int> output_sample_rate,
+                     std::optional<int> output_num_channels) {
+        AudioStreamOptions opts;
+        opts.output_sample_rate = output_sample_rate;
+        opts.output_num_channels = output_num_channels;
+        
+        AudioDecoder decoder(opts);
+        decoder.open(path);
+        
+        const auto& meta = decoder.get_metadata();
+        auto samples = decoder.get_all_samples();
+        
+        // Convert to numpy array
+        if (samples.empty()) {
+            auto arr = py::array_t<float>({0, 0});
+            return py::make_tuple(meta, arr);
+        }
+        
+        int num_channels = static_cast<int>(samples.size());
+        int num_samples = static_cast<int>(samples[0].size());
+        
+        auto arr = py::array_t<float>({num_channels, num_samples});
+        auto buf = arr.mutable_unchecked<2>();
+        
+        for (int c = 0; c < num_channels; ++c) {
+            std::memcpy(&buf(c, 0), samples[c].data(), num_samples * sizeof(float));
+        }
+        
+        return py::make_tuple(meta, arr);
+    },
+    py::arg("path"),
+    py::arg("output_sample_rate") = py::none(),
+    py::arg("output_num_channels") = py::none(),
+    R"pbdoc(
+        Load an audio file and decode all samples in one call.
+        
+        This is a convenience function that combines file loading and full
+        decoding in a single call. For large files or when you need frame-by-frame
+        control, use AudioDecoder directly.
+        
+        Args:
+            path (str): Path to audio file or URL.
+            output_sample_rate (int, optional): Target sample rate in Hz.
+                If None, uses source sample rate.
+            output_num_channels (int, optional): Target number of channels.
+                If None, uses source channel count.
+        
+        Returns:
+            tuple[Metadata, numpy.ndarray]: A tuple containing:
+                - Metadata: Audio stream information
+                - samples: Float32 array with shape (channels, samples)
+        
+        Example:
+            >>> import avioflow
+            >>> meta, samples = avioflow.load("audio.mp3")
+            >>> print(f"Duration: {meta.duration}s, Shape: {samples.shape}")
+            
+            >>> # With resampling to 16kHz mono
+            >>> meta, samples = avioflow.load("speech.wav", output_sample_rate=16000, output_num_channels=1)
+    )pbdoc");
 
-    py::class_<DeviceInfo>(m, "DeviceInfo", "Information about a system audio device")
-        .def(py::init<>())
-        .def_readonly("name", &DeviceInfo::name, "(str): DirectShow/WASAPI device name identifier")
-        .def_readonly("description", &DeviceInfo::description, "(str): Human-readable device description")
-        .def_readonly("is_output", &DeviceInfo::is_output, "(bool): True if this is an output/loopback device")
+    // --- DeviceInfo ---
+    
+    py::class_<DeviceInfo>(m, "DeviceInfo", 
+        "Container for system audio device information.")
+        .def_readonly("name", &DeviceInfo::name, 
+            "str: Unique device identifier used for opening.")
+        .def_readonly("description", &DeviceInfo::description, 
+            "str: Human-readable device name.")
+        .def_readonly("is_output", &DeviceInfo::is_output, 
+            "bool: True if this is an output/loopback device.")
         .def("__repr__", [](const DeviceInfo& self) {
-            std::stringstream ss;
-            ss << "<avioflow.DeviceInfo"
-               << " name='" << self.name << "'"
-               << " description='" << self.description << "'"
-               << " is_output=" << (self.is_output ? "True" : "False")
-               << ">";
-            return ss.str();
+            return "<avioflow.DeviceInfo name='" + self.name + "'>";
         });
 
-    py::class_<Metadata>(m, "Metadata", "Audio stream information")
-        .def(py::init<>())
-        .def_readonly("duration", &Metadata::duration, "(float): Duration in seconds")
-        .def_readonly("num_samples", &Metadata::num_samples, "(int): Total number of samples (if known)")
-        .def_readonly("sample_rate", &Metadata::sample_rate, "(int): Original sampling rate (Hz)")
-        .def_readonly("num_channels", &Metadata::num_channels, "(int): Original number of channels")
-        .def_readonly("sample_format", &Metadata::sample_format, "(str): Original sample format (e.g., 'fltp', 's16')")
-        .def_readonly("codec", &Metadata::codec, "(str): Codec name (e.g., 'mp3', 'aac')")
-        .def_readonly("bit_rate", &Metadata::bit_rate, "(int): Bit rate in bits per second")
-        .def_readonly("container", &Metadata::container, "(str): Format container name")
+    // --- Metadata ---
+    
+    py::class_<Metadata>(m, "Metadata", 
+        "Container for audio stream metadata.")
+        .def_readonly("duration", &Metadata::duration, 
+            "float: Duration in seconds. May be 0 for live streams.")
+        .def_readonly("num_samples", &Metadata::num_samples, 
+            "int: Total number of samples. Updated at EOF for streams.")
+        .def_readonly("sample_rate", &Metadata::sample_rate, 
+            "int: Sample rate in Hz (e.g., 44100, 48000).")
+        .def_readonly("num_channels", &Metadata::num_channels, 
+            "int: Number of audio channels (1=mono, 2=stereo).")
+        .def_readonly("sample_format", &Metadata::sample_format, 
+            "str: Original sample format (e.g., 'fltp', 's16').")
+        .def_readonly("codec", &Metadata::codec, 
+            "str: Codec name (e.g., 'mp3', 'aac', 'flac').")
+        .def_readonly("bit_rate", &Metadata::bit_rate, 
+            "int: Bit rate in bits per second.")
+        .def_readonly("container", &Metadata::container, 
+            "str: Container format (e.g., 'mp3', 'mp4', 'ogg').")
         .def("__repr__", [](const Metadata& self) {
             std::stringstream ss;
-            ss << "<avioflow.Metadata"
-               << " duration=" << std::fixed << std::setprecision(2) << self.duration
-               << " sample_rate=" << self.sample_rate
-               << " num_channels=" << self.num_channels
-               << " codec='" << self.codec << "'"
-               << " bit_rate=" << self.bit_rate
-               << " container='" << self.container << "'"
-               << ">";
+            ss << "<avioflow.Metadata "
+               << "codec='" << self.codec << "' "
+               << "sample_rate=" << self.sample_rate << " "
+               << "channels=" << self.num_channels << " "
+               << "duration=" << std::fixed << std::setprecision(2) << self.duration << "s>";
             return ss.str();
         });
 
-    py::class_<AudioSamples>(m, "AudioSamples", "Buffer containing decoded audio data")
-        .def(py::init<>())
-        .def_readonly("data", &AudioSamples::data, "(list[list[float]]): Planar float data: (channels, samples)")
-        .def_readonly("sample_rate", &AudioSamples::sample_rate, "(int): The sample rate of this data")
-        .def("__repr__", [](const AudioSamples& self) {
-            std::stringstream ss;
-            ss << "<avioflow.AudioSamples"
-               << " channels=" << self.data.size()
-               << " samples_per_channel=" << (self.data.empty() ? 0 : self.data[0].size())
-               << " sample_rate=" << self.sample_rate
-               << ">";
-            return ss.str();
-        });
-
-    // --- Main Decoder Class ---
-    py::class_<AudioDecoder>(m, "AudioDecoder", "Main class for audio decoding and device capture")
-        .def(py::init<const AudioStreamOptions&>(), py::arg("options") = AudioStreamOptions(), "Initialize decoder with optional resampling settings")
-        .def("open", &AudioDecoder::open, py::arg("source"), 
-             "Open an audio source (file path, URL, or wasapi_loopback/audio=...)")
-        .def("open_memory", [](AudioDecoder& self, py::bytes data) {
+    // --- AudioDecoder ---
+    
+    py::class_<AudioDecoder>(m, "AudioDecoder", R"pbdoc(
+        High-performance audio decoder with file and streaming support.
+        
+        Two operation modes:
+        
+        **File Mode** - Load complete audio files:
+            >>> decoder = AudioDecoder(output_sample_rate=44100)
+            >>> meta = decoder.load("audio.mp3")
+            >>> samples = decoder.get_all_samples()  # numpy array (channels, samples)
+        
+        **Stream Mode** - Decode real-time byte streams:
+            >>> decoder = AudioDecoder(input_format="s16le", input_sample_rate=48000, input_channels=2)
+            >>> samples = decoder(raw_bytes)  # Returns decoded numpy array
+        
+        Args:
+            output_sample_rate (int, optional): Target output sample rate in Hz.
+                If not specified, uses source sample rate.
+            output_num_channels (int, optional): Target number of output channels.
+                If not specified, uses source channel count.
+            input_sample_rate (int, optional): Source sample rate for raw PCM streaming.
+                Required for stream mode with raw PCM formats.
+            input_channels (int, optional): Source channel count for raw PCM streaming.
+                Required for stream mode with raw PCM formats.
+            input_format (str, optional): Source format for streaming. Options:
+                - "s16le": 16-bit signed little-endian PCM
+                - "f32le": 32-bit float little-endian PCM
+                - "aac": AAC audio (with ADTS headers)
+                - "opus": Opus audio
+                Required for stream mode.
+        
+        Attributes:
+            All audio data is returned as float32 in range [-1.0, 1.0].
+    )pbdoc")
+        .def(py::init([](py::kwargs kwargs) {
+            AudioStreamOptions options;
+            if (kwargs.contains("output_sample_rate")) 
+                options.output_sample_rate = py::cast<int>(kwargs["output_sample_rate"]);
+            if (kwargs.contains("output_num_channels")) 
+                options.output_num_channels = py::cast<int>(kwargs["output_num_channels"]);
+            if (kwargs.contains("input_sample_rate")) 
+                options.input_sample_rate = py::cast<int>(kwargs["input_sample_rate"]);
+            if (kwargs.contains("input_channels")) 
+                options.input_channels = py::cast<int>(kwargs["input_channels"]);
+            if (kwargs.contains("input_format")) 
+                options.input_format = py::cast<std::string>(kwargs["input_format"]);
+            return new AudioDecoder(options);
+        }))
+        
+        .def("load", [](AudioDecoder& self, py::object source) -> const Metadata& {
+            if (py::isinstance<py::str>(source)) {
+                self.open(py::cast<std::string>(source));
+            } else if (py::hasattr(source, "__fspath__")) {
+                self.open(py::cast<std::string>(source.attr("__fspath__")()));
+            } else {
+                throw py::type_error("source must be str, bytes, or PathLike object");
+            }
+            return self.get_metadata();
+        }, 
+        py::arg("source"), 
+        py::return_value_policy::reference_internal,
+        R"pbdoc(
+            Load audio from file path, URL, or device.
+            
+            Args:
+                source: Audio source, one of:
+                    - str: File path or URL
+                    - pathlib.Path: File path object
+                    - "wasapi_loopback": Windows system audio capture
+                    - "audio=DeviceName": Microphone/input device
+            
+            Returns:
+                Metadata: Audio stream metadata object.
+            
+            Raises:
+                RuntimeError: If source cannot be opened or decoded.
+                TypeError: If source type is not supported.
+            
+            Example:
+                >>> decoder = AudioDecoder()
+                >>> meta = decoder.load("song.mp3")
+                >>> print(f"Duration: {meta.duration}s, Sample rate: {meta.sample_rate}Hz")
+        )pbdoc")
+        
+        .def("__call__", [](AudioDecoder& self, py::bytes data) -> py::array_t<float> {
             std::string s = data;
-            self.open_memory(reinterpret_cast<const uint8_t*>(s.data()), s.size());
-        }, py::arg("data"), "Open audio from a memory buffer")
-        .def("open_stream", &AudioDecoder::open_stream, py::arg("callback"), py::arg("options") = AudioStreamOptions(), 
-             "Open audio from a custom stream-like object with a read callback")
-        .def("decode_next", [](AudioDecoder& self) -> py::object {
-            auto samples = self.decode_next();
-            if (samples.data.empty()) return py::none();
-            return py::cast(samples);
-        }, "Decode next available frame. Returns AudioSamples or None if end of stream reached.")
-        .def("get_all_samples", &AudioDecoder::get_all_samples, "Synchronously decode the entire source and return all samples.")
-        .def("is_finished", &AudioDecoder::is_finished, "Check if the stream has reached the end")
-        .def("get_metadata", &AudioDecoder::get_metadata, py::return_value_policy::reference_internal, "Get detected audio metadata");
+            self.push(reinterpret_cast<const uint8_t*>(s.data()), s.size());
+            
+            std::vector<std::vector<float>> total_samples;
+            while (true) {
+                auto frame = self.decode_next();
+                if (!frame) break;
+                
+                if (total_samples.empty()) {
+                    total_samples.resize(frame.num_channels);
+                }
+                for (int c = 0; c < frame.num_channels; ++c) {
+                    const float* src = frame.data[c];
+                    total_samples[c].insert(total_samples[c].end(), src, src + frame.num_samples);
+                }
+            }
+            
+            if (total_samples.empty()) return py::array_t<float>();
+            
+            size_t num_channels = total_samples.size();
+            size_t num_samples = total_samples[0].size();
+            py::array_t<float> result({num_channels, num_samples});
+            auto buf = result.mutable_unchecked<2>();
+            for (size_t c = 0; c < num_channels; ++c) {
+                std::copy(total_samples[c].begin(), total_samples[c].end(), &buf(c, 0));
+            }
+            return result;
+        }, 
+        py::arg("data"),
+        R"pbdoc(
+            Push raw bytes and decode immediately (streaming mode).
+            
+            This method enables push-based streaming: feed raw encoded bytes
+            and receive decoded audio samples.
+            
+            Args:
+                data (bytes): Raw encoded audio bytes. Format must match
+                    the input_format specified in constructor.
+            
+            Returns:
+                numpy.ndarray: Decoded audio samples with shape (channels, samples).
+                    dtype is float32, values in range [-1.0, 1.0].
+                    Returns empty array if no complete frames decoded yet.
+            
+            Raises:
+                RuntimeError: If input_format was not specified in constructor.
+            
+            Example:
+                >>> decoder = AudioDecoder(input_format="s16le", input_sample_rate=48000, input_channels=2)
+                >>> while True:
+                ...     raw_data = network_stream.read(4096)
+                ...     samples = decoder(raw_data)
+                ...     if samples.size > 0:
+                ...         process_audio(samples)
+        )pbdoc")
+        
+        .def("get_all_samples", [](AudioDecoder& self) -> py::array_t<float> {
+            std::vector<std::vector<float>> total_samples;
+            while (!self.is_finished()) {
+                auto frame = self.decode_next();
+                if (!frame) break;
+                
+                if (total_samples.empty()) {
+                    total_samples.resize(frame.num_channels);
+                }
+                for (int c = 0; c < frame.num_channels; ++c) {
+                    const float* src = frame.data[c];
+                    total_samples[c].insert(total_samples[c].end(), src, src + frame.num_samples);
+                }
+            }
+            
+            if (total_samples.empty()) return py::array_t<float>();
+            
+            size_t num_channels = total_samples.size();
+            size_t num_samples = total_samples[0].size();
+            py::array_t<float> result({num_channels, num_samples});
+            auto buf = result.mutable_unchecked<2>();
+            for (size_t c = 0; c < num_channels; ++c) {
+                std::copy(total_samples[c].begin(), total_samples[c].end(), &buf(c, 0));
+            }
+            return result;
+        }, 
+        R"pbdoc(
+            Decode entire audio source and return all samples.
+            
+            This is a convenience method for offline/batch processing.
+            Decodes from current position to end of stream.
+            
+            Returns:
+                numpy.ndarray: All audio samples with shape (channels, samples).
+                    dtype is float32, values in range [-1.0, 1.0].
+            
+            Note:
+                For large files, consider using frame-by-frame decoding
+                to manage memory usage.
+            
+            Example:
+                >>> decoder = AudioDecoder(output_sample_rate=16000)
+                >>> decoder.load("speech.wav")
+                >>> samples = decoder.get_all_samples()
+                >>> print(f"Shape: {samples.shape}")  # e.g., (1, 160000) for 10s mono
+        )pbdoc")
+        
+        .def("is_finished", &AudioDecoder::is_finished,
+        R"pbdoc(
+            Check if end of stream has been reached.
+            
+            Returns:
+                bool: True if all audio data has been decoded.
+        )pbdoc");
 
-    // --- Device Manager ---
-    py::class_<DeviceManager>(m, "DeviceManager", "Static utility for audio device management")
-        .def_static("list_audio_devices", &DeviceManager::list_audio_devices, "Enumerate all available audio input and loopback devices");
+    // --- DeviceManager ---
+    
+    py::class_<DeviceManager>(m, "DeviceManager", 
+        "Utility class for discovering system audio devices.")
+        .def_static("list_audio_devices", &DeviceManager::list_audio_devices,
+        R"pbdoc(
+            List available system audio devices.
+            
+            Returns:
+                list[DeviceInfo]: List of available audio input/output devices.
+            
+            Example:
+                >>> devices = avioflow.DeviceManager.list_audio_devices()
+                >>> for dev in devices:
+                ...     print(f"{dev.name}: {dev.description}")
+        )pbdoc");
 }

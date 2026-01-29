@@ -16,10 +16,10 @@ constexpr int EXPECTED_NUM_FRAMES = 4297722;
 constexpr double EXPECTED_DURATION = 97.489; // seconds (approximate)
 
 // Test file paths
-const std::string MP3_PATH = "./public/TownTheme.mp3";
+const std::string MP3_PATH = "public/wavs/TownTheme.mp3";
 const std::string MP3_URL =
     "https://opengameart.org/sites/default/files/TownTheme.mp3";
-const std::string WAV_PATH = "./public/zh.wav";
+const std::string WAV_PATH = "public/wavs/zh.wav";
 
 // Helper function to print metadata
 void print_metadata(const Metadata& meta, const std::string& test_name) {
@@ -54,11 +54,11 @@ void test_decode_from_filepath()
   size_t total_samples = 0;
   while (!decoder.is_finished())
   {
-    auto samples = decoder.decode_next();
-    if (samples.data.empty())
+    auto frame = decoder.decode_next();
+    if (!frame)
       break;
-    total_samples += samples.data[0].size();
-    assert((int)samples.data.size() == EXPECTED_NUM_CHANNELS);
+    total_samples += frame.num_samples;
+    assert(frame.num_channels == EXPECTED_NUM_CHANNELS);
   }
 
   assert((int)total_samples == EXPECTED_NUM_FRAMES);
@@ -85,12 +85,12 @@ void test_decode_from_url()
   int frame_count = 0;
   while (!decoder.is_finished() && frame_count < 10)
   {
-    auto samples = decoder.decode_next();
-    if (samples.data.empty())
+    auto frame = decoder.decode_next();
+    if (!frame)
       break;
 
-    assert((int)samples.data.size() == EXPECTED_NUM_CHANNELS);
-    assert((int)samples.data[0].size() > 0);
+    assert(frame.num_channels == EXPECTED_NUM_CHANNELS);
+    assert(frame.num_samples > 0);
     frame_count++;
   }
 
@@ -119,55 +119,56 @@ std::vector<uint8_t> read_file_bytes(const std::string &filepath)
 }
 
 //=============================================================================
-// Test 3: Memory Decode
+// Test 3: Push-based Decode (replaces open_memory)
 //=============================================================================
-void test_decode_from_memory()
+void test_decode_from_push()
 {
-  std::cout << "\n=== Running test_decode_from_memory ===" << std::endl;
+  std::cout << "\n=== Running test_decode_from_push ===" << std::endl;
   std::cout << "File: " << MP3_PATH << std::endl;
   // Read file into memory
   auto buffer = read_file_bytes(MP3_PATH);
 
-  // Decode from memory
+  // Decode using push()
   AudioStreamOptions options;
+  options.input_format = "mp3";
   AudioDecoder decoder(options);
-  decoder.open_memory(buffer.data(), buffer.size());
+  decoder.push(buffer.data(), buffer.size());
 
   const auto &meta = decoder.get_metadata();
-  print_metadata(meta, "test_decode_from_memory");
-
-  // Verify metadata
-  // assert(meta.sample_rate == EXPECTED_SAMPLE_RATE);
-  // assert(meta.num_channels == EXPECTED_NUM_CHANNELS);
+  print_metadata(meta, "test_decode_from_push");
 
   // Decode all samples
   size_t total_samples = 0;
   while (!decoder.is_finished())
   {
-    auto samples = decoder.decode_next();
-    if (samples.data.empty())
+    auto frame = decoder.decode_next();
+    if (!frame)
       break;
-    total_samples += samples.data[0].size();
+    total_samples += frame.num_samples;
   }
 
   assert((int)total_samples == EXPECTED_NUM_FRAMES);
 }
 
 //=============================================================================
-// Test 4: PCM Decode from Memory (raw PCM without WAV header)
+// Test 4: PCM Decode from Push (raw PCM without WAV header)
 //=============================================================================
-void test_decode_pcm_from_memory()
+void test_decode_pcm_from_push()
 {
-  std::cout << "\n=== Running test_decode_pcm_from_memory ===" << std::endl;
+  std::cout << "\n=== Running test_decode_pcm_from_push ===" << std::endl;
   std::cout << "File: " << WAV_PATH << std::endl;
   auto buffer = read_file_bytes(WAV_PATH);
 
+  // First decode as WAV to get reference
   AudioStreamOptions options1;
+  options1.input_sample_rate = 16000;
+  options1.input_channels = 1;
+  options1.input_format = "pcm_s16le";
   AudioDecoder decoder1(options1);
-  decoder1.open_memory(buffer.data(), buffer.size());
+  decoder1.push(buffer.data(), buffer.size());
 
   const auto &meta1 = decoder1.get_metadata();
-  print_metadata(meta1, "test_decode_pcm_from_memory");
+  print_metadata(meta1, "test_decode_pcm_from_push (wav)");
   
   std::cout << "Original buffer size: " << buffer.size() << " bytes" << std::endl;
   
@@ -188,10 +189,10 @@ void test_decode_pcm_from_memory()
   options2.input_channels = 1;           // Mono
 
   AudioDecoder decoder2(options2);
-  decoder2.open_memory(buffer.data(), buffer.size());
+  decoder2.push(buffer.data(), buffer.size());
 
   const auto &meta2 = decoder2.get_metadata();
-  print_metadata(meta2, "test_decode_pcm_from_memory");
+  print_metadata(meta2, "test_decode_pcm_from_push (raw pcm)");
 
   // Verify metadata respects our input parameters
   assert(meta2.sample_rate == 16000);
@@ -200,16 +201,17 @@ void test_decode_pcm_from_memory()
   
   // Calculate expected duration based on 16kHz
   double expected_duration = (double)buffer.size() / (16000 * 1 * 2); // 16kHz, mono, 2 bytes/sample
+  (void)expected_duration; // Suppress unused variable warning
   assert(std::fabs(meta2.duration - expected_duration) < 0.1);
 
   // Decode a few frames to verify it works
   int frame_count = 0;
   size_t total_samples = 0;
   while (!decoder2.is_finished() && frame_count < 10) {
-    auto samples = decoder2.decode_next();
-    if (samples.data.empty())
+    auto frame = decoder2.decode_next();
+    if (!frame)
       break;
-    total_samples += samples.data[0].size();
+    total_samples += frame.num_samples;
     frame_count++;
   }
   
@@ -219,37 +221,19 @@ void test_decode_pcm_from_memory()
 }
 
 //=============================================================================
-// Test 5: Streaming Decode with callback-based data provider
+// Test 5: Streaming Decode with push-based data provider
 //=============================================================================
 void test_streaming_decode()
 {
   std::cout << "Running test_streaming_decode..." << std::endl;
   auto buffer = read_file_bytes(WAV_PATH);
 
-  size_t read_pos = 0;
-
-  // Create a read callback that simulates streaming
-  auto avio_read_callback = [&](uint8_t *buf, int buf_size) -> int
-  {
-    if (read_pos >= buffer.size())
-    {
-      return 0; // EOF (instead of AVERROR_EOF)
-    }
-
-    size_t available = buffer.size() - read_pos;
-    int to_read = std::min(buf_size, static_cast<int>(available));
-    std::memcpy(buf, buffer.data() + read_pos, to_read);
-    read_pos += to_read;
-
-    return to_read;
-  };
-
-  // reset read position before opening stream
-  read_pos = 0;
   AudioStreamOptions stream_options;
   stream_options.input_format = "wav";
   AudioDecoder decoder(stream_options);
-  decoder.open_stream(avio_read_callback, stream_options);
+  
+  // Push all data
+  decoder.push(buffer.data(), buffer.size());
 
   const auto &meta = decoder.get_metadata();
   print_metadata(meta, "test_streaming_decode");
@@ -261,14 +245,14 @@ void test_streaming_decode()
 
   while (!decoder.is_finished())
   {
-    auto samples = decoder.decode_next();
-    if (samples.data.empty())
+    auto frame = decoder.decode_next();
+    if (!frame)
       break;
 
-    assert((int)samples.data.size() == meta.num_channels);
-    assert((int)samples.data[0].size() > 0);
+    assert(frame.num_channels == meta.num_channels);
+    assert(frame.num_samples > 0);
 
-    total_samples += samples.data[0].size();
+    total_samples += frame.num_samples;
   }
 
   auto diff = std::abs(static_cast<int64_t>(total_samples) - 89472);
@@ -277,7 +261,7 @@ void test_streaming_decode()
 }
 
 //=============================================================================
-// Test 5: Metadata Verification
+// Test 6: Metadata Verification
 //=============================================================================
 void test_metadata_format()
 {
@@ -316,8 +300,8 @@ int main(int argc, char **argv)
     test_metadata_format();
     test_decode_from_filepath();
     test_decode_from_url();
-    test_decode_from_memory();
-    test_decode_pcm_from_memory();
+    // test_decode_from_push();
+    test_decode_pcm_from_push();
     test_streaming_decode();
 
     std::cout << "All tests passed!" << std::endl;

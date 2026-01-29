@@ -1,171 +1,283 @@
 # AvioFlow
 
-AvioFlow is a high-performance audio decoding and capture library powered by FFmpeg. It provides a modern C++20 API and seamless Python bindings for efficient audio processing, including file decoding, URL streaming, and low-latency system audio capture (WASAPI/DirectShow).
+High-performance audio decoding library powered by FFmpeg with C++, Python, and Node.js bindings.
 
 ## Features
 
-- **Multi-format Support**: Decodes any format supported by FFmpeg (MP3, WAV, AAC, FLAC, etc.).
-- **Flexible Input**: Load audio from files, memory buffers, network URLs, or custom streams.
-- **Hardware Capture**: 
-    - **WASAPI Loopback**: Capture system output (what you hear).
-    - **DirectShow**: Capture from microphones and other input devices.
-- **Resampling**: Built-in support for target sample rate and channel conversion.
-- **Node-API Support**: Modern ESM-ready Node.js bindings for real-time audio processing.
-- **Python Bindings**: High-performance Python module using `pybind11`.
-- **Static Linking**: Fully static build support (FFmpeg + CRT) for easy distribution without external DLL dependencies.
+- **Multi-format Support**: MP3, WAV, AAC, FLAC, Opus, and all FFmpeg-supported formats
+- **Flexible Input**: Files, URLs, memory buffers, and real-time streams
+- **Hardware Capture**: WASAPI loopback (system audio) and DirectShow (microphones)
+- **Resampling**: Built-in sample rate and channel conversion
+- **Zero-copy API**: Direct buffer access via `FrameData` for maximum performance
+- **Cross-platform**: Windows, Linux, macOS
 
 ---
 
-## 🛠 Build Instructions
+## Installation
 
-### Prerequisites
-- **Windows**: Visual Studio 2022+, CMake 3.20+.
-- **Linux**: GCC 11+, CMake 3.20+, FFmpeg development headers.
-
-### Windows
-Use the provided PowerShell script for a full build (includes Node.js and Python):
-```powershell
-.\build.ps1
-```
-
-Or for a specific Node.js build:
-```powershell
-npm install
-# npx cmake-js compile
-npm run prebuild
-```
-
-### Linux
-Compile with shared or static FFmpeg (default is shared):
+### Python
 ```bash
-cmake -B build -DENABLE_PYTHON=ON -DENABLE_WASAPI=ON
-cmake --build build --config Release
-```
-
-### 📦 Prebuildify (Node.js)
-Generate prebuilt binaries for all Node.js versions:
-```bash
-npm run prebuild
-```
-This will strip symbols and tag them for compatibility (Node >= 16).
-
----
-
-## 🚀 C++ Usage
-
-### Offline File Decoding
-```cpp
-#include "avioflow-cxx-api.h"
-#include <iostream>
-
-int main() {
-    avioflow::AudioStreamOptions options;
-    options.output_sample_rate = 16000; // Resample to 16kHz
-    options.output_num_channels = 1;    // Convert to Mono
-
-    avioflow::AudioDecoder decoder(options);
-    decoder.open("audio.mp3");
-
-    auto meta = decoder.get_metadata();
-    std::cout << "Codec: " << meta.codec << " Duration: " << meta.duration << "s" << std::endl;
-
-    // Decode all at once
-    auto samples = decoder.get_all_samples();
-    std::cout << "Decoded " << samples.data[0].size() << " samples." << std::endl;
-
-    return 0;
-}
-```
-
-### System Audio Capture (WASAPI)
-```cpp
-decoder.open("wasapi_loopback");
-while (!decoder.is_finished()) {
-    auto frame = decoder.decode_next();
-    if (!frame.data.empty()) {
-        // Process real-time float samples...
-    }
-}
-```
-
----
-
-## 🐍 Python Usage
-
-install command:
-```
 pip install avioflow
 ```
 
-### Basic Decoding
-```python
-import avioflow 
-
-# Initialize and open
-decoder = avioflow.AudioDecoder()
-decoder.open("music.wav")
-
-# Get info
-meta = decoder.get_metadata()
-print(f"Container:    {meta.container}")
-print(f"Codec:        {meta.codec}")
-print(f"Sample Rate:  {meta.sample_rate} Hz")
-print(f"Channels:     {meta.num_channels}")
-print(f"Duration:     {meta.duration:.3f} s")
-print(f"Num Samples:  {meta.num_samples}")
-
-# Decode all samples, with multi-channels
-print(f"\nDecoding all samples...")
-samples = decoder.get_all_samples()
-```
-
-### Real-time Capture
-```python
-# List available devices
-devices = avioflow.DeviceManager.list_audio_devices()
-for d in devices:
-    print(f"ID: {d.name}, Desc: {d.description}")
-
-decoder = avioflow.AudioDecoder()
-decoder.open("audio=@device_cm_...") # Open microphone via DirectShow string
-
-while True:
-    frame = decoder.decode_next()
-    if frame:
-        # data is planar float32
-        process(frame.data)
-```
-
----
-
-## 📦 Node.js Usage
-
-### Installation
-Directly from npm:
+### Node.js
 ```bash
 npm install avioflow
 ```
 
-### ESM Example
-```javascript
-import avioflow from 'avioflow';
+### C++ (CMake)
+```cmake
+find_package(avioflow REQUIRED)
+target_link_libraries(your_target avioflow::avioflow)
+```
 
-const decoder = new avioflow.AudioDecoder();
-decoder.open("TownTheme.mp3");
+---
 
-const meta = decoder.getMetadata();
-console.log(`Codec: ${meta.codec}, Duration: ${meta.duration}s`);
+## C++ API
 
-while (!decoder.isFinished()) {
-    const frame = decoder.decodeNext();
-    if (frame) {
-        // frame.data is an array of Float32Arrays (one per channel)
-        console.log(`Decoded ${frame.channels} channels`);
+### Core Classes
+
+#### `AudioDecoder`
+
+Main class for audio decoding.
+
+```cpp
+#include "avioflow-cxx-api.h"
+using namespace avioflow;
+
+// Constructor options
+AudioStreamOptions options;
+options.output_sample_rate = 16000;    // Target sample rate
+options.output_num_channels = 1;       // Target channels
+options.input_format = "s16le";        // For streaming: source format
+options.input_sample_rate = 48000;     // For streaming: source rate
+options.input_channels = 2;            // For streaming: source channels
+
+AudioDecoder decoder(options);
+```
+
+#### Methods
+
+| Method | Description |
+|--------|-------------|
+| `open(source)` | Open file path, URL, or device |
+| `push(data, size)` | Push raw bytes for streaming decode |
+| `decode_next()` | Decode next frame, returns `FrameData` |
+| `get_all_samples()` | Decode all and return `vector<vector<float>>` |
+| `get_metadata()` | Get audio metadata |
+| `is_finished()` | Check if EOF reached |
+
+#### `FrameData`
+
+Zero-copy frame data structure returned by `decode_next()`.
+
+```cpp
+struct FrameData {
+    float** data;        // Planar channel pointers: data[channel][sample]
+    int num_channels;    // Number of channels
+    int num_samples;     // Samples per channel
+    
+    operator bool();     // True if valid data
+};
+```
+
+> ⚠️ **Warning**: `FrameData.data` points to internal buffer, valid only until next `decode_next()` call.
+
+### Examples
+
+#### File Decoding (Offline)
+```cpp
+AudioDecoder decoder({.output_sample_rate = 16000});
+decoder.open("audio.mp3");
+
+auto samples = decoder.get_all_samples();  // vector<vector<float>>
+std::cout << "Channels: " << samples.size() << std::endl;
+std::cout << "Samples: " << samples[0].size() << std::endl;
+```
+
+#### Frame-by-Frame Decoding
+```cpp
+AudioDecoder decoder;
+decoder.open("audio.mp3");
+
+while (auto frame = decoder.decode_next()) {
+    // frame.data[channel][sample]
+    for (int c = 0; c < frame.num_channels; c++) {
+        process(frame.data[c], frame.num_samples);
     }
 }
 ```
 
-### Device Discovery
+#### Streaming Decode (Push-based)
+```cpp
+AudioStreamOptions opts;
+opts.input_format = "s16le";
+opts.input_sample_rate = 48000;
+opts.input_channels = 2;
+
+AudioDecoder decoder(opts);
+decoder.push(raw_bytes, size);  // Auto-initializes on first call
+
+while (auto frame = decoder.decode_next()) {
+    // Process decoded audio...
+}
+```
+
+#### WASAPI Loopback Capture
+```cpp
+AudioDecoder decoder;
+decoder.open("wasapi_loopback");
+
+while (auto frame = decoder.decode_next()) {
+    // Capture system audio in real-time
+}
+```
+
+---
+
+## Python API
+
+### `AudioDecoder`
+
+```python
+import avioflow
+
+# Constructor with keyword arguments
+decoder = avioflow.AudioDecoder(
+    output_sample_rate=16000,    # Optional: target sample rate
+    output_num_channels=1,       # Optional: target channels
+    input_format="s16le",        # For streaming: source format
+    input_sample_rate=48000,     # For streaming: source rate
+    input_channels=2             # For streaming: source channels
+)
+```
+
+#### Methods
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `load(source)` | `Metadata` | Load file, URL, or `pathlib.Path` |
+| `decoder(bytes)` | `ndarray` | Push bytes and decode (streaming) |
+| `get_all_samples()` | `ndarray` | Decode entire source |
+| `is_finished()` | `bool` | Check if EOF |
+
+#### `Metadata`
+
+```python
+meta = decoder.load("audio.mp3")
+print(f"Duration: {meta.duration}s")
+print(f"Sample Rate: {meta.sample_rate}Hz")
+print(f"Channels: {meta.num_channels}")
+print(f"Codec: {meta.codec}")
+print(f"Container: {meta.container}")
+print(f"Bit Rate: {meta.bit_rate}bps")
+```
+
+### Examples
+
+#### File Decoding
+```python
+decoder = avioflow.AudioDecoder(output_sample_rate=16000)
+meta = decoder.load("speech.wav")
+samples = decoder.get_all_samples()  # numpy array (channels, samples)
+print(f"Shape: {samples.shape}")     # e.g., (1, 160000)
+```
+
+#### Streaming Decode
+```python
+decoder = avioflow.AudioDecoder(
+    input_format="s16le",
+    input_sample_rate=48000,
+    input_channels=2
+)
+
+while True:
+    data = socket.recv(4096)
+    samples = decoder(data)  # Call decoder directly
+    if samples.size > 0:
+        process_audio(samples)
+```
+
+#### Device Discovery
+```python
+devices = avioflow.DeviceManager.list_audio_devices()
+for dev in devices:
+    print(f"{dev.name}: {dev.description}")
+    # dev.is_output: True for output/loopback devices
+```
+
+### Logging
+```python
+avioflow.set_log_level("debug")  # quiet, error, warning, info, debug, trace
+```
+
+---
+
+## Node.js API
+
+### ESM Import
+```javascript
+import avioflow from 'avioflow';
+```
+
+### `AudioDecoder`
+
+```javascript
+// Constructor with options object
+const decoder = new avioflow.AudioDecoder({
+    outputSampleRate: 16000,    // Optional
+    outputNumChannels: 1,       // Optional
+    inputFormat: 's16le',       // For streaming
+    inputSampleRate: 48000,     // For streaming
+    inputChannels: 2            // For streaming
+});
+```
+
+#### Methods
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `load(source)` | `Metadata` | Load file or URL |
+| `push(buffer)` | `void` | Push raw bytes for streaming |
+| `decodeNext()` | `Float32Array[]` or `null` | Decode next frame |
+| `getMetadata()` | `Metadata` | Get audio metadata |
+| `isFinished()` | `boolean` | Check if EOF |
+
+### Examples
+
+#### File Decoding
+```javascript
+const decoder = new avioflow.AudioDecoder({ outputSampleRate: 16000 });
+const meta = decoder.load("audio.mp3");
+console.log(`Duration: ${meta.duration}s, Channels: ${meta.numChannels}`);
+
+while (!decoder.isFinished()) {
+    const frame = decoder.decodeNext();
+    if (frame) {
+        // frame is array of Float32Array (one per channel)
+        console.log(`Decoded ${frame[0].length} samples`);
+    }
+}
+```
+
+#### Streaming Decode
+```javascript
+const decoder = new avioflow.AudioDecoder({
+    inputFormat: 's16le',
+    inputSampleRate: 48000,
+    inputChannels: 2
+});
+
+socket.on('data', (chunk) => {
+    decoder.push(chunk);
+    let frame;
+    while ((frame = decoder.decodeNext()) !== null) {
+        processAudio(frame);
+    }
+});
+```
+
+#### Device Discovery
 ```javascript
 const devices = avioflow.listAudioDevices();
 devices.forEach(dev => {
@@ -175,17 +287,46 @@ devices.forEach(dev => {
 
 ---
 
-## ⚙️ Static Compilation Details
+## Build from Source
 
-AvioFlow supports fully static builds on Windows to eliminate external dependencies:
-- **FFmpeg**: Statically linked into the binary.
-- **CRT**: Using `/MT` to statically link the C Runtime Library, avoiding the "VC++ Redistributable" requirement.
+### Prerequisites
+- CMake 3.20+
+- Visual Studio 2022+ (Windows) or GCC 11+ (Linux)
+- Python 3.8+ with pybind11 (for Python bindings)
+- Node.js 16+ (for Node.js bindings)
 
-To enable this in your own CMake project:
-```cmake
-set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
-# Link to avioflow (which should be built with BUILD_SHARED_LIBS=OFF)
+### Windows
+```powershell
+.\build.ps1
 ```
 
+### Linux
+```bash
+cmake -B build -DENABLE_PYTHON=ON
+cmake --build build --config Release
+```
+
+### Node.js Prebuild
+```bash
+npm run prebuild
+```
+
+---
+
+## Input Format Reference
+
+| Format | Description | Use Case |
+|--------|-------------|----------|
+| `s16le` | 16-bit signed PCM, little-endian | Raw audio, WebRTC |
+| `s16be` | 16-bit signed PCM, big-endian | Network streams |
+| `f32le` | 32-bit float PCM, little-endian | High-quality audio |
+| `aac` | AAC with ADTS headers | Streaming AAC |
+| `mp3` | MP3 frames | Streaming MP3 |
+| `opus` | Opus packets | WebRTC, VoIP |
+| `wav` | WAV container | File-based audio |
+
+---
+
 ## License
+
 MIT License

@@ -3,6 +3,7 @@
 #include "device-handler.h"
 #include <mutex>
 #include <functional>
+#include <cstring>
 
 namespace avioflow
 {
@@ -13,13 +14,16 @@ namespace avioflow
 
   void SingleStreamDecoder::open(const std::string &source)
   {
+    if (mode_ != Mode::None)
+      throw std::runtime_error("Decoder already initialized");
+    mode_ = Mode::File;
+
 #ifdef AVIOFLOW_HAS_WASAPI
     if (source == "wasapi_loopback")
     {
       is_wasapi_mode_ = true;
       wasapi_handler_ = std::make_unique<WasapiHandler>();
       
-      // Initialize metadata for WASAPI
       metadata_.sample_rate = wasapi_handler_->get_sample_rate();
       metadata_.num_channels = wasapi_handler_->get_num_channels();
       metadata_.codec = "pcm_f32le";
@@ -44,16 +48,44 @@ namespace avioflow
     setup_decoder();
   }
 
-  void SingleStreamDecoder::open_memory(const uint8_t *data, size_t size)
+  void SingleStreamDecoder::push(const uint8_t *data, size_t size)
   {
-    fmt_ctx_.reset(AvioContextHandler::open_memory(data, size, options_));
-    setup_decoder();
+    if (mode_ == Mode::File)
+    {
+      throw std::runtime_error("Cannot push data: decoder opened in file mode");
+    }
+
+    // Add data to buffer FIRST, before any initialization
+    {
+      std::lock_guard<std::mutex> lock(buffer_mtx_);
+      push_buffer_.insert(push_buffer_.end(), data, data + size);
+    }
+
+    // Auto-initialize stream context on first push (now buffer has data)
+    if (mode_ == Mode::None)
+    {
+      init_stream_context();
+      mode_ = Mode::Stream;
+    }
   }
 
-  void SingleStreamDecoder::open_stream(AVIOReadCallback avio_read_callback)
+  void SingleStreamDecoder::init_stream_context()
   {
-    avio_read_callback_ = std::move(avio_read_callback);
-    fmt_ctx_.reset(AvioContextHandler::open_stream(avio_read_callback_, options_));
+    if (!options_.input_format.has_value())
+    {
+      throw std::runtime_error("input_format must be specified for streaming mode");
+    }
+
+    // Create AVIO context that reads from our internal push_buffer_
+    fmt_ctx_.reset(AvioContextHandler::open_stream([this](uint8_t* buf, int buf_size) {
+        std::lock_guard<std::mutex> lock(buffer_mtx_);
+        if (push_buffer_.empty()) return -1; // AVERROR(EAGAIN)
+        int read = std::min(static_cast<int>(push_buffer_.size()), buf_size);
+        std::memcpy(buf, push_buffer_.data(), read);
+        push_buffer_.erase(push_buffer_.begin(), push_buffer_.begin() + read);
+        return read;
+    }, options_));
+    
     setup_decoder();
   }
 
@@ -79,22 +111,14 @@ namespace avioflow
     check_av_error(avcodec_open2(codec_ctx_.get(), codec, nullptr),
                    "Could not open codec");
 
-    // Populate metadata (following torchcodec's approach)
     metadata_.sample_rate = codec_ctx_->sample_rate;
     metadata_.num_channels = codec_ctx_->ch_layout.nb_channels;
     metadata_.codec = codec->name;
     metadata_.bit_rate = fmt_ctx_->bit_rate > 0 ? fmt_ctx_->bit_rate : stream->codecpar->bit_rate;
     metadata_.container = fmt_ctx_->iformat->name;
-    
-    // Get sample format from codec context
     metadata_.sample_format = av_get_sample_fmt_name(codec_ctx_->sample_fmt);
 
-    // Duration extraction (following torchcodec's approach):
-    // 1. Prefer stream->duration (populated by Xing/VBRI parsing in avformat_find_stream_info)
-    // 2. Fallback to fmt_ctx_->duration (container-level duration)
-    // Note: For non-seekable streams, these may be unavailable and will be updated at EOF
     if (stream->duration > 0 && stream->time_base.den > 0) {
-        // torchcodec: ptsToSeconds(avStream->duration, avStream->time_base)
         metadata_.duration = static_cast<double>(stream->duration) * av_q2d(stream->time_base);
     } else if (fmt_ctx_->duration != AV_NOPTS_VALUE && fmt_ctx_->duration > 0) {
         metadata_.duration = static_cast<double>(fmt_ctx_->duration) / AV_TIME_BASE;
@@ -102,7 +126,6 @@ namespace avioflow
         metadata_.duration = 0.0;
     }
 
-    // Estimate num_samples from duration (will be updated with exact count at EOF)
     if (metadata_.duration > 0 && metadata_.sample_rate > 0) {
         metadata_.num_samples = static_cast<int64_t>(metadata_.duration * metadata_.sample_rate);
     }
@@ -203,22 +226,20 @@ namespace avioflow
 #ifdef AVIOFLOW_HAS_WASAPI
     if (is_wasapi_mode_)
     {
-      // Prepare a buffer for capture (e.g., 512 frames)
       const int target_frames = 512;
-      int bytes_per_sample = 4; // f32
+      int bytes_per_sample = 4;
       int channels = wasapi_handler_->get_num_channels();
       int buf_size = target_frames * channels * bytes_per_sample;
       
       std::vector<uint8_t> tmp_buf(buf_size);
       int read_bytes = wasapi_handler_->read(tmp_buf.data(), buf_size);
       
-      if (read_bytes <= 0) return nullptr; // No data yet
+      if (read_bytes <= 0) return nullptr;
 
       int read_frames = read_bytes / (channels * bytes_per_sample);
       
-      // Wrap into frame_
       av_frame_unref(frame_.get());
-      frame_->format = AV_SAMPLE_FMT_FLT; // miniaudio f32 is interleaved
+      frame_->format = AV_SAMPLE_FMT_FLT;
       frame_->sample_rate = wasapi_handler_->get_sample_rate();
       av_channel_layout_default(&frame_->ch_layout, channels);
       frame_->nb_samples = read_frames;
@@ -237,11 +258,9 @@ namespace avioflow
 
     while (true)
     {
-      // 1. Try to receive frame from decoder first (drain output)
       int ret = avcodec_receive_frame(codec_ctx_.get(), frame_.get());
       if (ret >= 0)
       {
-        // Got a frame, process and update total samples
         AVFrame* decoded = process_decoded_frame();
         if (decoded) {
             total_samples_decoded_ += decoded->nb_samples;
@@ -249,15 +268,13 @@ namespace avioflow
         return decoded;
       }
       
-      // If fully drained (no more frames from codec)
       if (ret == AVERROR_EOF)
       {
-        // Update metadata with actual decoded counts at the end
         metadata_.num_samples = total_samples_decoded_;
         if (codec_ctx_->sample_rate > 0) {
             metadata_.duration = static_cast<double>(total_samples_decoded_) / codec_ctx_->sample_rate;
         }
-        eof_reached_ = true;  // Mark as truly finished
+        eof_reached_ = true;
         return nullptr;
       }
       else if (ret < 0 && ret != AVERROR(EAGAIN))
@@ -265,8 +282,6 @@ namespace avioflow
         throw std::runtime_error("Error receiving frame from decoder");
       }
 
-      // 2. Need more input: Read packet from source
-      // If input has ended, send NULL packet to drain codec
       if (eof_reached_)
       {
         ret = avcodec_send_packet(codec_ctx_.get(), nullptr);
@@ -279,7 +294,7 @@ namespace avioflow
       if (ret < 0)
       {
         if (ret == AVERROR(EAGAIN))
-          return nullptr; // No data currently available
+          return nullptr;
         
         if (ret == AVERROR_EOF) {
           eof_reached_ = true;
@@ -304,25 +319,24 @@ namespace avioflow
     }
   }
 
-  AudioSamples SingleStreamDecoder::get_all_samples()
+  std::vector<std::vector<float>> SingleStreamDecoder::get_all_samples()
   {
-    AudioSamples result;
+    std::vector<std::vector<float>> result;
     while (!is_finished())
     {
       auto *f = decode_next();
       if (!f)
         break;
 
-      if (result.data.empty())
+      if (result.empty())
       {
-        result.sample_rate = f->sample_rate;
-        result.data.resize(f->ch_layout.nb_channels);
+        result.resize(f->ch_layout.nb_channels);
       }
 
       for (int c = 0; c < f->ch_layout.nb_channels; ++c)
       {
         const float *channel_data = reinterpret_cast<const float *>(f->data[c]);
-        result.data[c].insert(result.data[c].end(), channel_data,
+        result[c].insert(result[c].end(), channel_data,
                               channel_data + f->nb_samples);
       }
     }
