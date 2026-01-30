@@ -129,8 +129,9 @@ jobs:
           cp build/bin/avioflow.node prebuilds/linux-x64/avioflow.napi.node
           
           # Build for Electron versions (VS Code compatibility)
-          # Electron 28 (VS Code 1.85+), 30 (1.90+), 32 (1.95+), 34 (latest)
-          for ELECTRON_VER in 28.0.0 30.0.0 32.0.0 34.0.0; do
+          # Electron 28 (VS Code 1.85+), 30 (1.90+), 32 (1.95+), 34 (latest stable)
+          # Adding 37, 38, 39 for future compatibility
+          for ELECTRON_VER in 28.0.0 30.0.0 32.0.0 34.0.0 37.0.0 38.0.0 39.0.0; do
             echo "Building for Electron $ELECTRON_VER..."
             npx cmake-js compile --runtime=electron --runtime-version=$ELECTRON_VER --CDCMAKE_BUILD_TYPE=Release || true
             if [ -f "build/bin/avioflow.node" ]; then
@@ -253,8 +254,9 @@ jobs:
           Copy-Item build/bin/Release/avioflow.node prebuilds/win32-x64/avioflow.napi.node
           
           # Build for Electron versions (VS Code compatibility)
-          # Electron 28 (VS Code 1.85+), 30 (1.90+), 32 (1.95+), 34 (latest)
-          $electronVersions = @("28.0.0", "30.0.0", "32.0.0", "34.0.0")
+          # Electron 28 (VS Code 1.85+), 30 (1.90+), 32 (1.95+), 34 (latest stable)
+          # Adding 37, 38, 39 for future compatibility
+          $electronVersions = @("28.0.0", "30.0.0", "32.0.0", "34.0.0", "37.0.0", "38.0.0", "39.0.0")
           foreach ($ver in $electronVersions) {
             Write-Host "Building for Electron $ver..."
             try {

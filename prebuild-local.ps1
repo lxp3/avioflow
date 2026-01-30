@@ -76,7 +76,8 @@ if ($NodeFile) {
     Copy-Item $NodeFile (Join-Path $PlatformDir "avioflow.napi.node")
     Write-Host "  Node.js build: SUCCESS" -ForegroundColor Green
     Write-Host "  Output: $PlatformDir\avioflow.napi.node" -ForegroundColor Gray
-} else {
+}
+else {
     Write-Host "  ERROR: Could not find compiled .node file" -ForegroundColor Red
     exit 1
 }
@@ -85,7 +86,7 @@ Write-Host ""
 # Build for Electron (optional)
 if (-not $SkipElectron) {
     Write-Host "[4/5] Building for Electron..." -ForegroundColor Yellow
-    $ElectronVersions = @("34.0.0", "32.0.0", "30.0.0", "28.0.0")
+    $ElectronVersions = @("39.0.0", "38.0.0", "37.0.0", "34.0.0", "32.0.0", "30.0.0", "28.0.0")
     $ElectronSuccess = $false
     
     foreach ($ver in $ElectronVersions) {
@@ -116,7 +117,8 @@ if (-not $SkipElectron) {
                 $ElectronSuccess = $true
                 break
             }
-        } catch {
+        }
+        catch {
             Write-Host "    Failed: $_" -ForegroundColor DarkGray
         }
     }
@@ -125,7 +127,8 @@ if (-not $SkipElectron) {
         Write-Host "  WARNING: Electron build failed, using Node.js build as fallback" -ForegroundColor DarkYellow
         Copy-Item (Join-Path $PlatformDir "avioflow.napi.node") (Join-Path $PlatformDir "electron.napi.node")
     }
-} else {
+}
+else {
     Write-Host "[4/5] Skipping Electron build (--SkipElectron)" -ForegroundColor DarkGray
     # Copy Node.js build as fallback
     Copy-Item (Join-Path $PlatformDir "avioflow.napi.node") (Join-Path $PlatformDir "electron.napi.node")
@@ -143,19 +146,12 @@ if ($CreateDist) {
     Copy-Item (Join-Path $ProjectDir "README.md") $DistDir -ErrorAction SilentlyContinue
     Copy-Item (Join-Path $ProjectDir "LICENSE") $DistDir -ErrorAction SilentlyContinue
     
-    # Copy avioflow/nodejs directory
+    # Copy avioflow/nodejs essential files
     $NodejsSrc = Join-Path $ProjectDir "avioflow/nodejs"
     $NodejsDst = Join-Path $DistDir "avioflow/nodejs"
     New-Item -ItemType Directory -Path $NodejsDst -Force | Out-Null
-    Copy-Item "$NodejsSrc/*" $NodejsDst -Recurse
-    
-    # Copy avioflow/include directory
-    $IncludeSrc = Join-Path $ProjectDir "avioflow/include"
-    $IncludeDst = Join-Path $DistDir "avioflow/include"
-    if (Test-Path $IncludeSrc) {
-        New-Item -ItemType Directory -Path $IncludeDst -Force | Out-Null
-        Copy-Item "$IncludeSrc/*" $IncludeDst -Recurse
-    }
+    Copy-Item (Join-Path $NodejsSrc "index.js") $NodejsDst
+    Copy-Item (Join-Path $NodejsSrc "index.d.ts") $NodejsDst
     
     # Copy prebuilds
     Copy-Item $PrebuildsDir $DistDir -Recurse
@@ -168,7 +164,8 @@ if ($CreateDist) {
         $Size = "{0:N0} KB" -f ($_.Length / 1KB)
         Write-Host "    $RelPath ($Size)" -ForegroundColor Gray
     }
-} else {
+}
+else {
     Write-Host "[5/5] Skipping dist creation (--CreateDist:$false)" -ForegroundColor DarkGray
 }
 

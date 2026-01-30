@@ -20,10 +20,6 @@ High-performance audio decoding library powered by FFmpeg with C++, Python, and 
 pip install avioflow
 ```
 
-### Node.js
-```bash
-npm install avioflow
-```
 
 ### C++ (CMake)
 ```cmake
@@ -214,6 +210,25 @@ avioflow.set_log_level("debug")  # quiet, error, warning, info, debug, trace
 ---
 
 ## Node.js API
+
+### Compatibility
+
+Avioflow provides pre-built native binaries for major platforms and runtimes, ensuring zero-config installation in most environments.
+
+| Runtime | Version / ABI | Support |
+|---------|---------------|---------|
+| **Node.js** | 16, 18, 20, 22+ | ✅ Native (N-API) |
+| **Electron** | 28, 30, 32, 34 | ✅ VS Code 1.85 ~ 1.96+ |
+| **Electron** | 37, 38, 39 | ✅ Latest & Future Proof |
+| **Architectures** | x64 | ✅ Linux, Windows |
+
+The library automatically detects whether it's running in standard Node.js or an Electron environment (like a VS Code extension) and loads the optimized binary accordingly.
+
+### Installation
+
+```bash
+npm install avioflow
+```
 
 ### ESM Import
 ```javascript

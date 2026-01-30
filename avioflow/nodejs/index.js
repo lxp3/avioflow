@@ -33,28 +33,34 @@ for (const p of cmakeBuildPaths) {
 
 // Try prebuilds (for npm distribution)
 if (!addon) {
+  console.log(`[avioflow] Searching for prebuilds in: ${prebuildsDir}`);
   // For Electron, prefer electron-specific prebuild
   if (isElectron) {
     const electronPrebuild = join(prebuildsDir, 'electron.napi.node');
+    console.log(`[avioflow] Detected Electron ${process.versions.electron}. Checking: ${electronPrebuild}`);
     if (existsSync(electronPrebuild)) {
       try {
+        console.log(`[avioflow] Attempting to require electron-prebuild...`);
         addon = require(electronPrebuild);
-        console.log('[avioflow] Loaded Electron prebuild');
+        console.log('[avioflow] Successfully loaded Electron prebuild');
       } catch (e) {
-        console.warn('[avioflow] Failed to load Electron prebuild, falling back to Node.js build');
+        console.warn(`[avioflow] Failed to load Electron prebuild: ${e.message}`);
       }
+    } else {
+      console.warn('[avioflow] Electron prebuild file not found');
     }
   }
 
   // Fall back to Node.js prebuild
   if (!addon) {
     const nodePrebuild = join(prebuildsDir, 'avioflow.napi.node');
+    console.log(`[avioflow] Checking Node.js prebuild: ${nodePrebuild}`);
     if (existsSync(nodePrebuild)) {
       try {
         addon = require(nodePrebuild);
-        console.log('[avioflow] Loaded Node.js prebuild');
+        console.log('[avioflow] Successfully loaded Node.js prebuild');
       } catch (e) {
-        console.warn('[avioflow] Failed to load Node.js prebuild');
+        console.warn(`[avioflow] Failed to load Node.js prebuild: ${e.message}`);
       }
     }
   }
