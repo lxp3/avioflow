@@ -1,11 +1,80 @@
+/**
+ * @file bindings.cpp
+ * @brief Node.js bindings for avioflow audio decoding library using
+ * node-addon-api.
+ *
+ * Provides high-performance audio decoding capabilities to Node.js.
+ * Audio data is returned as Float32Array per channel.
+ */
+
 #include "avioflow-cxx-api.h"
 #include <napi.h>
+#include <string>
+#include <vector>
 
 
-// --- DeviceManager ---
+using namespace avioflow;
 
+// --- Helper Functions ---
+
+/**
+ * @brief Helper to convert Metadata to Napi::Object
+ */
+Napi::Object MetadataToJs(Napi::Env env, const Metadata &meta) {
+  Napi::Object obj = Napi::Object::New(env);
+  obj.Set("duration", meta.duration);
+  obj.Set("sampleRate", meta.sample_rate);
+  obj.Set("numChannels", meta.num_channels);
+  obj.Set("codec", meta.codec);
+  obj.Set("numSamples", meta.num_samples);
+  obj.Set("sampleFormat", meta.sample_format);
+  obj.Set("bitRate", meta.bit_rate);
+  obj.Set("container", meta.container);
+  return obj;
+}
+
+/**
+ * @brief Helper to convert samples vector to Napi::Array of Float32Array
+ */
+Napi::Array SamplesToJs(Napi::Env env,
+                        const std::vector<std::vector<float>> &samples) {
+  Napi::Array channelsArr = Napi::Array::New(env, samples.size());
+  for (size_t c = 0; c < samples.size(); ++c) {
+    Napi::Float32Array data = Napi::Float32Array::New(env, samples[c].size());
+    std::copy(samples[c].begin(), samples[c].end(), data.Data());
+    channelsArr[c] = data;
+  }
+  return channelsArr;
+}
+
+// --- Module-level functions ---
+
+/**
+ * @brief Set FFmpeg logging verbosity level.
+ *
+ * @param info Callback info containing:
+ *   - level (string): "quiet", "fatal", "error", "warning", "info", "debug",
+ * "trace"
+ */
+void SetLogLevel(const Napi::CallbackInfo &info) {
+  Napi::Env env = info.Env();
+  if (info.Length() < 1 || !info[0].IsString()) {
+    Napi::TypeError::New(env, "String expected for log level")
+        .ThrowAsJavaScriptException();
+    return;
+  }
+  std::string level = info[0].As<Napi::String>().Utf8Value();
+  avioflow_set_log_level(level.c_str());
+}
+
+/**
+ * @brief List available system audio devices.
+ *
+ * @return Array of DeviceInfo objects: { name: string, description: string,
+ * isOutput: boolean }
+ */
 Napi::Value ListAudioDevices(const Napi::CallbackInfo &info) {
-  auto devices = avioflow::DeviceManager::list_audio_devices();
+  auto devices = DeviceManager::list_audio_devices();
   Napi::Array result = Napi::Array::New(info.Env(), devices.size());
   for (size_t i = 0; i < devices.size(); ++i) {
     Napi::Object obj = Napi::Object::New(info.Env());
@@ -17,8 +86,62 @@ Napi::Value ListAudioDevices(const Napi::CallbackInfo &info) {
   return result;
 }
 
-// --- AudioDecoder ---
+/**
+ * @brief Quick offline loading helper.
+ *
+ * This is a convenience function that opens a file, decodes all samples,
+ * and returns both metadata and samples in one go.
+ *
+ * @param info Callback info containing:
+ *   - path (string): File path, URL, or device name.
+ *   - options (object, optional): { outputSampleRate, outputNumChannels }
+ * @return Object: { metadata: Metadata, samples: Float32Array[] }
+ */
+Napi::Value Load(const Napi::CallbackInfo &info) {
+  Napi::Env env = info.Env();
+  if (info.Length() < 1 || !info[0].IsString()) {
+    Napi::TypeError::New(env, "String expected for path")
+        .ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
 
+  std::string path = info[0].As<Napi::String>().Utf8Value();
+  AudioStreamOptions opts;
+
+  if (info.Length() > 1 && info[1].IsObject()) {
+    Napi::Object obj = info[1].As<Napi::Object>();
+    if (obj.Has("outputSampleRate"))
+      opts.output_sample_rate =
+          obj.Get("outputSampleRate").As<Napi::Number>().Int32Value();
+    if (obj.Has("outputNumChannels"))
+      opts.output_num_channels =
+          obj.Get("outputNumChannels").As<Napi::Number>().Int32Value();
+  }
+
+  try {
+    AudioDecoder decoder(opts);
+    decoder.open(path);
+    auto meta = decoder.get_metadata();
+    auto samples = decoder.get_all_samples();
+
+    Napi::Object result = Napi::Object::New(env);
+    result.Set("metadata", MetadataToJs(env, meta));
+    result.Set("samples", SamplesToJs(env, samples));
+    return result;
+  } catch (const std::exception &e) {
+    Napi::Error::New(env, e.what()).ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
+}
+
+// --- AudioDecoder Class ---
+
+/**
+ * @class AudioDecoder
+ * @brief State-managed audio decoder.
+ *
+ * Supports both full-file decoding and real-time streaming.
+ */
 class AudioDecoderAddon : public Napi::ObjectWrap<AudioDecoderAddon> {
 public:
   static Napi::Object Init(Napi::Env env, Napi::Object exports) {
@@ -27,6 +150,7 @@ public:
         {InstanceMethod("load", &AudioDecoderAddon::Load),
          InstanceMethod("push", &AudioDecoderAddon::Push),
          InstanceMethod("decodeNext", &AudioDecoderAddon::DecodeNext),
+         InstanceMethod("getAllSamples", &AudioDecoderAddon::GetAllSamples),
          InstanceMethod("isFinished", &AudioDecoderAddon::IsFinished)});
     constructor = Napi::Persistent(func);
     constructor.SuppressDestruct();
@@ -34,69 +158,127 @@ public:
     return exports;
   }
 
+  /**
+   * @brief Constructor for AudioDecoder
+   * @param info Optional options object: {
+   *   outputSampleRate?: number,
+   *   outputNumChannels?: number,
+   *   inputSampleRate?: number,
+   *   inputChannels?: number,
+   *   inputFormat?: string
+   * }
+   */
   AudioDecoderAddon(const Napi::CallbackInfo &info)
       : Napi::ObjectWrap<AudioDecoderAddon>(info) {
-    avioflow::AudioStreamOptions options;
+    AudioStreamOptions options;
     if (info.Length() > 0 && info[0].IsObject()) {
       Napi::Object obj = info[0].As<Napi::Object>();
-      if (obj.Has("outputSampleRate")) options.output_sample_rate = obj.Get("outputSampleRate").As<Napi::Number>().Int32Value();
-      if (obj.Has("outputNumChannels")) options.output_num_channels = obj.Get("outputNumChannels").As<Napi::Number>().Int32Value();
-      if (obj.Has("inputSampleRate")) options.input_sample_rate = obj.Get("inputSampleRate").As<Napi::Number>().Int32Value();
-      if (obj.Has("inputChannels")) options.input_channels = obj.Get("inputChannels").As<Napi::Number>().Int32Value();
-      if (obj.Has("inputFormat")) options.input_format = obj.Get("inputFormat").As<Napi::String>().Utf8Value();
+      if (obj.Has("outputSampleRate"))
+        options.output_sample_rate =
+            obj.Get("outputSampleRate").As<Napi::Number>().Int32Value();
+      if (obj.Has("outputNumChannels"))
+        options.output_num_channels =
+            obj.Get("outputNumChannels").As<Napi::Number>().Int32Value();
+      if (obj.Has("inputSampleRate"))
+        options.input_sample_rate =
+            obj.Get("inputSampleRate").As<Napi::Number>().Int32Value();
+      if (obj.Has("inputChannels"))
+        options.input_channels =
+            obj.Get("inputChannels").As<Napi::Number>().Int32Value();
+      if (obj.Has("inputFormat"))
+        options.input_format =
+            obj.Get("inputFormat").As<Napi::String>().Utf8Value();
     }
-    decoder = std::make_unique<avioflow::AudioDecoder>(options);
+    decoder = std::make_unique<AudioDecoder>(options);
   }
 
 private:
   static Napi::FunctionReference constructor;
-  std::unique_ptr<avioflow::AudioDecoder> decoder;
+  std::unique_ptr<AudioDecoder> decoder;
 
+  /**
+   * @brief Open audio from file path, URL, or device.
+   * @param path Source string
+   * @return Metadata object
+   */
   Napi::Value Load(const Napi::CallbackInfo &info) {
     if (info.Length() < 1 || !info[0].IsString()) {
-      Napi::TypeError::New(info.Env(), "String expected").ThrowAsJavaScriptException();
+      Napi::TypeError::New(info.Env(), "String expected")
+          .ThrowAsJavaScriptException();
       return info.Env().Undefined();
     }
-    decoder->open(info[0].As<Napi::String>().Utf8Value());
-
-    auto meta = decoder->get_metadata();
-    Napi::Object obj = Napi::Object::New(info.Env());
-    obj.Set("duration", meta.duration);
-    obj.Set("sampleRate", meta.sample_rate);
-    obj.Set("numChannels", meta.num_channels);
-    obj.Set("codec", meta.codec);
-    obj.Set("numSamples", meta.num_samples);
-    obj.Set("sampleFormat", meta.sample_format);
-    obj.Set("bitRate", meta.bit_rate);
-    obj.Set("container", meta.container);
-    return obj;
+    try {
+      decoder->open(info[0].As<Napi::String>().Utf8Value());
+      return MetadataToJs(info.Env(), decoder->get_metadata());
+    } catch (const std::exception &e) {
+      Napi::Error::New(info.Env(), e.what()).ThrowAsJavaScriptException();
+      return info.Env().Undefined();
+    }
   }
 
+  /**
+   * @brief Push raw encoded bytes (streaming mode).
+   * @param buffer Node.js Buffer containing encoded data
+   */
   Napi::Value Push(const Napi::CallbackInfo &info) {
     if (info.Length() < 1 || !info[0].IsBuffer()) {
-      Napi::TypeError::New(info.Env(), "Buffer expected").ThrowAsJavaScriptException();
+      Napi::TypeError::New(info.Env(), "Buffer expected")
+          .ThrowAsJavaScriptException();
       return info.Env().Undefined();
     }
     Napi::Buffer<uint8_t> buf = info[0].As<Napi::Buffer<uint8_t>>();
-    decoder->push(buf.Data(), buf.Length());
+    try {
+      decoder->push(buf.Data(), buf.Length());
+    } catch (const std::exception &e) {
+      Napi::Error::New(info.Env(), e.what()).ThrowAsJavaScriptException();
+    }
     return info.Env().Undefined();
   }
 
+  /**
+   * @brief Decode next available audio frame.
+   * @return Array of Float32Array (channels), or null if EOF/no data
+   */
   Napi::Value DecodeNext(const Napi::CallbackInfo &info) {
-    auto frame = decoder->decode_next();
-    if (!frame)
-      return info.Env().Null();
+    try {
+      auto frame = decoder->decode_next();
+      if (!frame)
+        return info.Env().Null();
 
-    Napi::Array channelsArr = Napi::Array::New(info.Env(), frame.num_channels);
-    for (int c = 0; c < frame.num_channels; ++c) {
-      Napi::Float32Array data =
-          Napi::Float32Array::New(info.Env(), frame.num_samples);
-      std::copy(frame.data[c], frame.data[c] + frame.num_samples, data.Data());
-      channelsArr[c] = data;
+      Napi::Array channelsArr =
+          Napi::Array::New(info.Env(), frame.num_channels);
+      for (int c = 0; c < frame.num_channels; ++c) {
+        Napi::Float32Array data =
+            Napi::Float32Array::New(info.Env(), frame.num_samples);
+        std::copy(frame.data[c], frame.data[c] + frame.num_samples,
+                  data.Data());
+        channelsArr[c] = data;
+      }
+      return channelsArr;
+    } catch (const std::exception &e) {
+      Napi::Error::New(info.Env(), e.what()).ThrowAsJavaScriptException();
+      return info.Env().Null();
     }
-    return channelsArr;
   }
 
+  /**
+   * @brief Decode all remaining samples at once.
+   * @return Array of Float32Array (one per channel)
+   */
+  Napi::Value GetAllSamples(const Napi::CallbackInfo &info) {
+    try {
+      auto samples = decoder->get_all_samples();
+      return SamplesToJs(info.Env(), samples);
+    } catch (const std::exception &e) {
+      Napi::Error::New(info.Env(), e.what()).ThrowAsJavaScriptException();
+      return Napi::Array::New(info.Env(), 0);
+    }
+  }
+
+  /**
+   * @brief Check if EOF has been reached.
+   * @return boolean
+   */
   Napi::Value IsFinished(const Napi::CallbackInfo &info) {
     return Napi::Boolean::New(info.Env(), decoder->is_finished());
   }
@@ -104,9 +286,18 @@ private:
 
 Napi::FunctionReference AudioDecoderAddon::constructor;
 
+/**
+ * @brief Initialize all exports for the native module.
+ */
 Napi::Object InitAll(Napi::Env env, Napi::Object exports) {
+  // Module-level functions
+  exports.Set("setLogLevel", Napi::Function::New(env, SetLogLevel));
   exports.Set("listAudioDevices", Napi::Function::New(env, ListAudioDevices));
+  exports.Set("load", Napi::Function::New(env, Load));
+
+  // Classes
   AudioDecoderAddon::Init(env, exports);
+
   return exports;
 }
 

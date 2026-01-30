@@ -220,16 +220,24 @@ avioflow.set_log_level("debug")  # quiet, error, warning, info, debug, trace
 import avioflow from 'avioflow';
 ```
 
+### Module-level Functions
+
+| Function | Returns | Description |
+|----------|---------|-------------|
+| `load(path, options?)` | `{metadata, samples}` | **Convenience**: Opens, decodes all samples, and returns both in one call. |
+| `listAudioDevices()` | `DeviceInfo[]` | List available system audio devices. |
+| `setLogLevel(level)` | `void` | Set FFmpeg log level ("quiet", "info", "debug", etc.). |
+
 ### `AudioDecoder`
 
 ```javascript
 // Constructor with options object
 const decoder = new avioflow.AudioDecoder({
-    outputSampleRate: 16000,    // Optional
-    outputNumChannels: 1,       // Optional
-    inputFormat: 's16le',       // For streaming
-    inputSampleRate: 48000,     // For streaming
-    inputChannels: 2            // For streaming
+    outputSampleRate: 16000,    // Optional: target sample rate
+    outputNumChannels: 1,       // Optional: target channels
+    inputFormat: 's16le',       // For streaming: source format
+    inputSampleRate: 48000,     // For streaming: source rate
+    inputChannels: 2            // For streaming: source channels
 });
 ```
 
@@ -237,30 +245,37 @@ const decoder = new avioflow.AudioDecoder({
 
 | Method | Returns | Description |
 |--------|---------|-------------|
-| `load(source)` | `Metadata` | Load file or URL |
-| `push(buffer)` | `void` | Push raw bytes for streaming |
-| `decodeNext()` | `Float32Array[]` or `null` | Decode next frame |
-| `getMetadata()` | `Metadata` | Get audio metadata |
-| `isFinished()` | `boolean` | Check if EOF |
+| `load(source)` | `Metadata` | Load file, URL, or device name. Returns metadata. |
+| `push(buffer)` | `void` | Push raw encoded bytes for streaming. |
+| `decodeNext()` | `Float32Array[]` \| `null` | Decode next frame. Returns array of channel data. |
+| `getAllSamples()` | `Float32Array[]` | Decode all remaining samples at once. |
+| `isFinished()` | `boolean` | Check if end of stream reached. |
 
 ### Examples
 
-#### File Decoding
+#### Quick File Loading (Recommended)
 ```javascript
-const decoder = new avioflow.AudioDecoder({ outputSampleRate: 16000 });
-const meta = decoder.load("audio.mp3");
-console.log(`Duration: ${meta.duration}s, Channels: ${meta.numChannels}`);
+// Opens file, resamples to 16kHz mono, and decodes everything
+const { metadata, samples } = avioflow.load("audio.mp3", { 
+    outputSampleRate: 16000, 
+    outputNumChannels: 1 
+});
 
-while (!decoder.isFinished()) {
-    const frame = decoder.decodeNext();
-    if (frame) {
-        // frame is array of Float32Array (one per channel)
-        console.log(`Decoded ${frame[0].length} samples`);
-    }
-}
+console.log(`Duration: ${metadata.duration}s`);
+console.log(`Channels: ${samples.length}, Samples: ${samples[0].length}`);
 ```
 
-#### Streaming Decode
+#### Batch Decoding with Decoder Instance
+```javascript
+const decoder = new avioflow.AudioDecoder({ outputSampleRate: 44100 });
+const meta = decoder.load("audio.wav");
+
+// Decodes the entire file into memory
+const allSamples = decoder.getAllSamples(); 
+process(allSamples);
+```
+
+#### Streaming Decode (Real-time)
 ```javascript
 const decoder = new avioflow.AudioDecoder({
     inputFormat: 's16le',
@@ -271,8 +286,9 @@ const decoder = new avioflow.AudioDecoder({
 socket.on('data', (chunk) => {
     decoder.push(chunk);
     let frame;
+    // Extract all available frames from the pushed chunk
     while ((frame = decoder.decodeNext()) !== null) {
-        processAudio(frame);
+        processAudio(frame); // frame is Float32Array[]
     }
 });
 ```
@@ -281,9 +297,10 @@ socket.on('data', (chunk) => {
 ```javascript
 const devices = avioflow.listAudioDevices();
 devices.forEach(dev => {
-    console.log(`${dev.isOutput ? 'Output' : 'Input'}: ${dev.name}`);
+    console.log(`${dev.isOutput ? 'Output' : 'Input'}: ${dev.name} (${dev.description})`);
 });
 ```
+
 
 ---
 

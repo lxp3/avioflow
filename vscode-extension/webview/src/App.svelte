@@ -284,14 +284,15 @@
                 <div class="meta-item">
                     <span class="label">Bitrate</span>
                     <span class="value"
-                        >{metadata.bitrate
-                            ? (metadata.bitrate / 1000).toFixed(0) + " kbps"
+                        >{metadata.bitRate
+                            ? (metadata.bitRate / 1000).toFixed(0) + " kbps"
                             : "Variable"}</span
                     >
                 </div>
                 <div class="meta-item">
                     <span class="label">Format</span>
-                    <span class="value">{metadata.formatName}</span>
+                    <span class="value">{metadata.container.toUpperCase()}</span
+                    >
                 </div>
             </div>
         </div>
