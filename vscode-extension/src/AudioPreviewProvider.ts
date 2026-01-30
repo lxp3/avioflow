@@ -1,16 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
-
-// Use the avioflow library
-// In a proper extension build, we might need to handle native deps more carefully
-let avioflow: any;
-try {
-    avioflow = require('avioflow').default || require('avioflow');
-    console.log('[Avioflow] Library loaded successfully');
-} catch (e: any) {
-    console.error('[Avioflow] Failed to load avioflow library:', e);
-}
+import * as avioflow from 'avioflow';
 
 export class AudioPreviewProvider implements vscode.CustomReadonlyEditorProvider {
 
@@ -65,33 +56,29 @@ export class AudioPreviewProvider implements vscode.CustomReadonlyEditorProvider
 
     private async loadAndSendData(document: vscode.CustomDocument, webviewPanel: vscode.WebviewPanel) {
         try {
-            if (!avioflow) {
-                throw new Error('Avioflow library not loaded');
-            }
-
+            // @ts-ignore
             const decoder = new avioflow.AudioDecoder();
-            decoder.open(document.uri.fsPath);
+            // load() returns metadata with camelCase properties
+            const metadata = decoder.load(document.uri.fsPath);
 
-            const metadata = decoder.getMetadata();
-
-            // Collect all samples
-            const allSamples: Float32Array[][] = [];
+            // Since get_all_samples is not in the provided bindings, we collect frames manually
+            // and merge them into channel buffers.
+            const frames: Float32Array[][] = [];
             while (!decoder.isFinished()) {
                 const frame = decoder.decodeNext();
-                if (frame && frame.data) {
-                    allSamples.push(frame.data);
+                if (frame) {
+                    frames.push(frame);
                 }
             }
 
             // Merge frames into continuous buffers per channel
             const numChannels = metadata.numChannels;
             const samples: Float32Array[] = [];
-
             for (let c = 0; c < numChannels; c++) {
-                const totalLength = allSamples.reduce((sum, frame) => sum + frame[c].length, 0);
+                const totalLength = frames.reduce((sum, f) => sum + f[c].length, 0);
                 const channelData = new Float32Array(totalLength);
                 let offset = 0;
-                for (const frame of allSamples) {
+                for (const frame of frames) {
                     channelData.set(frame[c], offset);
                     offset += frame[c].length;
                 }
@@ -102,7 +89,7 @@ export class AudioPreviewProvider implements vscode.CustomReadonlyEditorProvider
                 type: 'init',
                 filePath: document.uri.fsPath,
                 metadata,
-                samples: samples.map(s => Array.from(s)) // Buffer to array for message passing
+                samples: samples.map(s => Array.from(s))
             });
 
         } catch (e: any) {

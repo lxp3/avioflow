@@ -72,6 +72,6 @@
         "vite": "^5.0.0"
     },
     "dependencies": {
-        "avioflow": "^0.1.4"
+        "avioflow": "^0.1.7"
     }
 }
