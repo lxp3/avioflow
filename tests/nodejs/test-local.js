@@ -61,7 +61,8 @@ async function online_test() {
         // but for MP3/AAC, the decoder can auto-detect if the container is supported.
         const decoder = new avioflow.AudioDecoder({
             outputSampleRate: 16000,
-            outputNumChannels: 1
+            outputNumChannels: 1,
+            inputFormat: 'mp3' // Required for push-based decoding
         })
 
         const buffer = fs.readFileSync(testFile)
