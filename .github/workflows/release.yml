@@ -123,9 +123,25 @@ jobs:
         if: needs.check-tag.outputs.build-npm == 'true'
         run: |
           npm install
+          # Build for Node.js
           npx cmake-js compile --CDCMAKE_BUILD_TYPE=Release
           mkdir -p prebuilds/linux-x64
           cp build/bin/avioflow.node prebuilds/linux-x64/avioflow.napi.node
+          
+          # Build for Electron versions (VS Code compatibility)
+          # Electron 28 (VS Code 1.85+), 30 (1.90+), 32 (1.95+), 34 (latest)
+          for ELECTRON_VER in 28.0.0 30.0.0 32.0.0 34.0.0; do
+            echo "Building for Electron $ELECTRON_VER..."
+            npx cmake-js compile --runtime=electron --runtime-version=$ELECTRON_VER --CDCMAKE_BUILD_TYPE=Release || true
+            if [ -f "build/bin/avioflow.node" ]; then
+              ELECTRON_MAJOR=$(echo $ELECTRON_VER | cut -d. -f1)
+              mkdir -p prebuilds/linux-x64
+              cp build/bin/avioflow.node "prebuilds/linux-x64/electron.napi.node" 2>/dev/null || true
+            fi
+          done
+          
+          echo "Prebuilds created:"
+          ls -la prebuilds/
 
       # --- Upload Artifacts ---
       - uses: actions/upload-artifact@v4
@@ -231,9 +247,28 @@ jobs:
         shell: pwsh
         run: |
           npm install
+          # Build for Node.js
           npx cmake-js compile
           New-Item -ItemType Directory -Path prebuilds/win32-x64 -Force
           Copy-Item build/bin/Release/avioflow.node prebuilds/win32-x64/avioflow.napi.node
+          
+          # Build for Electron versions (VS Code compatibility)
+          # Electron 28 (VS Code 1.85+), 30 (1.90+), 32 (1.95+), 34 (latest)
+          $electronVersions = @("28.0.0", "30.0.0", "32.0.0", "34.0.0")
+          foreach ($ver in $electronVersions) {
+            Write-Host "Building for Electron $ver..."
+            try {
+              npx cmake-js compile --runtime=electron --runtime-version=$ver
+              if (Test-Path "build/bin/Release/avioflow.node") {
+                Copy-Item build/bin/Release/avioflow.node prebuilds/win32-x64/electron.napi.node -Force
+              }
+            } catch {
+              Write-Host "Warning: Failed to build for Electron $ver"
+            }
+          }
+          
+          Write-Host "Prebuilds created:"
+          Get-ChildItem -Recurse prebuilds/
 
       # --- Upload Artifacts ---
       - uses: actions/upload-artifact@v4

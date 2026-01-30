@@ -7,12 +7,16 @@ const require = createRequire(import.meta.url);
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectDir = join(__dirname, '../..');
 
-// Try to load native module:
-// 1. First try cmake-js local build (for development)
-// 2. Then try node-gyp-build prebuilds (for npm distribution)
+// Detect if running in Electron (VS Code extension environment)
+const isElectron = !!(process.versions && process.versions.electron);
+const platform = process.platform === 'win32' ? 'win32' : process.platform === 'darwin' ? 'darwin' : 'linux';
+const arch = process.arch;
+const prebuildsDir = join(projectDir, 'prebuilds', `${platform}-${arch}`);
+
+// Try to load native module
 let addon;
 
-// Check cmake-js build locations
+// Check cmake-js build locations (for development)
 const cmakeBuildPaths = [
   join(projectDir, 'build/bin/Release/avioflow.node'),
   join(projectDir, 'build/bin/avioflow.node'),
@@ -27,9 +31,38 @@ for (const p of cmakeBuildPaths) {
   }
 }
 
-// Fall back to prebuilds via node-gyp-build
+// Try prebuilds (for npm distribution)
 if (!addon) {
-  addon = require('node-gyp-build')(projectDir);
+  // For Electron, prefer electron-specific prebuild
+  if (isElectron) {
+    const electronPrebuild = join(prebuildsDir, 'electron.napi.node');
+    if (existsSync(electronPrebuild)) {
+      try {
+        addon = require(electronPrebuild);
+        console.log('[avioflow] Loaded Electron prebuild');
+      } catch (e) {
+        console.warn('[avioflow] Failed to load Electron prebuild, falling back to Node.js build');
+      }
+    }
+  }
+
+  // Fall back to Node.js prebuild
+  if (!addon) {
+    const nodePrebuild = join(prebuildsDir, 'avioflow.napi.node');
+    if (existsSync(nodePrebuild)) {
+      try {
+        addon = require(nodePrebuild);
+        console.log('[avioflow] Loaded Node.js prebuild');
+      } catch (e) {
+        console.warn('[avioflow] Failed to load Node.js prebuild');
+      }
+    }
+  }
+
+  // Last resort: use node-gyp-build
+  if (!addon) {
+    addon = require('node-gyp-build')(projectDir);
+  }
 }
 
 export default addon;

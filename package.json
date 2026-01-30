@@ -1,6 +1,6 @@
 {
   "name": "avioflow",
-  "version": "0.1.9",
+  "version": "0.1.10",
   "description": "High-performance audio decoding and device discovery library using FFmpeg",
   "author": "lxp3",
   "license": "MIT",
@@ -32,7 +32,9 @@
     "ffmpeg",
     "realtime",
     "native",
-    "napi"
+    "napi",
+    "electron",
+    "vscode"
   ],
   "engines": {
     "node": ">=16"
@@ -40,8 +42,9 @@
   "scripts": {
     "test": "node tests/nodejs/test-local.js",
     "build": "cmake-js compile",
-    "prebuild": "prebuildify --napi --strip --tag-libc --build-command \"npx cmake-js compile\"",
-    "prepare-publish": "powershell -ExecutionPolicy Bypass -File ./prepare-publish.ps1"
+    "prebuild": "prebuildify --napi --strip --tag-libc",
+    "prebuild-electron": "prebuildify --napi --strip --tag-libc --platform=win32 --arch=x64 -r electron -t 28.0.0 -t 30.0.0 -t 32.0.0 -t 34.0.0",
+    "install": "node-gyp-build || echo 'Prebuild not found, native module may need to be built manually'"
   },
   "dependencies": {
     "node-addon-api": "^8.0.0",
