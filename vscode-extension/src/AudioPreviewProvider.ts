@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
-import * as avioflow from 'avioflow';
+import avioflow from 'avioflow';
 
 export class AudioPreviewProvider implements vscode.CustomReadonlyEditorProvider {
 
@@ -56,40 +56,19 @@ export class AudioPreviewProvider implements vscode.CustomReadonlyEditorProvider
 
     private async loadAndSendData(document: vscode.CustomDocument, webviewPanel: vscode.WebviewPanel) {
         try {
-            // @ts-ignore
-            const decoder = new avioflow.AudioDecoder();
-            // load() returns metadata with camelCase properties
-            const metadata = decoder.load(document.uri.fsPath);
-
-            // Since get_all_samples is not in the provided bindings, we collect frames manually
-            // and merge them into channel buffers.
-            const frames: Float32Array[][] = [];
-            while (!decoder.isFinished()) {
-                const frame = decoder.decodeNext();
-                if (frame) {
-                    frames.push(frame);
-                }
+            if (!avioflow) {
+                throw new Error('Avioflow library not loaded');
             }
 
-            // Merge frames into continuous buffers per channel
-            const numChannels = metadata.numChannels;
-            const samples: Float32Array[] = [];
-            for (let c = 0; c < numChannels; c++) {
-                const totalLength = frames.reduce((sum, f) => sum + f[c].length, 0);
-                const channelData = new Float32Array(totalLength);
-                let offset = 0;
-                for (const frame of frames) {
-                    channelData.set(frame[c], offset);
-                    offset += frame[c].length;
-                }
-                samples.push(channelData);
-            }
+            // Use the convenience load() function which returns { metadata, samples }
+            // samples is Float32Array[] where each element is one channel's data
+            const { metadata, samples } = avioflow.load(document.uri.fsPath);
 
             webviewPanel.webview.postMessage({
                 type: 'init',
                 filePath: document.uri.fsPath,
                 metadata,
-                samples: samples.map(s => Array.from(s))
+                samples: samples.map((s: Float32Array) => Array.from(s)) // Convert to array for message passing
             });
 
         } catch (e: any) {
