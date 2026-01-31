@@ -118,31 +118,30 @@ jobs:
           cmake --install build_shared --prefix $PKG_DIR
           tar -czvf $PKG_DIR.tar.gz $PKG_DIR
 
-      # --- Build Node.js Addon (Static) ---
-      - name: Build Node.js Addon (Static)
+      # --- Build Node.js Addon (Static, Node-API) ---
+      # IMPORTANT: Node-API (N-API) provides ABI stability!
+      # A single build with NAPI_VERSION=8 works on:
+      # - Node.js 16, 18, 20, 22+ (all versions with Node-API 8 support)
+      # - Electron 28, 30, 32, 34, 37, 38, 39+ (all use Node-API 8)
+      # NO separate Electron builds are required!
+      - name: Build Node.js Addon (Node-API 8)
         if: needs.check-tag.outputs.build-npm == 'true'
         run: |
           npm install
-          # Build for Node.js
-          npx cmake-js compile --CDCMAKE_BUILD_TYPE=Release
+          
+          # Build once with Node-API 8 - works for ALL runtimes
+          echo "Building Node-API 8 addon (universal for Node.js & Electron)..."
+          npx cmake-js compile --CDCMAKE_BUILD_TYPE=Release --CDNAPI_VERSION=8
+          
+          # Create prebuilds directory
           mkdir -p prebuilds/linux-x64
           cp build/bin/avioflow.node prebuilds/linux-x64/avioflow.napi.node
           
-          # Build for Electron versions (VS Code compatibility)
-          # Electron 28 (VS Code 1.85+), 30 (1.90+), 32 (1.95+), 34 (latest stable)
-          # Adding 37, 38, 39 for future compatibility
-          for ELECTRON_VER in 28.0.0 30.0.0 32.0.0 34.0.0 37.0.0 38.0.0 39.0.0; do
-            echo "Building for Electron $ELECTRON_VER..."
-            npx cmake-js compile --runtime=electron --runtime-version=$ELECTRON_VER --CDCMAKE_BUILD_TYPE=Release || true
-            if [ -f "build/bin/avioflow.node" ]; then
-              ELECTRON_MAJOR=$(echo $ELECTRON_VER | cut -d. -f1)
-              mkdir -p prebuilds/linux-x64
-              cp build/bin/avioflow.node "prebuilds/linux-x64/electron.napi.node" 2>/dev/null || true
-            fi
-          done
-          
+          echo "=== Prebuild Info ==="
+          echo "Node-API version: 8"
+          echo "Compatible with: Node.js 16+, Electron 28+"
           echo "Prebuilds created:"
-          ls -la prebuilds/
+          ls -la prebuilds/linux-x64/
 
       # --- Upload Artifacts ---
       - uses: actions/upload-artifact@v4
@@ -242,33 +241,29 @@ jobs:
           cmake --install build_shared --prefix $PkgDir --config Release
           Compress-Archive -Path "$PkgDir/*" -DestinationPath "$PkgDir.zip"
 
-      # --- Build Node.js Addon (Static) ---
-      - name: Build Node.js Addon (Static)
+      # --- Build Node.js Addon (Static, Node-API) ---
+      # IMPORTANT: Node-API (N-API) provides ABI stability!
+      # A single build with NAPI_VERSION=8 works on:
+      # - Node.js 16, 18, 20, 22+ (all versions with Node-API 8 support)
+      # - Electron 28, 30, 32, 34, 37, 38, 39+ (all use Node-API 8)
+      # NO separate Electron builds are required!
+      - name: Build Node.js Addon (Node-API 8)
         if: needs.check-tag.outputs.build-npm == 'true'
         shell: pwsh
         run: |
           npm install
-          # Build for Node.js
-          npx cmake-js compile
+          
+          # Build once with Node-API 8 - works for ALL runtimes
+          Write-Host "Building Node-API 8 addon (universal for Node.js & Electron)..."
+          npx cmake-js compile --CDNAPI_VERSION=8
+          
+          # Create prebuilds directory
           New-Item -ItemType Directory -Path prebuilds/win32-x64 -Force
           Copy-Item build/bin/Release/avioflow.node prebuilds/win32-x64/avioflow.napi.node
           
-          # Build for Electron versions (VS Code compatibility)
-          # Electron 28 (VS Code 1.85+), 30 (1.90+), 32 (1.95+), 34 (latest stable)
-          # Adding 37, 38, 39 for future compatibility
-          $electronVersions = @("28.0.0", "30.0.0", "32.0.0", "34.0.0", "37.0.0", "38.0.0", "39.0.0")
-          foreach ($ver in $electronVersions) {
-            Write-Host "Building for Electron $ver..."
-            try {
-              npx cmake-js compile --runtime=electron --runtime-version=$ver
-              if (Test-Path "build/bin/Release/avioflow.node") {
-                Copy-Item build/bin/Release/avioflow.node prebuilds/win32-x64/electron.napi.node -Force
-              }
-            } catch {
-              Write-Host "Warning: Failed to build for Electron $ver"
-            }
-          }
-          
+          Write-Host "=== Prebuild Info ==="
+          Write-Host "Node-API version: 8"
+          Write-Host "Compatible with: Node.js 16+, Electron 28+"
           Write-Host "Prebuilds created:"
           Get-ChildItem -Recurse prebuilds/
 

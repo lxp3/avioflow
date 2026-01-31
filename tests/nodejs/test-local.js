@@ -57,11 +57,12 @@ async function online_test() {
 
     try {
         // We use the same MP3 file but read it in chunks to simulate a stream.
-        // For actual streaming, we need to know the input format if it's raw PCM,
-        // but for MP3/AAC, the decoder can auto-detect if the container is supported.
+        // For streaming mode, we need to specify the input format so the decoder
+        // knows how to parse the incoming data.
         const decoder = new avioflow.AudioDecoder({
             outputSampleRate: 16000,
-            outputNumChannels: 1
+            outputNumChannels: 1,
+            inputFormat: 'mp3'  // Required for streaming mode
         })
 
         const buffer = fs.readFileSync(testFile)
