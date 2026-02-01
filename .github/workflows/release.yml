@@ -374,6 +374,11 @@ jobs:
           mkdir -p out/node_modules
           cp -r node_modules/avioflow out/node_modules/
 
+      - name: Disable vscode:prepublish
+        working-directory: vscode-extension
+        run: |
+          node -e "const fs = require('fs'); const pkg = require('./package.json'); delete pkg.scripts['vscode:prepublish']; fs.writeFileSync('./package.json', JSON.stringify(pkg, null, 4));"
+
       - name: Package platform-specific .vsix
         shell: bash
         working-directory: vscode-extension
@@ -385,7 +390,7 @@ jobs:
           
           # Package with platform target
           # --skip-vscode-prepublish: We already ran compile manually
-          npx -y @vscode/vsce package --no-dependencies --allow-missing-repository --no-prepublish --target ${{ matrix.target }} -o "avioflow-$VERSION-${{ matrix.target }}.vsix"
+          npx -y @vscode/vsce package --no-dependencies --allow-missing-repository --target ${{ matrix.target }} -o "avioflow-$VERSION-${{ matrix.target }}.vsix"
           
           echo "Build complete!"
           ls -la *.vsix
