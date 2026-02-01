@@ -333,12 +333,21 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # ============================================================
-  # Build VS Code Extension (.vsix)
+  # Build VS Code Extension (.vsix) - Platform Specific
   # ============================================================
   build-vsix:
     needs: check-tag
     if: needs.check-tag.outputs.build-vsix == 'true'
-    runs-on: windows-latest
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            target: win32-x64
+            shell: pwsh
+          - os: ubuntu-latest
+            target: linux-x64
+            shell: bash
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 
@@ -352,36 +361,39 @@ jobs:
         with:
           version: 9
 
-      - name: Build VS Code Extension
-        shell: pwsh
+      - name: Install dependencies
+        working-directory: vscode-extension
+        run: pnpm install
+
+      - name: Compile extension
+        working-directory: vscode-extension
+        run: pnpm run compile
+
+      - name: Copy native modules
+        shell: ${{ matrix.shell }}
         working-directory: vscode-extension
         run: |
-          Write-Host ">>> Step 1: Installing dependencies..." -ForegroundColor Cyan
-          pnpm install
-          
-          Write-Host ">>> Step 2: Cleaning up previous builds..." -ForegroundColor Cyan
-          if (Test-Path "out") { Remove-Item -Recurse -Force "out" }
-          if (Test-Path "*.vsix") { Remove-Item -Force "*.vsix" }
-          
-          Write-Host ">>> Step 3: Compiling extension..." -ForegroundColor Cyan
-          pnpm run compile
-          
-          Write-Host ">>> Step 4: Copying native modules..." -ForegroundColor Cyan
-          if (!(Test-Path "out/node_modules")) { New-Item -ItemType Directory -Path "out/node_modules" }
-          Copy-Item -Recurse -Force "node_modules/avioflow" "out/node_modules/"
-          
-          Write-Host ">>> Step 5: Packaging .vsix..." -ForegroundColor Cyan
+          mkdir -p out/node_modules
+          cp -r node_modules/avioflow out/node_modules/
+
+      - name: Package platform-specific .vsix
+        shell: ${{ matrix.shell }}
+        working-directory: vscode-extension
+        run: |
           # Extract version from tag
-          $tag = "${{ needs.check-tag.outputs.tag-name }}"
-          $version = $tag -replace '^v' -replace '-vsix$'
-          npx -y @vscode/vsce package --no-dependencies --allow-missing-repository -o "avioflow-$version.vsix"
+          TAG="${{ needs.check-tag.outputs.tag-name }}"
+          VERSION=$(echo "$TAG" | sed 's/^v//' | sed 's/-vsix$//')
+          echo "Building version: $VERSION for target: ${{ matrix.target }}"
           
-          Write-Host ">>> Build complete!" -ForegroundColor Green
-          Get-ChildItem *.vsix
+          # Package with platform target
+          npx -y @vscode/vsce package --no-dependencies --allow-missing-repository --target ${{ matrix.target }} -o "avioflow-$VERSION-${{ matrix.target }}.vsix"
+          
+          echo "Build complete!"
+          ls -la *.vsix || dir *.vsix
 
       - uses: actions/upload-artifact@v4
         with:
-          name: vscode-extension
+          name: vsix-${{ matrix.target }}
           path: vscode-extension/*.vsix
 
       - name: Cancel workflow on failure
@@ -389,6 +401,7 @@ jobs:
         run: gh run cancel ${{ github.run_id }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
 
   # ============================================================
   # Publish to GitHub, PyPI, NPM, and VS Code Marketplace
@@ -449,11 +462,13 @@ jobs:
             cp -r artifacts/windows-nodejs-prebuilds/* prebuilds/ || true
           fi
           
-          # VS Code extension
+          # VS Code extension (multi-platform)
           if [ "${{ needs.check-tag.outputs.build-vsix }}" == "true" ]; then
-            echo "Preparing VS Code extension..."
-            cp artifacts/vscode-extension/*.vsix vsix_dist/ || true
-            cp artifacts/vscode-extension/*.vsix dist/ || true
+            echo "Preparing VS Code extensions..."
+            cp artifacts/vsix-win32-x64/*.vsix vsix_dist/ || true
+            cp artifacts/vsix-linux-x64/*.vsix vsix_dist/ || true
+            cp artifacts/vsix-win32-x64/*.vsix dist/ || true
+            cp artifacts/vsix-linux-x64/*.vsix dist/ || true
           fi
           
           echo "Release contents:"
@@ -494,12 +509,15 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      # Publish to VS Code Marketplace
+      # Publish to VS Code Marketplace (all platform-specific .vsix files)
       - name: Publish to VS Code Marketplace
         if: needs.check-tag.outputs.build-vsix == 'true'
         run: |
-          VSIX_FILE=$(ls vsix_dist/*.vsix | head -n 1)
-          echo "Publishing $VSIX_FILE to VS Code Marketplace..."
-          npx -y @vscode/vsce publish --packagePath "$VSIX_FILE"
+          echo "Publishing all .vsix files to VS Code Marketplace..."
+          for VSIX_FILE in vsix_dist/*.vsix; do
+            echo "Publishing $VSIX_FILE..."
+            npx -y @vscode/vsce publish --packagePath "$VSIX_FILE"
+          done
+          echo "All platforms published!"
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
