@@ -1,5 +1,6 @@
 #include "avioflow-cxx-api.h"
 #include "../core/ffmpeg/device-handler.h"
+#include "../core/ffmpeg/ffmpeg-common.h"
 #include "../core/ffmpeg/single-stream-decoder.h"
 
 namespace avioflow {
@@ -41,12 +42,9 @@ FrameData AudioDecoder::decode_next() {
   AVFrame *frame = impl_->decoder_.decode_next();
   if (!frame)
     return {nullptr, 0, 0};
-  
-  return {
-    reinterpret_cast<float**>(frame->data),
-    frame->ch_layout.nb_channels,
-    frame->nb_samples
-  };
+
+  return {reinterpret_cast<float **>(frame->data), frame->ch_layout.nb_channels,
+          frame->nb_samples};
 }
 
 std::vector<std::vector<float>> AudioDecoder::get_all_samples() {
@@ -69,44 +67,19 @@ std::vector<DeviceInfo> DeviceManager::list_audio_devices() {
 
 // Global configuration
 void avioflow_set_log_level(const char *level) {
-  std::string log_level_str;
+  internal_set_log_level(level);
+}
 
-  if (level == nullptr) {
-    const char *env_level = std::getenv("AVIOFLOW_LOG_LEVEL");
-    if (env_level != nullptr) {
-      log_level_str = env_level;
-    } else {
-      log_level_str = "info";
-    }
-  } else {
-    log_level_str = level;
-  }
+std::vector<std::string> get_supported_decoders() {
+  return internal_get_supported_decoders();
+}
 
-  for (auto &c : log_level_str) {
-    c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-  }
+std::vector<std::string> get_supported_encoders() {
+  return internal_get_supported_encoders();
+}
 
-  int av_level = AV_LOG_INFO;
-  if (log_level_str == "quiet")
-    av_level = AV_LOG_QUIET;
-  else if (log_level_str == "panic")
-    av_level = AV_LOG_PANIC;
-  else if (log_level_str == "fatal")
-    av_level = AV_LOG_FATAL;
-  else if (log_level_str == "error")
-    av_level = AV_LOG_ERROR;
-  else if (log_level_str == "warning")
-    av_level = AV_LOG_WARNING;
-  else if (log_level_str == "info")
-    av_level = AV_LOG_INFO;
-  else if (log_level_str == "verbose")
-    av_level = AV_LOG_VERBOSE;
-  else if (log_level_str == "debug")
-    av_level = AV_LOG_DEBUG;
-  else if (log_level_str == "trace")
-    av_level = AV_LOG_TRACE;
-
-  av_log_set_level(av_level);
+std::vector<std::string> get_supported_input_formats() {
+  return internal_get_supported_input_formats();
 }
 
 } // namespace avioflow

@@ -19,6 +19,7 @@
     let animationFrame: number;
 
     let canvas: HTMLCanvasElement;
+    let waveformSummary: { min: Float32Array; max: Float32Array }[] = [];
 
     onMount(() => {
         window.addEventListener("message", (event) => {
@@ -27,8 +28,8 @@
                 case "init":
                     filePath = message.filePath || "";
                     metadata = message.metadata;
-                    samples = message.samples.map(
-                        (ch: any) => new Float32Array(ch),
+                    samples = message.samples.map((ch: any) =>
+                        ch instanceof Float32Array ? ch : new Float32Array(ch),
                     );
                     duration = metadata.duration;
                     initAudio();
@@ -36,12 +37,22 @@
             }
         });
 
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === " " || e.code === "Space") {
+                e.preventDefault();
+                togglePlay();
+            }
+        };
+
+        window.addEventListener("keydown", handleKeyDown);
+
         // Notify extension we are ready
         // @ts-ignore
         const vscode = acquireVsCodeApi();
         vscode.postMessage({ type: "ready" });
 
         return () => {
+            window.removeEventListener("keydown", handleKeyDown);
             if (animationFrame) cancelAnimationFrame(animationFrame);
             if (sourceNode) sourceNode.stop();
             if (audioContext) audioContext.close();
@@ -67,83 +78,149 @@
             audioBuffer.copyToChannel(samples[i], i);
         }
 
+        calculateSummary();
         drawWaveform();
     }
 
-    function drawWaveform() {
-        if (!canvas || samples.length === 0) return;
-        const ctx = canvas.getContext("2d")!;
-        const width = canvas.width;
-        const height = canvas.height;
+    function calculateSummary() {
+        if (samples.length === 0 || canvasWidth === 0) return;
 
-        ctx.clearRect(0, 0, width, height);
-
-        const numChannels = samples.length;
-        const channelHeight = height / numChannels;
-        const halfChannelHeight = channelHeight / 2;
-
-        ctx.lineWidth = 1;
-
-        samples.forEach((data, chIndex) => {
-            const yBase = chIndex * channelHeight + halfChannelHeight;
-            const step = Math.ceil(data.length / width);
-
-            ctx.beginPath();
-            ctx.strokeStyle = "#e0e0e0"; // Light gray for the whole waveform
+        const width = Math.ceil(canvasWidth);
+        waveformSummary = samples.map((data) => {
+            const minArr = new Float32Array(width);
+            const maxArr = new Float32Array(width);
+            const step = data.length / width;
 
             for (let i = 0; i < width; i++) {
                 let min = 1.0;
                 let max = -1.0;
-                for (let j = 0; j < step; j++) {
-                    const idx = i * step + j;
-                    if (idx >= data.length) break;
-                    const val = data[idx];
+                const startIdx = Math.floor(i * step);
+                const endIdx = Math.floor((i + 1) * step);
+
+                for (let j = startIdx; j < endIdx && j < data.length; j++) {
+                    const val = data[j];
                     if (val < min) min = val;
                     if (val > max) max = val;
                 }
-                ctx.moveTo(i, yBase + min * halfChannelHeight * 0.9);
-                ctx.lineTo(i, yBase + max * halfChannelHeight * 0.9);
+                minArr[i] = min;
+                maxArr[i] = max;
+            }
+            return { min: minArr, max: maxArr };
+        });
+    }
+
+    function drawTimeline(
+        ctx: CanvasRenderingContext2D,
+        width: number,
+        height: number,
+    ) {
+        const numTicks = 10;
+        const tickSpacing = width / numTicks;
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.strokeStyle = "rgba(0,0,0,0.1)";
+        ctx.lineWidth = 1;
+        ctx.font = "10px Inter, -apple-system, sans-serif";
+        ctx.fillStyle = "#86868b";
+        ctx.textAlign = "center";
+
+        for (let i = 0; i <= numTicks; i++) {
+            const x = i * tickSpacing + 0.5;
+            const time = (i / numTicks) * duration;
+
+            // Vertical grid line
+            ctx.moveTo(x, 0);
+            ctx.lineTo(x, height);
+
+            // Time label
+            if (i > 0 && i < numTicks) {
+                ctx.fillText(formatTime(time), x, 12);
+            }
+        }
+        ctx.stroke();
+        ctx.restore();
+    }
+
+    function drawWaveform() {
+        if (!canvas || waveformSummary.length === 0) return;
+
+        const dpr = window.devicePixelRatio || 1;
+        const displayWidth = canvas.offsetWidth;
+        const displayHeight = canvas.offsetHeight;
+
+        if (
+            canvas.width !== displayWidth * dpr ||
+            canvas.height !== displayHeight * dpr
+        ) {
+            canvas.width = displayWidth * dpr;
+            canvas.height = displayHeight * dpr;
+        }
+
+        const ctx = canvas.getContext("2d")!;
+        ctx.save();
+        ctx.scale(dpr, dpr);
+
+        const width = displayWidth;
+        const height = displayHeight;
+        ctx.clearRect(0, 0, width, height);
+
+        // 0. Draw Timeline/Ruler
+        drawTimeline(ctx, width, height);
+
+        const numChannels = waveformSummary.length;
+        const channelHeight = height / numChannels;
+        const halfChannelHeight = channelHeight / 2;
+        const drawHeight = halfChannelHeight * 0.92;
+
+        waveformSummary.forEach((summary, chIndex) => {
+            const yBase = chIndex * channelHeight + halfChannelHeight;
+            const playedWidth = Math.floor((currentTime / duration) * width);
+
+            // 1. Draw unplayed part (background)
+            ctx.beginPath();
+            ctx.strokeStyle = "#d1d1d6";
+            ctx.lineWidth = 1;
+            for (let i = playedWidth; i < width; i++) {
+                const x = i + 0.5;
+                ctx.moveTo(x, yBase + summary.min[i] * drawHeight);
+                ctx.lineTo(x, yBase + summary.max[i] * drawHeight);
             }
             ctx.stroke();
 
-            // Overdraw the played part with blue
-            if (currentTime > 0) {
-                const playedWidth = (currentTime / duration) * width;
+            // 2. Draw played part (foreground)
+            if (playedWidth > 0) {
                 ctx.beginPath();
-                ctx.strokeStyle = "#007aff"; // Apple Blue
+                ctx.strokeStyle = "#007aff";
+                ctx.lineWidth = 1;
                 for (let i = 0; i < playedWidth; i++) {
-                    let min = 1.0;
-                    let max = -1.0;
-                    for (let j = 0; j < step; j++) {
-                        const idx = i * step + j;
-                        if (idx >= data.length) break;
-                        const val = data[idx];
-                        if (val < min) min = val;
-                        if (val > max) max = val;
-                    }
-                    ctx.moveTo(i, yBase + min * halfChannelHeight * 0.9);
-                    ctx.lineTo(i, yBase + max * halfChannelHeight * 0.9);
+                    const x = i + 0.5;
+                    ctx.moveTo(x, yBase + summary.min[i] * drawHeight);
+                    ctx.lineTo(x, yBase + summary.max[i] * drawHeight);
                 }
                 ctx.stroke();
             }
 
-            // Draw channel separator
+            // 3. Channel separator
             if (chIndex < numChannels - 1) {
                 ctx.beginPath();
-                ctx.strokeStyle = "#f0f0f0";
+                ctx.strokeStyle = "rgba(0,0,0,0.05)";
                 ctx.moveTo(0, (chIndex + 1) * channelHeight);
                 ctx.lineTo(width, (chIndex + 1) * channelHeight);
                 ctx.stroke();
             }
         });
 
-        // Draw playhead
-        const playheadX = (currentTime / duration) * width;
+        // 4. Playhead
+        const playheadX = (currentTime / duration) * width + 0.5;
         ctx.beginPath();
-        ctx.strokeStyle = "#ff3b30"; // Apple Red for playhead
+        ctx.strokeStyle = "#ff3b30";
+        ctx.lineWidth = 1.5;
         ctx.moveTo(playheadX, 0);
         ctx.lineTo(playheadX, height);
         ctx.stroke();
+
+        ctx.restore();
     }
 
     function togglePlay() {
@@ -209,23 +286,43 @@
         const x = e.clientX - rect.left;
         const ratio = Math.max(0, Math.min(1, x / rect.width));
 
-        const wasPlaying = isPlaying;
         if (isPlaying) pause();
 
         pauseOffset = ratio * duration;
         currentTime = pauseOffset;
         drawWaveform();
 
-        if (wasPlaying) play();
+        play();
     }
 
     function formatTime(s: number) {
-        const min = Math.floor(s / 60);
-        const sec = Math.floor(s % 60);
-        return `${min}:${sec.toString().padStart(2, "0")}`;
+        if (!s || s === 0) return "0.000s";
+        const hrs = Math.floor(s / 3600);
+        const min = Math.floor((s % 3600) / 60);
+        const sec = s % 60;
+
+        let result = "";
+        if (hrs > 0) result += `${hrs}h `;
+        if (min > 0 || hrs > 0) result += `${min}m `;
+        result += `${sec.toFixed(3)}s`;
+        return result;
+    }
+
+    function formatSize(bytes: number) {
+        if (bytes === 0) return "0 B";
+        const k = 1024;
+        const sizes = ["B", "KB", "MB", "GB"];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
+    }
+
+    function copyToClipboard(text: string) {
+        navigator.clipboard.writeText(text);
+        // Maybe add a temporary toast or tooltip here
     }
 
     $: if (canvas && (canvasWidth || canvasHeight)) {
+        calculateSummary();
         canvas.width = canvas.offsetWidth;
         canvas.height = canvas.offsetHeight;
         drawWaveform();
@@ -240,58 +337,78 @@
     {#if metadata}
         <div class="header">
             <div class="header-content">
-                <svg
-                    class="file-icon"
-                    viewBox="0 0 24 24"
-                    width="20"
-                    height="20"
-                    ><path
-                        fill="currentColor"
-                        d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"
-                    /></svg
-                >
-                <span class="path">{filePath.split(/[\\/]/).pop()}</span>
-                <span class="full-path">{filePath}</span>
+                <div class="path-row">
+                    <span class="full-path-title">File Path:</span>
+                    <code class="full-path-text">{filePath}</code>
+                    <button
+                        class="copy-btn"
+                        on:click={() => copyToClipboard(filePath)}
+                        title="Copy Path"
+                    >
+                        <svg viewBox="0 0 24 24" width="14" height="14"
+                            ><path
+                                fill="currentColor"
+                                d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"
+                            /></svg
+                        >
+                    </button>
+                </div>
+                <div class="title-row">
+                    <svg
+                        class="file-icon"
+                        viewBox="0 0 24 24"
+                        width="24"
+                        height="24"
+                        ><path
+                            fill="currentColor"
+                            d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"
+                        /></svg
+                    >
+                    <span class="filename">{filePath.split(/[\\/]/).pop()}</span
+                    >
+                </div>
             </div>
         </div>
 
         <div class="metadata-card">
             <div class="metadata-grid">
+                <!-- Row 1: Size, Format, Codec -->
                 <div class="meta-item">
-                    <span class="label">Duration</span>
+                    <span class="label">size</span>
+                    <span class="value">{formatSize(metadata.fileSize)}</span>
+                </div>
+                <div class="meta-item">
+                    <span class="label">format</span>
+                    <span class="value">{metadata.container}</span>
+                </div>
+                <div class="meta-item">
+                    <span class="label">codec</span>
+                    <span class="value">{metadata.codec.toLowerCase()}</span>
+                </div>
+                <div class="meta-item empty-fill"></div>
+
+                <!-- Row 2: Duration, Sample Rate, Channels, Bitrate -->
+                <div class="meta-item">
+                    <span class="label">duration</span>
                     <span class="value">{formatTime(duration)}</span>
                 </div>
                 <div class="meta-item">
-                    <span class="label">Sample Rate</span>
+                    <span class="label">sample rate</span>
                     <span class="value"
                         >{metadata.sampleRate.toLocaleString()} Hz</span
                     >
                 </div>
                 <div class="meta-item">
-                    <span class="label">Channels</span>
-                    <span class="value"
-                        >{metadata.numChannels === 1
-                            ? "Mono"
-                            : metadata.numChannels === 2
-                              ? "Stereo"
-                              : metadata.numChannels + " Channels"}</span
-                    >
+                    <span class="label">channels</span>
+                    <span class="value">{metadata.numChannels}</span>
                 </div>
                 <div class="meta-item">
-                    <span class="label">Codec</span>
-                    <span class="value">{metadata.codec.toUpperCase()}</span>
-                </div>
-                <div class="meta-item">
-                    <span class="label">Bitrate</span>
+                    <span class="label">bitrate</span>
                     <span class="value"
-                        >{metadata.bitrate
-                            ? (metadata.bitrate / 1000).toFixed(0) + " kbps"
+                        >{metadata.bitRate
+                            ? (metadata.bitRate / 1000).toFixed(0) + " kbps"
                             : "Variable"}</span
                     >
-                </div>
-                <div class="meta-item">
-                    <span class="label">Format</span>
-                    <span class="value">{metadata.formatName}</span>
                 </div>
             </div>
         </div>
@@ -300,9 +417,19 @@
             <div
                 class="waveform-container"
                 bind:clientWidth={canvasWidth}
-                bind:clientHeight={canvasHeight}
+                style="height: {metadata.numChannels * 160}px"
             >
                 <canvas bind:this={canvas} on:click={handleSeek}></canvas>
+                <div class="channel-overlay">
+                    {#each Array(metadata.numChannels) as _, i}
+                        <div
+                            class="channel-label"
+                            style="height: {100 / metadata.numChannels}%"
+                        >
+                            <span>{i}</span>
+                        </div>
+                    {/each}
+                </div>
             </div>
         </div>
 
@@ -384,32 +511,73 @@
     }
 
     .header {
-        margin-bottom: 4px;
+        margin-bottom: 8px;
     }
 
     .header-content {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .path-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        background: transparent;
+        padding: 0;
+        border: none;
+        min-width: 0;
+    }
+
+    .full-path-title {
+        font-size: 11px;
+        font-weight: 700;
+        color: #86868b;
+    }
+
+    .full-path-text {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+            monospace;
+        font-size: 12px;
+        color: #1d1d1f;
+        flex: 1;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .copy-btn {
+        background: transparent;
+        border: none;
+        color: #007aff;
+        cursor: pointer;
+        padding: 4px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 4px;
+        transition: background 0.2s;
+    }
+
+    .copy-btn:hover {
+        background: rgba(0, 122, 255, 0.1);
+    }
+
+    .title-row {
         display: flex;
         align-items: center;
         gap: 10px;
     }
 
-    .file-icon {
-        color: #007aff;
-    }
-
-    .path {
-        font-size: 18px;
+    .filename {
+        font-size: 20px;
         font-weight: 600;
         color: #1d1d1f;
     }
 
-    .full-path {
-        font-size: 12px;
-        color: #86868b;
-        margin-left: 8px;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
+    .file-icon {
+        color: #007aff;
     }
 
     .metadata-card {
@@ -424,22 +592,29 @@
 
     .metadata-grid {
         display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        gap: 16px 32px;
+        grid-template-columns: repeat(4, auto);
+        gap: 8px 32px;
+        justify-content: start;
     }
 
     .meta-item {
         display: flex;
-        flex-direction: column;
-        gap: 4px;
+        flex-direction: row;
+        align-items: center;
+        padding: 2px 0;
+    }
+
+    .meta-item:last-child {
+        border-bottom: none;
     }
 
     .label {
-        font-size: 11px;
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.02em;
         color: #86868b;
+        margin-right: 8px;
+        white-space: nowrap;
     }
 
     .value {
@@ -452,17 +627,40 @@
         flex: 1;
         display: flex;
         min-height: 0;
+        overflow-y: auto;
     }
 
     .waveform-container {
-        flex: 1;
+        width: 100%;
         position: relative;
         background: #ffffff;
-        border: 1px solid rgba(0, 0, 0, 0.08);
+        border: 1px solid rgba(0, 0, 0, 0.05);
         border-radius: 12px;
         cursor: pointer;
         overflow: hidden;
         box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.02);
+    }
+
+    .channel-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        bottom: 0;
+        width: 24px;
+        pointer-events: none;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .channel-label {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 10px;
+        font-weight: 700;
+        color: #86868b;
+        background: rgba(255, 255, 255, 0.7);
+        border-right: 1px solid rgba(0, 0, 0, 0.05);
     }
 
     canvas {

@@ -1,29 +1,16 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
-import * as fs from 'fs';
+import { AvioflowWorkerService } from './AvioflowWorkerService';
 
-// Lazy load avioflow to avoid crashes if module fails to load
-let avioflowModule: any = null;
-let avioflowLoadError: Error | null = null;
-
-function getAvioflow() {
-    if (avioflowModule) {
-        return avioflowModule;
-    }
-    if (avioflowLoadError) {
-        throw avioflowLoadError;
-    }
-    try {
-        // Use dynamic require to catch loading errors
-        avioflowModule = require('avioflow').default || require('avioflow');
-        console.log('[Avioflow] Native module loaded successfully');
-        return avioflowModule;
-    } catch (error: any) {
-        avioflowLoadError = error;
-        console.error('[Avioflow] Failed to load native module:', error.message);
-        console.error('[Avioflow] Stack trace:', error.stack);
-        throw error;
-    }
+/**
+ * Interface for the message received from the worker
+ */
+interface WorkerResponse {
+    type: 'done' | 'error' | 'ready';
+    metadata?: any;
+    samples?: any[];
+    message?: string;
+    stack?: string;
 }
 
 export class AudioPreviewProvider implements vscode.CustomReadonlyEditorProvider {
@@ -52,7 +39,6 @@ export class AudioPreviewProvider implements vscode.CustomReadonlyEditorProvider
         openContext: vscode.CustomDocumentOpenContext,
         token: vscode.CancellationToken
     ): Promise<vscode.CustomDocument> {
-        console.log('[Avioflow] openCustomDocument called for:', uri.fsPath);
         return { uri, dispose: () => { } };
     }
 
@@ -61,7 +47,6 @@ export class AudioPreviewProvider implements vscode.CustomReadonlyEditorProvider
         webviewPanel: vscode.WebviewPanel,
         token: vscode.CancellationToken
     ): Promise<void> {
-        console.log('[Avioflow] resolveCustomEditor called for:', document.uri.fsPath);
 
         webviewPanel.webview.options = {
             enableScripts: true,
@@ -71,49 +56,33 @@ export class AudioPreviewProvider implements vscode.CustomReadonlyEditorProvider
             ]
         };
 
-        console.log('[Avioflow] Setting webview HTML...');
         webviewPanel.webview.html = this.getHtmlForWebview(webviewPanel.webview);
-        console.log('[Avioflow] Webview HTML set, waiting for ready message...');
 
         webviewPanel.webview.onDidReceiveMessage(e => {
-            console.log('[Avioflow] Received message from webview:', e.type);
             if (e.type === 'ready') {
-                console.log('[Avioflow] Webview ready, loading audio data...');
                 this.loadAndSendData(document, webviewPanel);
             }
         });
     }
 
     private async loadAndSendData(document: vscode.CustomDocument, webviewPanel: vscode.WebviewPanel) {
-        console.log('[Avioflow] loadAndSendData started for:', document.uri.fsPath);
         try {
-            console.log('[Avioflow] Calling getAvioflow()...');
-            const avioflow = getAvioflow();
-            console.log('[Avioflow] getAvioflow() returned:', avioflow ? 'module loaded' : 'null');
+            const service = AvioflowWorkerService.getInstance();
 
-            if (!avioflow) {
-                throw new Error('Avioflow library not loaded');
-            }
+            const start = Date.now();
+            const { metadata, samples } = await service.load(document.uri.fsPath);
+            const duration = Date.now() - start;
 
-            console.log('[Avioflow] About to call avioflow.load()...');
-            // Use the convenience load() function which returns { metadata, samples }
-            // samples is Float32Array[] where each element is one channel's data
-            const { metadata, samples } = avioflow.load(document.uri.fsPath);
-            console.log('[Avioflow] avioflow.load() completed successfully');
-            console.log('[Avioflow] Metadata:', JSON.stringify(metadata));
-            console.log('[Avioflow] Samples channels:', samples.length);
-
+            console.log(`[Avioflow] Decoding complete in ${duration}ms, sending to webview`);
             webviewPanel.webview.postMessage({
                 type: 'init',
                 filePath: document.uri.fsPath,
                 metadata,
-                samples: samples.map((s: Float32Array) => Array.from(s)) // Convert to array for message passing
+                samples
             });
-            console.log('[Avioflow] Data sent to webview');
 
         } catch (e: any) {
             console.error('[Avioflow] loadAndSendData error:', e);
-            console.error('[Avioflow] Error stack:', e.stack);
             vscode.window.showErrorMessage(`Avioflow Error: ${e.message}`);
         }
     }
