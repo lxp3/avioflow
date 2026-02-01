@@ -343,10 +343,8 @@ jobs:
         include:
           - os: windows-latest
             target: win32-x64
-            shell: pwsh
           - os: ubuntu-latest
             target: linux-x64
-            shell: bash
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -370,14 +368,14 @@ jobs:
         run: pnpm run compile
 
       - name: Copy native modules
-        shell: ${{ matrix.shell }}
+        shell: bash
         working-directory: vscode-extension
         run: |
           mkdir -p out/node_modules
           cp -r node_modules/avioflow out/node_modules/
 
       - name: Package platform-specific .vsix
-        shell: ${{ matrix.shell }}
+        shell: bash
         working-directory: vscode-extension
         run: |
           # Extract version from tag
@@ -389,7 +387,7 @@ jobs:
           npx -y @vscode/vsce package --no-dependencies --allow-missing-repository --target ${{ matrix.target }} -o "avioflow-$VERSION-${{ matrix.target }}.vsix"
           
           echo "Build complete!"
-          ls -la *.vsix || dir *.vsix
+          ls -la *.vsix
 
       - uses: actions/upload-artifact@v4
         with:
