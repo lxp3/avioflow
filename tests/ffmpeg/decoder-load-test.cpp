@@ -1,11 +1,13 @@
 #include "avioflow-cxx-api.h"
+#include <algorithm>
 #include <cassert>
+#include <chrono>
 #include <cmath>
 #include <cstring>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <vector>
-#include <algorithm>
 
 using namespace avioflow;
 
@@ -22,7 +24,7 @@ const std::string MP3_URL =
 const std::string WAV_PATH = "public/wavs/zh.wav";
 
 // Helper function to print metadata
-void print_metadata(const Metadata& meta, const std::string& test_name) {
+void print_metadata(const Metadata &meta, const std::string &test_name) {
   std::cout << "[" << test_name << "] Metadata:" << std::endl;
   std::cout << "  Sample Rate: " << meta.sample_rate << " Hz" << std::endl;
   std::cout << "  Channels: " << meta.num_channels << std::endl;
@@ -35,13 +37,13 @@ void print_metadata(const Metadata& meta, const std::string& test_name) {
 //=============================================================================
 // Test 1: File Path Decode
 //=============================================================================
-void test_decode_from_filepath()
-{
+void test_decode_from_filepath() {
+  auto start = std::chrono::high_resolution_clock::now();
   std::cout << "\n=== Running test_decode_from_filepath ===" << std::endl;
   std::cout << "File: " << MP3_PATH << std::endl;
   AudioDecoder decoder;
   decoder.open(MP3_PATH);
-  
+
   const auto &meta = decoder.get_metadata();
   print_metadata(meta, "test_decode_from_filepath");
 
@@ -52,8 +54,7 @@ void test_decode_from_filepath()
 
   // Decode all samples
   size_t total_samples = 0;
-  while (!decoder.is_finished())
-  {
+  while (!decoder.is_finished()) {
     auto frame = decoder.decode_next();
     if (!frame)
       break;
@@ -62,13 +63,17 @@ void test_decode_from_filepath()
   }
 
   assert((int)total_samples == EXPECTED_NUM_FRAMES);
+  auto end = std::chrono::high_resolution_clock::now();
+  std::chrono::duration<double, std::milli> elapsed = end - start;
+  std::cout << "time spent: " << std::fixed << std::setprecision(3)
+            << elapsed.count() << " ms" << std::endl;
 }
 
 //=============================================================================
 // Test 2: URL Decode
 //=============================================================================
-void test_decode_from_url()
-{
+void test_decode_from_url() {
+  auto start = std::chrono::high_resolution_clock::now();
   std::cout << "\n=== Running test_decode_from_url ===" << std::endl;
   std::cout << "URL: " << MP3_URL << std::endl;
   AudioDecoder decoder;
@@ -83,8 +88,7 @@ void test_decode_from_url()
 
   // For URL, just decode first few frames to verify it works
   int frame_count = 0;
-  while (!decoder.is_finished() && frame_count < 10)
-  {
+  while (!decoder.is_finished() && frame_count < 10) {
     auto frame = decoder.decode_next();
     if (!frame)
       break;
@@ -95,11 +99,13 @@ void test_decode_from_url()
   }
 
   assert(frame_count > 0);
+  auto end = std::chrono::high_resolution_clock::now();
+  std::chrono::duration<double, std::milli> elapsed = end - start;
+  std::cout << "time spent: " << std::fixed << std::setprecision(3)
+            << elapsed.count() << " ms" << std::endl;
 }
 
-
-std::vector<uint8_t> read_file_bytes(const std::string &filepath)
-{
+std::vector<uint8_t> read_file_bytes(const std::string &filepath) {
   std::ifstream file(filepath, std::ios::binary | std::ios::ate);
   if (!file.is_open()) {
     std::cerr << "Failed to open file: " << filepath << std::endl;
@@ -121,8 +127,8 @@ std::vector<uint8_t> read_file_bytes(const std::string &filepath)
 //=============================================================================
 // Test 3: Push-based Decode (replaces open_memory)
 //=============================================================================
-void test_decode_from_push()
-{
+void test_decode_from_push() {
+  auto start = std::chrono::high_resolution_clock::now();
   std::cout << "\n=== Running test_decode_from_push ===" << std::endl;
   std::cout << "File: " << MP3_PATH << std::endl;
   // Read file into memory
@@ -139,8 +145,7 @@ void test_decode_from_push()
 
   // Decode all samples
   size_t total_samples = 0;
-  while (!decoder.is_finished())
-  {
+  while (!decoder.is_finished()) {
     auto frame = decoder.decode_next();
     if (!frame)
       break;
@@ -148,13 +153,17 @@ void test_decode_from_push()
   }
 
   assert((int)total_samples == EXPECTED_NUM_FRAMES);
+  auto end = std::chrono::high_resolution_clock::now();
+  std::chrono::duration<double, std::milli> elapsed = end - start;
+  std::cout << "time spent: " << std::fixed << std::setprecision(3)
+            << elapsed.count() << " ms" << std::endl;
 }
 
 //=============================================================================
 // Test 4: PCM Decode from Push (raw PCM without WAV header)
 //=============================================================================
-void test_decode_pcm_from_push()
-{
+void test_decode_pcm_from_push() {
+  auto start = std::chrono::high_resolution_clock::now();
   std::cout << "\n=== Running test_decode_pcm_from_push ===" << std::endl;
   std::cout << "File: " << WAV_PATH << std::endl;
   auto buffer = read_file_bytes(WAV_PATH);
@@ -169,24 +178,26 @@ void test_decode_pcm_from_push()
 
   const auto &meta1 = decoder1.get_metadata();
   print_metadata(meta1, "test_decode_pcm_from_push (wav)");
-  
-  std::cout << "Original buffer size: " << buffer.size() << " bytes" << std::endl;
-  
+
+  std::cout << "Original buffer size: " << buffer.size() << " bytes"
+            << std::endl;
+
   // Strip the first 44 bytes (WAV header)
   constexpr size_t WAV_HEADER_SIZE = 44;
   if (buffer.size() <= WAV_HEADER_SIZE) {
     std::cerr << "File too small to contain WAV header" << std::endl;
     assert(false);
   }
-  
+
   buffer.erase(buffer.begin(), buffer.begin() + WAV_HEADER_SIZE);
-  std::cout << "PCM buffer size (after removing header): " << buffer.size() << " bytes" << std::endl;
+  std::cout << "PCM buffer size (after removing header): " << buffer.size()
+            << " bytes" << std::endl;
 
   // Decode raw PCM data with explicit format specification
   AudioStreamOptions options2;
-  options2.input_format = "s16le";       // PCM signed 16-bit little-endian
-  options2.input_sample_rate = 16000;    // 16kHz
-  options2.input_channels = 1;           // Mono
+  options2.input_format = "s16le";    // PCM signed 16-bit little-endian
+  options2.input_sample_rate = 16000; // 16kHz
+  options2.input_channels = 1;        // Mono
 
   AudioDecoder decoder2(options2);
   decoder2.push(buffer.data(), buffer.size());
@@ -198,9 +209,10 @@ void test_decode_pcm_from_push()
   assert(meta2.sample_rate == 16000);
   assert(meta2.num_channels == 1);
   assert(meta2.codec == "pcm_s16le");
-  
+
   // Calculate expected duration based on 16kHz
-  double expected_duration = (double)buffer.size() / (16000 * 1 * 2); // 16kHz, mono, 2 bytes/sample
+  double expected_duration =
+      (double)buffer.size() / (16000 * 1 * 2); // 16kHz, mono, 2 bytes/sample
   (void)expected_duration; // Suppress unused variable warning
   assert(std::fabs(meta2.duration - expected_duration) < 0.1);
 
@@ -214,24 +226,29 @@ void test_decode_pcm_from_push()
     total_samples += frame.num_samples;
     frame_count++;
   }
-  
-  std::cout << "Decoded " << frame_count << " frames, " << total_samples << " samples" << std::endl;
+
+  std::cout << "Decoded " << frame_count << " frames, " << total_samples
+            << " samples" << std::endl;
   assert(frame_count > 0);
   std::cout << "PCM decoding test passed!" << std::endl;
+  auto end = std::chrono::high_resolution_clock::now();
+  std::chrono::duration<double, std::milli> elapsed = end - start;
+  std::cout << "time spent: " << std::fixed << std::setprecision(3)
+            << elapsed.count() << " ms" << std::endl;
 }
 
 //=============================================================================
 // Test 5: Streaming Decode with push-based data provider
 //=============================================================================
-void test_streaming_decode()
-{
+void test_streaming_decode() {
+  auto start = std::chrono::high_resolution_clock::now();
   std::cout << "Running test_streaming_decode..." << std::endl;
   auto buffer = read_file_bytes(WAV_PATH);
 
   AudioStreamOptions stream_options;
   stream_options.input_format = "wav";
   AudioDecoder decoder(stream_options);
-  
+
   // Push all data
   decoder.push(buffer.data(), buffer.size());
 
@@ -243,8 +260,7 @@ void test_streaming_decode()
 
   size_t total_samples = 0;
 
-  while (!decoder.is_finished())
-  {
+  while (!decoder.is_finished()) {
     auto frame = decoder.decode_next();
     if (!frame)
       break;
@@ -258,13 +274,17 @@ void test_streaming_decode()
   auto diff = std::abs(static_cast<int64_t>(total_samples) - 89472);
   (void)diff;
   assert(diff < 500);
+  auto end = std::chrono::high_resolution_clock::now();
+  std::chrono::duration<double, std::milli> elapsed = end - start;
+  std::cout << "time spent: " << std::fixed << std::setprecision(3)
+            << elapsed.count() << " ms" << std::endl;
 }
 
 //=============================================================================
 // Test 6: Metadata Verification
 //=============================================================================
-void test_metadata_format()
-{
+void test_metadata_format() {
+  auto start = std::chrono::high_resolution_clock::now();
   std::cout << "Running test_metadata_format..." << std::endl;
   AudioDecoder decoder;
   decoder.open(MP3_PATH);
@@ -278,13 +298,16 @@ void test_metadata_format()
   assert(metadata.num_channels == EXPECTED_NUM_CHANNELS);
   assert(metadata.duration > 90.0);
   assert(metadata.duration < 100.0);
+  auto end = std::chrono::high_resolution_clock::now();
+  std::chrono::duration<double, std::milli> elapsed = end - start;
+  std::cout << "time spent: " << std::fixed << std::setprecision(3)
+            << elapsed.count() << " ms" << std::endl;
 }
 
 //=============================================================================
 // Main Test Runner
 //=============================================================================
-int main(int argc, char **argv)
-{
+int main(int argc, char **argv) {
   (void)argc;
   (void)argv;
   std::cout << "\n=== avioflow Decoder Unit Tests ===" << std::endl;
@@ -295,19 +318,18 @@ int main(int argc, char **argv)
   bool file_exists = check_file.good();
   check_file.close();
 
-  if (file_exists)
-  {
+  if (file_exists) {
     test_metadata_format();
-    test_decode_from_filepath();
+    for (int i = 0; i < 5; i++) {
+      test_decode_from_filepath();
+    }
     test_decode_from_url();
     // test_decode_from_push();
     test_decode_pcm_from_push();
     test_streaming_decode();
 
     std::cout << "All tests passed!" << std::endl;
-  }
-  else
-  {
+  } else {
     std::cout << "Test file not found: " << MP3_PATH << std::endl;
   }
 

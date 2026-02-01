@@ -342,17 +342,11 @@ npm run prebuild
 
 ---
 
-## Input Format Reference
+## Supported Formats
 
-| Format | Description | Use Case |
-|--------|-------------|----------|
-| `s16le` | 16-bit signed PCM, little-endian | Raw audio, WebRTC |
-| `s16be` | 16-bit signed PCM, big-endian | Network streams |
-| `f32le` | 32-bit float PCM, little-endian | High-quality audio |
-| `aac` | AAC with ADTS headers | Streaming AAC |
-| `mp3` | MP3 frames | Streaming MP3 |
-| `opus` | Opus packets | WebRTC, VoIP |
-| `wav` | WAV container | File-based audio |
+AvioFlow supports a wide range of audio formats, codecs, and devices through FFmpeg. 
+
+For a complete and detailed list of supported decoders, encoders, and input formats, please refer to the **[Supported Formats Reference](doc/supported_formats.md)**.
 
 ---
 
