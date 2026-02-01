@@ -213,16 +213,13 @@ avioflow.set_log_level("debug")  # quiet, error, warning, info, debug, trace
 
 ### Compatibility
 
-Avioflow provides pre-built native binaries for major platforms and runtimes, ensuring zero-config installation in most environments.
-
-| Runtime | Version / ABI | Support |
-|---------|---------------|---------|
+| Runtime | Version | Support |
+|---------|---------|---------|
 | **Node.js** | 16, 18, 20, 22+ | ✅ Native (N-API) |
-| **Electron** | 28, 30, 32, 34 | ✅ VS Code 1.85 ~ 1.96+ |
-| **Electron** | 37, 38, 39 | ✅ Latest & Future Proof |
+| **Electron** | All versions | ❌ Not supported |
 | **Architectures** | x64 | ✅ Linux, Windows |
 
-The library automatically detects whether it's running in standard Node.js or an Electron environment (like a VS Code extension) and loads the optimized binary accordingly.
+> ⚠️ **Electron Not Supported**: Due to V8 ABI compatibility issues, the native addon crashes in Electron environments (including VS Code extensions). For Electron apps, we recommend using an **external FFmpeg process** instead.
 
 ### Installation
 

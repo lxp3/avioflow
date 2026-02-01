@@ -119,19 +119,19 @@ jobs:
           tar -czvf $PKG_DIR.tar.gz $PKG_DIR
 
       # --- Build Node.js Addon (Static, Node-API) ---
-      # IMPORTANT: Node-API (N-API) provides ABI stability!
-      # A single build with NAPI_VERSION=8 works on:
-      # - Node.js 16, 18, 20, 22+ (all versions with Node-API 8 support)
-      # - Electron 28, 30, 32, 34, 37, 38, 39+ (all use Node-API 8)
-      # NO separate Electron builds are required!
+      # Build for both Node.js AND Electron to ensure maximum compatibility.
+      # While Node-API provides ABI stability, using Electron headers during
+      # compilation ensures all V8/libuv internals are properly aligned.
       - name: Build Node.js Addon (Node-API 8)
         if: needs.check-tag.outputs.build-npm == 'true'
         run: |
           npm install
           
-          # Build once with Node-API 8 - works for ALL runtimes
-          echo "Building Node-API 8 addon (universal for Node.js & Electron)..."
-          npx cmake-js compile --CDCMAKE_BUILD_TYPE=Release --CDNAPI_VERSION=8
+          # Build with cmake-js using Electron runtime for VS Code compatibility
+          echo "Building Node-API 8 addon with Electron runtime..."
+          
+          # Use Electron 37 (VS Code's current Electron version) as the build target
+          npx cmake-js compile --CDCMAKE_BUILD_TYPE=Release --CDNAPI_VERSION=8 --runtime electron --runtime-version 37.0.0
           
           # Create prebuilds directory
           mkdir -p prebuilds/linux-x64
@@ -139,9 +139,19 @@ jobs:
           
           echo "=== Prebuild Info ==="
           echo "Node-API version: 8"
+          echo "Build runtime: Electron 37"
           echo "Compatible with: Node.js 16+, Electron 28+"
           echo "Prebuilds created:"
           ls -la prebuilds/linux-x64/
+
+      # Verify the built module works
+      - name: Verify Node.js Addon
+        if: needs.check-tag.outputs.build-npm == 'true'
+        run: |
+          echo "Verifying native module loads correctly..."
+          node -e "const m = require('./prebuilds/linux-x64/avioflow.napi.node'); console.log('Exports:', Object.keys(m));"
+          node tests/nodejs/test-local.js
+          echo "Verification passed!"
 
       # --- Upload Artifacts ---
       - uses: actions/upload-artifact@v4
@@ -242,20 +252,22 @@ jobs:
           Compress-Archive -Path "$PkgDir/*" -DestinationPath "$PkgDir.zip"
 
       # --- Build Node.js Addon (Static, Node-API) ---
-      # IMPORTANT: Node-API (N-API) provides ABI stability!
-      # A single build with NAPI_VERSION=8 works on:
-      # - Node.js 16, 18, 20, 22+ (all versions with Node-API 8 support)
-      # - Electron 28, 30, 32, 34, 37, 38, 39+ (all use Node-API 8)
-      # NO separate Electron builds are required!
+      # Build for both Node.js AND Electron to ensure maximum compatibility.
+      # While Node-API provides ABI stability, using Electron headers during
+      # compilation ensures all V8/libuv internals are properly aligned.
       - name: Build Node.js Addon (Node-API 8)
         if: needs.check-tag.outputs.build-npm == 'true'
         shell: pwsh
         run: |
           npm install
           
-          # Build once with Node-API 8 - works for ALL runtimes
-          Write-Host "Building Node-API 8 addon (universal for Node.js & Electron)..."
-          npx cmake-js compile --CDNAPI_VERSION=8
+          # Build with cmake-js using Electron runtime for VS Code compatibility
+          # VS Code uses Electron, so we build against Electron headers
+          Write-Host "Building Node-API 8 addon with Electron runtime..."
+          
+          # Use Electron 37 (VS Code's current Electron version) as the build target
+          # The --runtime electron flag ensures we use Electron's Node headers
+          npx cmake-js compile --CDNAPI_VERSION=8 --runtime electron --runtime-version 37.0.0
           
           # Create prebuilds directory
           New-Item -ItemType Directory -Path prebuilds/win32-x64 -Force
@@ -263,9 +275,20 @@ jobs:
           
           Write-Host "=== Prebuild Info ==="
           Write-Host "Node-API version: 8"
+          Write-Host "Build runtime: Electron 37"
           Write-Host "Compatible with: Node.js 16+, Electron 28+"
           Write-Host "Prebuilds created:"
           Get-ChildItem -Recurse prebuilds/
+
+      # Verify the built module works
+      - name: Verify Node.js Addon
+        if: needs.check-tag.outputs.build-npm == 'true'
+        shell: pwsh
+        run: |
+          Write-Host "Verifying native module loads correctly..."
+          node -e "const m = require('./prebuilds/win32-x64/avioflow.napi.node'); console.log('Exports:', Object.keys(m));"
+          node tests/nodejs/test-local.js
+          Write-Host "Verification passed!"
 
       # --- Upload Artifacts ---
       - uses: actions/upload-artifact@v4

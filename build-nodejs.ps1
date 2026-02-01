@@ -108,13 +108,15 @@ if (-not $SkipBuild) {
         Remove-Item -Recurse -Force $BuildDir 2>$null
     }
     
-    # Build with Node-API 8
+    # Build with Node-API 8 using Electron runtime
+    # This ensures compatibility with VS Code's Electron environment
     # Note: cmake-js outputs info to stderr, which PowerShell treats as errors
     # We redirect stderr to stdout and check for the actual output file to determine success
-    Write-Info "Running: pnpm exec cmake-js compile --CDNAPI_VERSION=$NodeAPIVersion"
+    $ElectronVersion = "37.0.0"  # VS Code's current Electron version
+    Write-Info "Running: pnpm exec cmake-js compile --CDNAPI_VERSION=$NodeAPIVersion --runtime electron --runtime-version $ElectronVersion"
     
     # Use cmd to avoid PowerShell stderr issues
-    $buildResult = cmd /c "pnpm exec cmake-js compile --CDNAPI_VERSION=$NodeAPIVersion 2>&1"
+    $buildResult = cmd /c "pnpm exec cmake-js compile --CDNAPI_VERSION=$NodeAPIVersion --runtime electron --runtime-version $ElectronVersion 2>&1"
     
     if ($VerboseOutput) { 
         $buildResult | ForEach-Object { Write-Host $_ }
@@ -172,7 +174,8 @@ if ($VerboseOutput) {
 
 if ($testExitCode -eq 0) {
     Write-Success "Node.js test PASSED"
-} else {
+}
+else {
     Write-Fail "Node.js test FAILED (exit code: $testExitCode)"
     if (-not $VerboseOutput) {
         $testOutput | ForEach-Object { Write-Info "  $_" }
@@ -315,16 +318,34 @@ app.on('window-all-closed', () => {});
             $process.Kill()
             Write-Host "TIMEOUT" -ForegroundColor DarkYellow
             $TestResults[$ver] = "TIMEOUT"
-        } elseif ($process.ExitCode -eq 0) {
-            Write-Host "PASSED ✓" -ForegroundColor Green
+        }
+        elseif ($process.ExitCode -eq 0) {
+            Write-Host "PASSED [OK]" -ForegroundColor Green
             $TestResults[$ver] = "PASSED"
             
             if ($VerboseOutput) {
                 $stdout = $process.StandardOutput.ReadToEnd()
                 $stdout.Split("`n") | ForEach-Object { Write-Info "    $_" }
             }
-        } else {
-            Write-Host "FAILED ✗" -ForegroundColor Red
+        }
+        elseif ($process.ExitCode -lt 0) {
+            # Negative exit code indicates a crash (signal termination)
+            Write-Host "CRASHED (exit code: $($process.ExitCode))" -ForegroundColor Red
+            $TestResults[$ver] = "CRASHED"
+            
+            $stderr = $process.StandardError.ReadToEnd()
+            $stdout = $process.StandardOutput.ReadToEnd()
+            if ($stdout) { 
+                Write-Info "    STDOUT:"
+                $stdout.Split("`n") | ForEach-Object { Write-Info "      $_" } 
+            }
+            if ($stderr) { 
+                Write-Info "    STDERR:"
+                $stderr.Split("`n") | ForEach-Object { Write-Info "      $_" } 
+            }
+        }
+        else {
+            Write-Host "FAILED (exit code: $($process.ExitCode))" -ForegroundColor Red
             $TestResults[$ver] = "FAILED"
             
             $stderr = $process.StandardError.ReadToEnd()
@@ -332,11 +353,13 @@ app.on('window-all-closed', () => {});
             if ($stderr) { $stderr.Split("`n") | ForEach-Object { Write-Info "    $_" } }
             if ($stdout) { $stdout.Split("`n") | ForEach-Object { Write-Info "    $_" } }
         }
-    } catch {
+    }
+    catch {
         Write-Host "ERROR" -ForegroundColor Red
         $TestResults[$ver] = "ERROR"
         Write-Info "    $_"
-    } finally {
+    }
+    finally {
         # Clean up temp file
         if (Test-Path $TempTestFile) {
             Remove-Item $TempTestFile -Force 2>$null
@@ -353,8 +376,12 @@ Write-Header "Test Results Summary"
 
 $Passed = ($TestResults.Values | Where-Object { $_ -eq "PASSED" }).Count
 $Failed = ($TestResults.Values | Where-Object { $_ -eq "FAILED" }).Count
+$Crashed = ($TestResults.Values | Where-Object { $_ -eq "CRASHED" }).Count
 $Skipped = ($TestResults.Values | Where-Object { $_ -eq "SKIP" -or $_ -eq "TIMEOUT" -or $_ -eq "ERROR" }).Count
-$Total = $TestResults.Count
+# Count empty/null results as unknown (likely crashed without proper capture)
+$Unknown = ($ElectronVersions | Where-Object { -not $TestResults[$_] -or $TestResults[$_] -eq "" }).Count
+$TotalTests = $ElectronVersions.Count
+$TotalProblems = $Failed + $Crashed + $Unknown
 
 Write-Host "Node.js Test: PASSED" -ForegroundColor Green
 Write-Host ""
@@ -362,29 +389,44 @@ Write-Host "Electron Tests:" -ForegroundColor White
 
 foreach ($ver in $ElectronVersions) {
     $result = $TestResults[$ver]
-    $color = switch ($result) {
-        "PASSED" { "Green" }
-        "FAILED" { "Red" }
-        default { "DarkYellow" }
+    if (-not $result -or $result -eq "") {
+        $result = "UNKNOWN (no result captured)"
+        $color = "Red"
+    }
+    else {
+        $color = switch ($result) {
+            "PASSED" { "Green" }
+            "FAILED" { "Red" }
+            "CRASHED" { "Red" }
+            default { "DarkYellow" }
+        }
     }
     Write-Host "  Electron $ver`: $result" -ForegroundColor $color
 }
 
 Write-Host ""
-Write-Host ("=" * 60) -ForegroundColor $(if ($Failed -eq 0) { "Green" } else { "Red" })
+$SummaryColor = if ($TotalProblems -eq 0) { "Green" } else { "Red" }
+Write-Host ("=" * 60) -ForegroundColor $SummaryColor
 
-if ($Failed -eq 0) {
-    Write-Host "  ✓ ALL TESTS PASSED!" -ForegroundColor Green
+if ($TotalProblems -eq 0 -and $Passed -eq $TotalTests) {
+    Write-Host "  [OK] ALL TESTS PASSED!" -ForegroundColor Green
     Write-Host ""
     Write-Host "  This proves Node-API ABI stability:" -ForegroundColor White
-    Write-Host "  → One build (Node-API $NodeAPIVersion) works across ALL versions" -ForegroundColor Gray
-    Write-Host "  → No need for Electron-specific builds" -ForegroundColor Gray
-} else {
-    Write-Host "  ✗ SOME TESTS FAILED" -ForegroundColor Red
-    Write-Host "  Passed: $Passed, Failed: $Failed, Skipped: $Skipped" -ForegroundColor Gray
+    Write-Host "  -> One build (Node-API $NodeAPIVersion) works across ALL versions" -ForegroundColor Gray
+    Write-Host "  -> No need for Electron-specific builds" -ForegroundColor Gray
+}
+else {
+    Write-Host "  [FAIL] TESTS FAILED OR CRASHED" -ForegroundColor Red
+    Write-Host ""
+    Write-Host "  Summary:" -ForegroundColor White
+    Write-Host "    Passed:  $Passed / $TotalTests" -ForegroundColor $(if ($Passed -eq $TotalTests) { "Green" } else { "Gray" })
+    if ($Failed -gt 0) { Write-Host "    Failed:  $Failed" -ForegroundColor Red }
+    if ($Crashed -gt 0) { Write-Host "    Crashed: $Crashed" -ForegroundColor Red }
+    if ($Unknown -gt 0) { Write-Host "    Unknown: $Unknown (likely crashed)" -ForegroundColor Red }
+    if ($Skipped -gt 0) { Write-Host "    Skipped: $Skipped" -ForegroundColor DarkYellow }
 }
 
-Write-Host ("=" * 60) -ForegroundColor $(if ($Failed -eq 0) { "Green" } else { "Red" })
+Write-Host ("=" * 60) -ForegroundColor $SummaryColor
 Write-Host ""
 
-exit $(if ($Failed -eq 0) { 0 } else { 1 })
+exit $(if ($TotalProblems -eq 0 -and $Passed -eq $TotalTests) { 0 } else { 1 })
