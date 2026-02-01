@@ -16,9 +16,10 @@ jobs:
   # Determine what to build based on tag
   # Tag formats:
   #   v0.1.5       -> Build and publish everything (C++, Python, npm)
-  #   v0.1.5-app   -> Build and publish C++ only
+  #   v0.1.5-cpp   -> Build and publish C++ only
   #   v0.1.5-wheels -> Build and publish Python wheels only
   #   v0.1.5-npm   -> Build and publish npm only
+  #   v0.1.5-vsix  -> Build and publish VS Code extension only
   # ============================================================
   check-tag:
     runs-on: ubuntu-latest
@@ -26,6 +27,7 @@ jobs:
       build-cpp: ${{ steps.check.outputs.build-cpp }}
       build-python: ${{ steps.check.outputs.build-python }}
       build-npm: ${{ steps.check.outputs.build-npm }}
+      build-vsix: ${{ steps.check.outputs.build-vsix }}
       tag-name: ${{ steps.check.outputs.tag-name }}
     steps:
       - name: Check tag format
@@ -38,6 +40,7 @@ jobs:
           BUILD_CPP="false"
           BUILD_PYTHON="false"
           BUILD_NPM="false"
+          BUILD_VSIX="false"
           
           # Check tag suffix
           if [[ "$TAG" =~ -cpp$ ]]; then
@@ -49,6 +52,9 @@ jobs:
           elif [[ "$TAG" =~ -npm$ ]]; then
             echo "Tag ends with -npm: Building npm only"
             BUILD_NPM="true"
+          elif [[ "$TAG" =~ -vsix$ ]]; then
+            echo "Tag ends with -vsix: Building VS Code extension only"
+            BUILD_VSIX="true"
           elif [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "Tag is version only: Building everything"
             BUILD_CPP="true"
@@ -56,18 +62,20 @@ jobs:
             BUILD_NPM="true"
           else
             echo "Unknown tag format: $TAG"
-            echo "Supported formats: v0.1.5, v0.1.5-app, v0.1.5-wheels, v0.1.5-npm"
+            echo "Supported formats: v0.1.5, v0.1.5-cpp, v0.1.5-wheels, v0.1.5-npm, v0.1.5-vsix"
             exit 1
           fi
           
           echo "build-cpp=$BUILD_CPP" >> $GITHUB_OUTPUT
           echo "build-python=$BUILD_PYTHON" >> $GITHUB_OUTPUT
           echo "build-npm=$BUILD_NPM" >> $GITHUB_OUTPUT
+          echo "build-vsix=$BUILD_VSIX" >> $GITHUB_OUTPUT
           
           echo "Build configuration:"
           echo "  C++: $BUILD_CPP"
           echo "  Python: $BUILD_PYTHON"
           echo "  npm: $BUILD_NPM"
+          echo "  VS Code Extension: $BUILD_VSIX"
 
   # ============================================================
   # Linux Build (C++ + Node.js + Python Wheels)
@@ -118,20 +126,15 @@ jobs:
           cmake --install build_shared --prefix $PKG_DIR
           tar -czvf $PKG_DIR.tar.gz $PKG_DIR
 
-      # --- Build Node.js Addon (Static, Node-API) ---
-      # Build for both Node.js AND Electron to ensure maximum compatibility.
-      # While Node-API provides ABI stability, using Electron headers during
-      # compilation ensures all V8/libuv internals are properly aligned.
+      # --- Build Node.js Addon (Static, Node-API 8 for Node.js >= 16) ---
       - name: Build Node.js Addon (Node-API 8)
         if: needs.check-tag.outputs.build-npm == 'true'
         run: |
           npm install
           
-          # Build with cmake-js using Electron runtime for VS Code compatibility
-          echo "Building Node-API 8 addon with Electron runtime..."
-          
-          # Use Electron 37 (VS Code's current Electron version) as the build target
-          npx cmake-js compile --CDCMAKE_BUILD_TYPE=Release --CDNAPI_VERSION=8 --runtime electron --runtime-version 37.0.0
+          # Build with cmake-js for Node.js (no Electron support)
+          echo "Building Node-API 8 addon for Node.js..."
+          npx cmake-js compile --CDCMAKE_BUILD_TYPE=Release --CDNAPI_VERSION=8
           
           # Create prebuilds directory
           mkdir -p prebuilds/linux-x64
@@ -139,8 +142,7 @@ jobs:
           
           echo "=== Prebuild Info ==="
           echo "Node-API version: 8"
-          echo "Build runtime: Electron 37"
-          echo "Compatible with: Node.js 16+, Electron 28+"
+          echo "Compatible with: Node.js 16+"
           echo "Prebuilds created:"
           ls -la prebuilds/linux-x64/
 
@@ -251,23 +253,16 @@ jobs:
           cmake --install build_shared --prefix $PkgDir --config Release
           Compress-Archive -Path "$PkgDir/*" -DestinationPath "$PkgDir.zip"
 
-      # --- Build Node.js Addon (Static, Node-API) ---
-      # Build for both Node.js AND Electron to ensure maximum compatibility.
-      # While Node-API provides ABI stability, using Electron headers during
-      # compilation ensures all V8/libuv internals are properly aligned.
+      # --- Build Node.js Addon (Static, Node-API 8 for Node.js >= 16) ---
       - name: Build Node.js Addon (Node-API 8)
         if: needs.check-tag.outputs.build-npm == 'true'
         shell: pwsh
         run: |
           npm install
           
-          # Build with cmake-js using Electron runtime for VS Code compatibility
-          # VS Code uses Electron, so we build against Electron headers
-          Write-Host "Building Node-API 8 addon with Electron runtime..."
-          
-          # Use Electron 37 (VS Code's current Electron version) as the build target
-          # The --runtime electron flag ensures we use Electron's Node headers
-          npx cmake-js compile --CDNAPI_VERSION=8 --runtime electron --runtime-version 37.0.0
+          # Build with cmake-js for Node.js (no Electron support)
+          Write-Host "Building Node-API 8 addon for Node.js..."
+          npx cmake-js compile --CDNAPI_VERSION=8
           
           # Create prebuilds directory
           New-Item -ItemType Directory -Path prebuilds/win32-x64 -Force
@@ -275,8 +270,7 @@ jobs:
           
           Write-Host "=== Prebuild Info ==="
           Write-Host "Node-API version: 8"
-          Write-Host "Build runtime: Electron 37"
-          Write-Host "Compatible with: Node.js 16+, Electron 28+"
+          Write-Host "Compatible with: Node.js 16+"
           Write-Host "Prebuilds created:"
           Get-ChildItem -Recurse prebuilds/
 
@@ -339,10 +333,68 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # ============================================================
-  # Publish to GitHub, PyPI, and NPM
+  # Build VS Code Extension (.vsix)
+  # ============================================================
+  build-vsix:
+    needs: check-tag
+    if: needs.check-tag.outputs.build-vsix == 'true'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Build VS Code Extension
+        shell: pwsh
+        working-directory: vscode-extension
+        run: |
+          Write-Host ">>> Step 1: Installing dependencies..." -ForegroundColor Cyan
+          pnpm install
+          
+          Write-Host ">>> Step 2: Cleaning up previous builds..." -ForegroundColor Cyan
+          if (Test-Path "out") { Remove-Item -Recurse -Force "out" }
+          if (Test-Path "*.vsix") { Remove-Item -Force "*.vsix" }
+          
+          Write-Host ">>> Step 3: Compiling extension..." -ForegroundColor Cyan
+          pnpm run compile
+          
+          Write-Host ">>> Step 4: Copying native modules..." -ForegroundColor Cyan
+          if (!(Test-Path "out/node_modules")) { New-Item -ItemType Directory -Path "out/node_modules" }
+          Copy-Item -Recurse -Force "node_modules/avioflow" "out/node_modules/"
+          
+          Write-Host ">>> Step 5: Packaging .vsix..." -ForegroundColor Cyan
+          # Extract version from tag
+          $tag = "${{ needs.check-tag.outputs.tag-name }}"
+          $version = $tag -replace '^v' -replace '-vsix$'
+          npx -y @vscode/vsce package --no-dependencies --allow-missing-repository -o "avioflow-$version.vsix"
+          
+          Write-Host ">>> Build complete!" -ForegroundColor Green
+          Get-ChildItem *.vsix
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vscode-extension
+          path: vscode-extension/*.vsix
+
+      - name: Cancel workflow on failure
+        if: failure()
+        run: gh run cancel ${{ github.run_id }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ============================================================
+  # Publish to GitHub, PyPI, NPM, and VS Code Marketplace
   # ============================================================
   publish:
-    needs: [check-tag, build-linux, build-python-linux, build-windows, build-python-windows]
+    needs: [check-tag, build-linux, build-python-linux, build-windows, build-python-windows, build-vsix]
     runs-on: ubuntu-latest
     if: |
       always() &&
@@ -351,12 +403,13 @@ jobs:
       (needs.build-linux.result == 'success' || needs.build-linux.result == 'skipped') &&
       (needs.build-windows.result == 'success' || needs.build-windows.result == 'skipped') &&
       (needs.build-python-linux.result == 'success' || needs.build-python-linux.result == 'skipped') &&
-      (needs.build-python-windows.result == 'success' || needs.build-python-windows.result == 'skipped')
+      (needs.build-python-windows.result == 'success' || needs.build-python-windows.result == 'skipped') &&
+      (needs.build-vsix.result == 'success' || needs.build-vsix.result == 'skipped')
     steps:
       - uses: actions/checkout@v4
 
       - name: Setup Node.js
-        if: needs.check-tag.outputs.build-npm == 'true'
+        if: needs.check-tag.outputs.build-npm == 'true' || needs.check-tag.outputs.build-vsix == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: '20'
@@ -371,7 +424,7 @@ jobs:
       # Prepare directories
       - name: Prepare release files
         run: |
-          mkdir -p dist pypi_dist prebuilds
+          mkdir -p dist pypi_dist prebuilds vsix_dist
           
           # C++ binaries (GitHub Release only)
           if [ "${{ needs.check-tag.outputs.build-cpp }}" == "true" ]; then
@@ -396,14 +449,22 @@ jobs:
             cp -r artifacts/windows-nodejs-prebuilds/* prebuilds/ || true
           fi
           
+          # VS Code extension
+          if [ "${{ needs.check-tag.outputs.build-vsix }}" == "true" ]; then
+            echo "Preparing VS Code extension..."
+            cp artifacts/vscode-extension/*.vsix vsix_dist/ || true
+            cp artifacts/vscode-extension/*.vsix dist/ || true
+          fi
+          
           echo "Release contents:"
           ls -la dist/ || true
           ls -la pypi_dist/ || true
           ls -la prebuilds/ || true
+          ls -la vsix_dist/ || true
 
       # Upload to GitHub Release
       - name: Upload to GitHub Release
-        if: needs.check-tag.outputs.build-cpp == 'true' || needs.check-tag.outputs.build-python == 'true'
+        if: needs.check-tag.outputs.build-cpp == 'true' || needs.check-tag.outputs.build-python == 'true' || needs.check-tag.outputs.build-vsix == 'true'
         uses: softprops/action-gh-release@v2
         with:
           files: |
@@ -432,3 +493,13 @@ jobs:
           fi
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      # Publish to VS Code Marketplace
+      - name: Publish to VS Code Marketplace
+        if: needs.check-tag.outputs.build-vsix == 'true'
+        run: |
+          VSIX_FILE=$(ls vsix_dist/*.vsix | head -n 1)
+          echo "Publishing $VSIX_FILE to VS Code Marketplace..."
+          npx -y @vscode/vsce publish --packagePath "$VSIX_FILE"
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
