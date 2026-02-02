@@ -1,0 +1,50 @@
+{
+  "name": "avioflow-wasm",
+  "version": "0.1.0",
+  "description": "High-performance audio decoding library (WebAssembly build)",
+  "author": "lxp3",
+  "license": "MIT",
+  "type": "module",
+  "main": "src/index.js",
+  "types": "src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.d.ts",
+      "import": "./src/index.js"
+    },
+    "./wasm": {
+      "import": "./dist/avioflow.js"
+    }
+  },
+  "files": [
+    "src/",
+    "dist/"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lxp3/avioflow.git",
+    "directory": "wasm"
+  },
+  "bugs": {
+    "url": "https://github.com/lxp3/avioflow/issues"
+  },
+  "homepage": "https://github.com/lxp3/avioflow#readme",
+  "keywords": [
+    "audio",
+    "ffmpeg",
+    "wasm",
+    "webassembly",
+    "decoder",
+    "mp3",
+    "wav",
+    "aac",
+    "flac"
+  ],
+  "engines": {
+    "node": ">=16"
+  },
+  "scripts": {
+    "build": "pwsh ./build.ps1",
+    "test": "node --experimental-wasm-modules tests/test-node.mjs"
+  }
+}

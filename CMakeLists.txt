@@ -172,6 +172,12 @@ if(ENABLE_NODE_JS)
     add_subdirectory(nodejs/csrc)
 endif()
 
+# --- WebAssembly Bindings ---
+option(ENABLE_WASM "Enable WebAssembly bindings" OFF)
+if(ENABLE_WASM)
+    add_subdirectory(wasm/csrc)
+endif()
+
 
 # --- Installation & Packaging ---
 # Only perform regular C++ installation if NOT building a Python wheel
