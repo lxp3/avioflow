@@ -133,19 +133,18 @@ jobs:
         run: |
           npm install
           
-          # Build with cmake-js for Node.js (no Electron support)
+          # Build with cmake-js for Node.js
           echo "Building Node-API 8 addon for Node.js..."
           npx cmake-js compile --CDCMAKE_BUILD_TYPE=Release --CDNAPI_VERSION=8
           
-          # Create prebuilds directory
-          mkdir -p prebuilds/linux-x64
-          cp build/bin/avioflow.node prebuilds/linux-x64/avioflow.napi.node
+          # Copy to platform-specific package directory
+          cp build/bin/avioflow.node npm-packages/@avioflow/linux-x64/avioflow.node
           
-          echo "=== Prebuild Info ==="
+          echo "=== Platform Package Info ==="
+          echo "Package: @avioflow/linux-x64"
           echo "Node-API version: 8"
           echo "Compatible with: Node.js 16+"
-          echo "Prebuilds created:"
-          ls -la prebuilds/linux-x64/
+          ls -la npm-packages/@avioflow/linux-x64/
 
       # Verify the built module works
       - name: Verify Node.js Addon
@@ -153,7 +152,7 @@ jobs:
         working-directory: nodejs
         run: |
           echo "Verifying native module loads correctly..."
-          node -e "const m = require('./prebuilds/linux-x64/avioflow.napi.node'); console.log('Exports:', Object.keys(m));"
+          node -e "const m = require('./npm-packages/@avioflow/linux-x64/avioflow.node'); console.log('Exports:', Object.keys(m));"
           node tests/test-offline-load.js
           echo "Verification passed!"
 
@@ -167,8 +166,8 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: needs.check-tag.outputs.build-npm == 'true'
         with:
-          name: linux-nodejs-prebuilds
-          path: nodejs/prebuilds/
+          name: npm-linux-x64
+          path: nodejs/npm-packages/@avioflow/linux-x64/
 
       - name: Cancel workflow on failure
         if: failure()
@@ -265,19 +264,18 @@ jobs:
         run: |
           npm install
           
-          # Build with cmake-js for Node.js (no Electron support)
+          # Build with cmake-js for Node.js
           Write-Host "Building Node-API 8 addon for Node.js..."
           npx cmake-js compile --CDNAPI_VERSION=8
           
-          # Create prebuilds directory
-          New-Item -ItemType Directory -Path prebuilds/win32-x64 -Force
-          Copy-Item build/bin/Release/avioflow.node prebuilds/win32-x64/avioflow.napi.node
+          # Copy to platform-specific package directory
+          Copy-Item build/bin/Release/avioflow.node npm-packages/@avioflow/win32-x64/avioflow.node
           
-          Write-Host "=== Prebuild Info ==="
+          Write-Host "=== Platform Package Info ==="
+          Write-Host "Package: @avioflow/win32-x64"
           Write-Host "Node-API version: 8"
           Write-Host "Compatible with: Node.js 16+"
-          Write-Host "Prebuilds created:"
-          Get-ChildItem -Recurse prebuilds/
+          Get-ChildItem npm-packages/@avioflow/win32-x64/
 
       # Verify the built module works
       - name: Verify Node.js Addon
@@ -286,7 +284,7 @@ jobs:
         working-directory: nodejs
         run: |
           Write-Host "Verifying native module loads correctly..."
-          node -e "const m = require('./prebuilds/win32-x64/avioflow.napi.node'); console.log('Exports:', Object.keys(m));"
+          node -e "const m = require('./npm-packages/@avioflow/win32-x64/avioflow.node'); console.log('Exports:', Object.keys(m));"
           node tests/test-offline-load.js
           Write-Host "Verification passed!"
 
@@ -300,8 +298,8 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: needs.check-tag.outputs.build-npm == 'true'
         with:
-          name: windows-nodejs-prebuilds
-          path: nodejs/prebuilds/
+          name: npm-win32-x64
+          path: nodejs/npm-packages/@avioflow/win32-x64/
 
       - name: Cancel workflow on failure
         if: failure()
@@ -450,7 +448,7 @@ jobs:
       # Prepare directories
       - name: Prepare release files
         run: |
-          mkdir -p dist pypi_dist prebuilds vsix_dist
+          mkdir -p dist pypi_dist vsix_dist
           
           # C++ binaries (GitHub Release only)
           if [ "${{ needs.check-tag.outputs.build-cpp }}" == "true" ]; then
@@ -468,11 +466,16 @@ jobs:
             cp artifacts/windows-python-wheels/*.whl pypi_dist/ || true
           fi
           
-          # Node.js prebuilds
+          # Node.js platform packages (copy native modules to package directories)
           if [ "${{ needs.check-tag.outputs.build-npm }}" == "true" ]; then
-            echo "Preparing npm prebuilds..."
-            cp -r artifacts/linux-nodejs-prebuilds/* prebuilds/ || true
-            cp -r artifacts/windows-nodejs-prebuilds/* prebuilds/ || true
+            echo "Preparing npm platform packages..."
+            # Copy the built .node files to the package directories
+            cp artifacts/npm-linux-x64/avioflow.node nodejs/npm-packages/@avioflow/linux-x64/ || true
+            cp artifacts/npm-win32-x64/avioflow.node nodejs/npm-packages/@avioflow/win32-x64/ || true
+            
+            echo "Platform packages prepared:"
+            ls -la nodejs/npm-packages/@avioflow/linux-x64/ || true
+            ls -la nodejs/npm-packages/@avioflow/win32-x64/ || true
           fi
           
           # VS Code extension (multi-platform)
@@ -487,7 +490,6 @@ jobs:
           echo "Release contents:"
           ls -la dist/ || true
           ls -la pypi_dist/ || true
-          ls -la prebuilds/ || true
           ls -la vsix_dist/ || true
 
       # Upload to GitHub Release
@@ -509,17 +511,43 @@ jobs:
           password: ${{ secrets.PYPI_API_TOKEN }}
           skip-existing: true
 
-      - name: Publish to NPM
+      # Publish platform-specific packages first, then main package
+      - name: Publish @avioflow/linux-x64 to NPM
         if: needs.check-tag.outputs.build-npm == 'true'
-        working-directory: nodejs
+        working-directory: nodejs/npm-packages/@avioflow/linux-x64
         run: |
-          # Copy prebuilds from artifacts
-          cp -r ../prebuilds/* prebuilds/ || true
-          
           PACKAGE_NAME=$(node -p "require('./package.json').name")
           PACKAGE_VERSION=$(node -p "require('./package.json').version")
           if npm view "$PACKAGE_NAME@$PACKAGE_VERSION" version > /dev/null 2>&1; then
-            echo "Version $PACKAGE_VERSION of $PACKAGE_NAME already exists on NPM. Skipping publish."
+            echo "Version $PACKAGE_VERSION of $PACKAGE_NAME already exists. Skipping."
+          else
+            npm publish --access public
+          fi
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish @avioflow/win32-x64 to NPM
+        if: needs.check-tag.outputs.build-npm == 'true'
+        working-directory: nodejs/npm-packages/@avioflow/win32-x64
+        run: |
+          PACKAGE_NAME=$(node -p "require('./package.json').name")
+          PACKAGE_VERSION=$(node -p "require('./package.json').version")
+          if npm view "$PACKAGE_NAME@$PACKAGE_VERSION" version > /dev/null 2>&1; then
+            echo "Version $PACKAGE_VERSION of $PACKAGE_NAME already exists. Skipping."
+          else
+            npm publish --access public
+          fi
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish avioflow (main package) to NPM
+        if: needs.check-tag.outputs.build-npm == 'true'
+        working-directory: nodejs
+        run: |
+          PACKAGE_NAME=$(node -p "require('./package.json').name")
+          PACKAGE_VERSION=$(node -p "require('./package.json').version")
+          if npm view "$PACKAGE_NAME@$PACKAGE_VERSION" version > /dev/null 2>&1; then
+            echo "Version $PACKAGE_VERSION of $PACKAGE_NAME already exists. Skipping."
           else
             npm publish --access public --provenance
           fi

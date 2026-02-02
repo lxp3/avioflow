@@ -1,6 +1,6 @@
 {
   "name": "avioflow",
-  "version": "0.1.13",
+  "version": "0.1.14",
   "description": "High-performance audio decoding and device discovery library using FFmpeg",
   "author": "lxp3",
   "license": "MIT",
@@ -17,17 +17,16 @@
   "files": [
     "src/index.js",
     "src/index.cjs",
-    "src/index.d.ts",
-    "prebuilds/"
+    "src/index.d.ts"
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/lxp3/avioflow.git"
+    "url": "git+https://github.com/AkitoLX/avioflow.git"
   },
   "bugs": {
-    "url": "https://github.com/lxp3/avioflow/issues"
+    "url": "https://github.com/AkitoLX/avioflow/issues"
   },
-  "homepage": "https://github.com/lxp3/avioflow#readme",
+  "homepage": "https://github.com/AkitoLX/avioflow#readme",
   "keywords": [
     "audio",
     "ffmpeg",
@@ -43,16 +42,15 @@
   "scripts": {
     "test": "node tests/test-offline-load.js",
     "build": "cmake-js compile",
-    "prebuild": "prebuildify --napi --strip --tag-libc",
-    "install": "node-gyp-build || echo 'Prebuild not found, native module may need to be built manually'"
+    "prebuild": "prebuildify --napi --strip --tag-libc"
   },
-  "dependencies": {
-    "node-addon-api": "^8.0.0",
-    "node-gyp-build": "^4.6.0"
+  "optionalDependencies": {
+    "@avioflow/win32-x64": "0.1.14",
+    "@avioflow/linux-x64": "0.1.14"
   },
   "devDependencies": {
     "cmake-js": "^7.3.0",
-    "electron": "39.0.0",
+    "node-addon-api": "^8.0.0",
     "prebuildify": "^6.0.0"
   }
 }
