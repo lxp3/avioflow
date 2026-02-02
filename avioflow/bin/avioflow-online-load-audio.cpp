@@ -33,11 +33,20 @@ std::string get_format_from_path(const std::string& path) {
 
 void test_online_decode(const std::string& path) {
     try {
-        // Get format from file extension
-        std::string format = get_format_from_path(path);
-        std::cout << "Detected format: " << format << "\n";
+        // Hardcode for zh.wav: 16kHz, Mono, s16le
+        const int SAMPLE_RATE = 16000;
+        const int CHANNELS = 1;
+        const int BYTES_PER_SAMPLE = 2;  // s16le
+        const int CHUNK_DURATION_MS = 100;
+        const int WAV_HEADER_SIZE = 44;
         
-        // Read file into memory first
+        // Calculate 100ms chunk size: 16000 * 1 * 2 * 0.1 = 3200 bytes
+        const size_t chunk_size = SAMPLE_RATE * CHANNELS * BYTES_PER_SAMPLE * CHUNK_DURATION_MS / 1000;
+        
+        std::cout << "Streaming with PCM format (s16le, " << SAMPLE_RATE << "Hz, " << CHANNELS << " channel)\n";
+        std::cout << "Chunk size: " << chunk_size << " bytes (" << CHUNK_DURATION_MS << "ms per chunk)\n";
+        
+        // Read file into memory
         std::ifstream file(path, std::ios::binary | std::ios::ate);
         if (!file.is_open()) {
             std::cerr << "Could not open file: " << path << "\n";
@@ -49,44 +58,99 @@ void test_online_decode(const std::string& path) {
         file.read(reinterpret_cast<char*>(buffer.data()), size);
         file.close();
         
-        // Setup streaming options with explicit format
+        // Skip WAV header (44 bytes), only use raw PCM data
+        if (size <= WAV_HEADER_SIZE) {
+            std::cerr << "File too small to contain valid WAV header\n";
+            return;
+        }
+        const uint8_t* pcm_data = buffer.data() + WAV_HEADER_SIZE;
+        size_t pcm_size = size - WAV_HEADER_SIZE;
+        
+        std::cout << "File size: " << size << " bytes\n";
+        std::cout << "PCM data size: " << pcm_size << " bytes (after skipping " << WAV_HEADER_SIZE << " byte header)\n";
+        
+        // Setup streaming options for raw PCM
         avioflow::AudioStreamOptions options;
-        options.input_format = format;
+        options.input_format = "s16le";           // Raw PCM format
+        options.input_sample_rate = SAMPLE_RATE;  // Must specify for raw PCM
+        options.input_channels = CHANNELS;        // Must specify for raw PCM
         
         avioflow::AudioDecoder decoder(options);
         
-        // Push all data at once (simulating chunked reads could be done with multiple push calls)
-        decoder.push(buffer.data(), buffer.size());
-
+        // Push first chunk to initialize decoder
+        if (pcm_size < chunk_size) {
+            std::cerr << "PCM data too small for even one chunk\n";
+            return;
+        }
+        decoder.push(pcm_data, chunk_size);
+        
+        // Now metadata should be available
         const auto& meta = decoder.get_metadata();
-        std::cout << "Successfully opened stream: " << path << "\n";
-        std::cout << "Container: " << meta.container << "\n";
-        std::cout << "Codec: " << meta.codec << "\n";
+        std::cout << "\n--- Initial Metadata (after first push) ---\n";
         std::cout << "Sample Format: " << meta.sample_format << "\n";
         std::cout << "Channels: " << meta.num_channels << "\n";
         std::cout << "Sample Rate: " << meta.sample_rate << " Hz\n";
-        std::cout << "Bit Rate: " << meta.bit_rate / 1000 << " kbps\n";
-        std::cout << "Initial Num Samples: " << meta.num_samples << "\n";
-        std::cout << "Initial Duration: " << meta.duration << " s\n";
-
-        // Decode all frames and count samples
+        
+        // Continue pushing remaining data in 100ms chunks
+        size_t offset = chunk_size;  // Start from second chunk
+        int chunk_count = 1;  // First chunk already pushed
         size_t total_samples = 0;
-        int frame_count = 0;
+        
+        std::cout << "\n--- Starting chunked streaming ---\n";
+        std::cout << "Chunk 1: Pushed " << chunk_size << " bytes (initialization)\n";
+        
+        while (offset < pcm_size) {
+            size_t current_chunk_size = std::min(chunk_size, pcm_size - offset);
+            chunk_count++;
+            
+            std::cout << "Chunk " << chunk_count << ": Pushing " << current_chunk_size << " bytes...";
+            decoder.push(pcm_data + offset, current_chunk_size);
+            offset += current_chunk_size;
+            
+            // Decode all available frames after this push
+            int frames_in_chunk = 0;
+            size_t samples_in_chunk = 0;
+            while (true) {
+                auto frame = decoder.decode_next();
+                if (!frame)
+                    break;
+                total_samples += frame.num_samples;
+                samples_in_chunk += frame.num_samples;
+                frames_in_chunk++;
+            }
+            
+            std::cout << " Decoded " << frames_in_chunk << " frames, " 
+                      << samples_in_chunk << " samples (Total: " << total_samples << ")\n";
+        }
+        
+        // Flush decoder
+        std::cout << "\nFlushing decoder...\n";
+        int flush_frames = 0;
+        size_t flush_samples = 0;
         while (!decoder.is_finished()) {
             auto frame = decoder.decode_next();
             if (!frame)
                 break;
             total_samples += frame.num_samples;
-            frame_count++;
+            flush_samples += frame.num_samples;
+            flush_frames++;
         }
-        std::cout << "Decoded " << total_samples << " samples per channel in "
-                  << frame_count << " frames (Chunked Read).\n";
+        if (flush_frames > 0) {
+            std::cout << "Flushed " << flush_frames << " frames, " << flush_samples << " samples\n";
+        }
 
         // Display finalized metadata
         const auto& final_meta = decoder.get_metadata();
-        std::cout << "--- Finalized Metadata ---\n";
-        std::cout << "Final Num Samples: " << final_meta.num_samples << "\n";
-        std::cout << "Final Duration: " << final_meta.duration << " s\n";
+        std::cout << "\n--- Finalized Metadata ---\n";
+        std::cout << "Sample Format: " << final_meta.sample_format << "\n";
+        std::cout << "Channels: " << final_meta.num_channels << "\n";
+        std::cout << "Sample Rate: " << final_meta.sample_rate << " Hz\n";
+        std::cout << "Total Samples: " << final_meta.num_samples << "\n";
+        std::cout << "Duration: " << final_meta.duration << " s\n";
+        
+        std::cout << "\n>>> Total Samples Decoded: " << total_samples << "\n";
+        std::cout << ">>> Total Chunks Pushed: " << chunk_count << "\n";
+        
     } catch (const std::exception& e) {
         std::cerr << "Error decoding stream: " << e.what() << "\n";
     }
