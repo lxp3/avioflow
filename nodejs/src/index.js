@@ -17,12 +17,12 @@ import { existsSync } from 'fs';
 
 const require = createRequire(import.meta.url);
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const projectDir = join(__dirname, '../..');
+const nodejsDir = join(__dirname, '..');  // nodejs/ directory
 
 // Platform detection
 const platform = process.platform === 'win32' ? 'win32' : process.platform === 'darwin' ? 'darwin' : 'linux';
 const arch = process.arch;
-const prebuildsDir = join(projectDir, 'prebuilds', `${platform}-${arch}`);
+const prebuildsDir = join(nodejsDir, 'prebuilds', `${platform}-${arch}`);
 
 // Runtime info for debugging
 const isElectron = !!(process.versions && process.versions.electron);
@@ -57,10 +57,10 @@ function tryLoad(modulePath, description) {
 
 // 1. Development builds (cmake-js output)
 const devPaths = [
-  join(projectDir, 'build/bin/Release/avioflow.node'),
-  join(projectDir, 'build/bin/avioflow.node'),
-  join(projectDir, 'build_static/bin/Release/avioflow.node'),
-  join(projectDir, 'build_static/bin/avioflow.node'),
+  join(nodejsDir, 'build/bin/Release/avioflow.node'),
+  join(nodejsDir, 'build/bin/avioflow.node'),
+  join(nodejsDir, 'build_static/bin/Release/avioflow.node'),
+  join(nodejsDir, 'build_static/bin/avioflow.node'),
 ];
 
 for (const p of devPaths) {
@@ -82,7 +82,7 @@ if (!addon) {
 if (!addon) {
   try {
     console.log('[avioflow] Attempting node-gyp-build fallback...');
-    addon = require('node-gyp-build')(projectDir);
+    addon = require('node-gyp-build')(nodejsDir);
     console.log('[avioflow] Loaded via node-gyp-build');
   } catch (e) {
     console.error(`[avioflow] Failed to load native module: ${e.message}`);

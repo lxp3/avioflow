@@ -32,11 +32,12 @@ param(
 
 $ErrorActionPreference = "Stop"
 $ProjectDir = $PSScriptRoot
-$PrebuildsDir = Join-Path $ProjectDir "prebuilds"
+$NodejsDir = Join-Path $ProjectDir "nodejs"
+$PrebuildsDir = Join-Path $NodejsDir "prebuilds"
 $Platform = if ($IsWindows -or $env:OS -eq "Windows_NT") { "win32" } else { "linux" }
 $Arch = "x64"
 $PlatformDir = Join-Path $PrebuildsDir "$Platform-$Arch"
-$TestScript = Join-Path $ProjectDir "tests\nodejs\test-local.js"
+$TestScript = Join-Path $NodejsDir "tests\test-offline-load.js"
 $NodeAPIVersion = 8
 
 # Colors and formatting
@@ -87,12 +88,17 @@ $CurrentStep = 0
 $CurrentStep++
 Write-Step $CurrentStep $TotalSteps "Installing pnpm dependencies..."
 
-$installResult = cmd /c "pnpm install 2>&1"
-if ($LASTEXITCODE -ne 0) {
-    Write-Fail "pnpm install failed"
-    exit 1
+Push-Location $NodejsDir
+try {
+    $installResult = cmd /c "pnpm install 2>&1"
+    if ($LASTEXITCODE -ne 0) {
+        Write-Fail "pnpm install failed"
+        exit 1
+    }
+    Write-Success "Dependencies installed"
+} finally {
+    Pop-Location
 }
-Write-Success "Dependencies installed"
 Write-Host ""
 
 # ============================================================================
@@ -103,7 +109,7 @@ if (-not $SkipBuild) {
     Write-Step $CurrentStep $TotalSteps "Building Node-API $NodeAPIVersion addon (universal build)..."
     
     # Clean previous build
-    $BuildDir = Join-Path $ProjectDir "build"
+    $BuildDir = Join-Path $NodejsDir "build"
     if (Test-Path $BuildDir) {
         Remove-Item -Recurse -Force $BuildDir 2>$null
     }
@@ -113,10 +119,16 @@ if (-not $SkipBuild) {
     # Note: cmake-js outputs info to stderr, which PowerShell treats as errors
     # We redirect stderr to stdout and check for the actual output file to determine success
     $ElectronVersion = "37.0.0"  # VS Code's current Electron version
-    Write-Info "Running: pnpm exec cmake-js compile --CDNAPI_VERSION=$NodeAPIVersion --runtime electron --runtime-version $ElectronVersion"
+    Write-Info "Running: pnpm exec cmake-js compile --CDNAPI_VERSION=$NodeAPIVersion --runtime electron --runtime-version $ElectronVersion --directory $ProjectDir --out $BuildDir"
     
     # Use cmd to avoid PowerShell stderr issues
-    $buildResult = cmd /c "pnpm exec cmake-js compile --CDNAPI_VERSION=$NodeAPIVersion --runtime electron --runtime-version $ElectronVersion 2>&1"
+    # cmake-js needs to run from nodejs dir (for node_modules) but point to root CMakeLists.txt
+    Push-Location $NodejsDir
+    try {
+        $buildResult = cmd /c "pnpm exec cmake-js compile --CDNAPI_VERSION=$NodeAPIVersion --runtime electron --runtime-version $ElectronVersion --directory `"$ProjectDir`" --out `"$BuildDir`" 2>&1"
+    } finally {
+        Pop-Location
+    }
     
     if ($VerboseOutput) { 
         $buildResult | ForEach-Object { Write-Host $_ }
@@ -125,8 +137,8 @@ if (-not $SkipBuild) {
     # Find and copy the .node file
     $NodeFile = $null
     $PossiblePaths = @(
-        "build/bin/Release/avioflow.node",
-        "build/bin/avioflow.node"
+        "nodejs/build/bin/Release/avioflow.node",
+        "nodejs/build/bin/avioflow.node"
     )
     foreach ($p in $PossiblePaths) {
         $FullPath = Join-Path $ProjectDir $p
@@ -149,7 +161,7 @@ if (-not $SkipBuild) {
     
     $FileSize = (Get-Item $NodeFile).Length / 1MB
     Write-Success "Build successful!"
-    Write-Info "Output: prebuilds\$Platform-$Arch\avioflow.napi.node"
+    Write-Info "Output: nodejs\prebuilds\$Platform-$Arch\avioflow.napi.node"
     Write-Info "Size: $([math]::Round($FileSize, 2)) MB"
     Write-Info "Node-API Version: $NodeAPIVersion (ABI Stable)"
     Write-Host ""
@@ -206,7 +218,9 @@ foreach ($ver in $ElectronVersions) {
     $env:ELECTRON_MIRROR = "https://npmmirror.com/mirrors/electron/"
     
     # Install specific Electron version (saved to devDependencies, kept locally)
+    Push-Location $NodejsDir
     $installOutput = cmd /c "pnpm add -D electron@$fullVersion 2>&1"
+    Pop-Location
     
     if ($LASTEXITCODE -ne 0) {
         Write-Host "SKIP (install failed)" -ForegroundColor DarkYellow
@@ -215,7 +229,7 @@ foreach ($ver in $ElectronVersions) {
     }
     
     # Manually run install.js to ensure binary is downloaded (pnpm may skip postinstall)
-    $electronInstallScript = Join-Path $ProjectDir "node_modules\.pnpm\electron@$fullVersion\node_modules\electron\install.js"
+    $electronInstallScript = Join-Path $NodejsDir "node_modules\.pnpm\electron@$fullVersion\node_modules\electron\install.js"
     if (Test-Path $electronInstallScript) {
         $null = cmd /c "node `"$electronInstallScript`" 2>&1"
     }
@@ -239,7 +253,7 @@ app.whenReady().then(async () => {
     
     try {
         // Load the native module directly (bypasses ESM loader issues)
-        const prebuildPath = path.join(__dirname, 'prebuilds', process.platform + '-' + process.arch, 'avioflow.napi.node');
+        const prebuildPath = path.join(__dirname, 'nodejs', 'prebuilds', process.platform + '-' + process.arch, 'avioflow.napi.node');
         console.log('Loading native module from:', prebuildPath);
         
         if (!fs.existsSync(prebuildPath)) {
@@ -293,9 +307,9 @@ app.on('window-all-closed', () => {});
     
     try {
         # Run Electron with our test script
-        $electronPath = Join-Path $ProjectDir "node_modules\.bin\electron.cmd"
+        $electronPath = Join-Path $NodejsDir "node_modules\.bin\electron.cmd"
         if (-not (Test-Path $electronPath)) {
-            $electronPath = Join-Path $ProjectDir "node_modules\.bin\electron"
+            $electronPath = Join-Path $NodejsDir "node_modules\.bin\electron"
         }
         
         $pinfo = New-Object System.Diagnostics.ProcessStartInfo

@@ -4,7 +4,7 @@ find_package(pybind11 CONFIG QUIET)
 # 2. If not found, fall back to downloading it via FetchContent
 if(NOT pybind11_FOUND)
     message(STATUS "pybind11 not found in environment, falling back to FetchContent...")
-    include(../../cmake/pybind11.cmake)
+    include(${CMAKE_SOURCE_DIR}/cmake/pybind11.cmake)
 endif()
 
 find_package(Python REQUIRED COMPONENTS Interpreter Development.Module)
@@ -17,7 +17,7 @@ set(PY_EXT_NAME _avioflow)
 pybind11_add_module(${PY_EXT_NAME} bindings.cpp)
 
 # Header include paths
-target_include_directories(${PY_EXT_NAME} PRIVATE ../include)
+target_include_directories(${PY_EXT_NAME} PRIVATE ${CMAKE_SOURCE_DIR}/avioflow/include)
 
 # Link main target
 target_link_libraries(${PY_EXT_NAME} PRIVATE avioflow)
@@ -34,7 +34,7 @@ set_target_properties(${PY_EXT_NAME} PROPERTIES
 # Copy __init__.py to the same directory
 add_custom_command(TARGET ${PY_EXT_NAME} POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy
-        "${CMAKE_CURRENT_SOURCE_DIR}/${PY_PACKAGE_NAME}/__init__.py"
+        "${CMAKE_SOURCE_DIR}/python/${PY_PACKAGE_NAME}/__init__.py"
         "$<TARGET_FILE_DIR:${PY_EXT_NAME}>/__init__.py"
     COMMENT "Copying __init__.py to package directory"
 )
@@ -70,6 +70,6 @@ elseif(WIN32)
     endif()
 endif()
 
-install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/${PY_PACKAGE_NAME}/__init__.py"
+install(FILES "${CMAKE_SOURCE_DIR}/python/${PY_PACKAGE_NAME}/__init__.py"
     DESTINATION "${PYTHON_INSTALL_DESTINATION}/${PY_PACKAGE_NAME}"
 )

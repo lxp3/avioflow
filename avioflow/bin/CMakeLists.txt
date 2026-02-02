@@ -14,3 +14,19 @@ endif()
 
 add_executable(avioflow-microphone-capture avioflow-microphone-capture.cpp)
 target_link_libraries(avioflow-microphone-capture PRIVATE avioflow)
+
+# Tests (moved from tests/ffmpeg/)
+add_executable(ffmpeg-decoder-offline-load-test decoder-offline-load-test.cpp)
+target_link_libraries(ffmpeg-decoder-offline-load-test PRIVATE avioflow)
+
+add_executable(ffmpeg-decoder-online-load-test decoder-online-load-test.cpp)
+target_link_libraries(ffmpeg-decoder-online-load-test PRIVATE avioflow)
+
+add_executable(ffmpeg-decoder-resample-test decoder-resample-test.cpp)
+target_link_libraries(ffmpeg-decoder-resample-test PRIVATE avioflow)
+
+add_executable(ffmpeg-device-list-test device-list-test.cpp)
+target_link_libraries(ffmpeg-device-list-test PRIVATE avioflow)
+
+add_executable(ffmpeg-info-test ffmpeg-info-test.cpp)
+target_link_libraries(ffmpeg-info-test PRIVATE avioflow)

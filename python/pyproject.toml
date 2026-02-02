@@ -6,7 +6,7 @@ build-backend = "scikit_build_core.build"
 name = "avioflow"
 version = "0.1.8"
 description = "High-performance audio decoding with FFmpeg and C++"
-readme = "README.md"
+readme = "../README.md"
 authors = [{name = "lxp3"}]
 requires-python = ">=3.8"
 dependencies = [
@@ -29,7 +29,8 @@ classifiers = [
 ]
 
 [tool.scikit-build]
-# Pass options to CMake
+# Pass options to CMake - use parent directory as source
+cmake.source-dir = ".."
 cmake.args = [
     "-DENABLE_PYTHON=ON",
     "-DENABLE_WASAPI=ON",
@@ -38,6 +39,3 @@ cmake.args = [
 
 # Ensure the build directory is separate
 build-dir = "build/{wheel_tag}"
-
-# We only want to include the files that are installed via CMake
-# scikit-build-core handles this automatically when using build-backend
