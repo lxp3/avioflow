@@ -134,6 +134,86 @@ Napi::Value Load(const Napi::CallbackInfo &info) {
   }
 }
 
+/**
+ * @brief Get waveform summary for visualization.
+ *
+ * Returns min/max values for each pixel column to support zooming.
+ *
+ * @param info Callback info containing:
+ *   - path (string): File path
+ *   - samplesPerPixel (number): How many samples to compress into one pixel
+ * @return Object: { metadata: Metadata, min: Float32Array[], max: Float32Array[] }
+ */
+Napi::Value GetWaveform(const Napi::CallbackInfo &info) {
+  Napi::Env env = info.Env();
+  if (info.Length() < 2 || !info[0].IsString() || !info[1].IsNumber()) {
+    Napi::TypeError::New(env, "String path and Number samplesPerPixel expected")
+        .ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
+
+  std::string path = info[0].As<Napi::String>().Utf8Value();
+  int32_t samplesPerPixel = info[1].As<Napi::Number>().Int32Value();
+  if (samplesPerPixel < 1) samplesPerPixel = 1;
+
+  AudioStreamOptions opts;
+  // Limit output sample rate to reduce decoding overhead for waveform only
+  opts.output_sample_rate = 16000; 
+
+  try {
+    AudioDecoder decoder(opts);
+    decoder.open(path);
+    auto meta = decoder.get_metadata();
+    auto all_samples = decoder.get_all_samples();
+
+    if (all_samples.empty()) return env.Undefined();
+
+    size_t numChannels = all_samples.size();
+    size_t totalSamples = all_samples[0].size();
+    size_t numPixels = (totalSamples + samplesPerPixel - 1) / samplesPerPixel;
+
+    Napi::Array minArr = Napi::Array::New(env, numChannels);
+    Napi::Array maxArr = Napi::Array::New(env, numChannels);
+
+    for (size_t c = 0; c < numChannels; ++c) {
+      Napi::Float32Array minData = Napi::Float32Array::New(env, numPixels);
+      Napi::Float32Array maxData = Napi::Float32Array::New(env, numPixels);
+      
+      const auto& channelData = all_samples[c];
+
+      for (size_t p = 0; p < numPixels; ++p) {
+        float minVal = 0.0f;
+        float maxVal = 0.0f;
+        size_t start = p * samplesPerPixel;
+        size_t end = std::min(start + samplesPerPixel, totalSamples);
+
+        if (start < totalSamples) {
+          minVal = channelData[start];
+          maxVal = channelData[start];
+          for (size_t s = start + 1; s < end; ++s) {
+            float val = channelData[s];
+            if (val < minVal) minVal = val;
+            if (val > maxVal) maxVal = val;
+          }
+        }
+        minData[p] = minVal;
+        maxData[p] = maxVal;
+      }
+      minArr[c] = minData;
+      maxArr[c] = maxData;
+    }
+
+    Napi::Object result = Napi::Object::New(env);
+    result.Set("metadata", MetadataToJs(env, meta));
+    result.Set("min", minArr);
+    result.Set("max", maxArr);
+    return result;
+  } catch (const std::exception &e) {
+    Napi::Error::New(env, e.what()).ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
+}
+
 // --- AudioDecoder Class ---
 
 /**
@@ -294,6 +374,7 @@ Napi::Object InitAll(Napi::Env env, Napi::Object exports) {
   exports.Set("setLogLevel", Napi::Function::New(env, SetLogLevel));
   exports.Set("listAudioDevices", Napi::Function::New(env, ListAudioDevices));
   exports.Set("load", Napi::Function::New(env, Load));
+  exports.Set("getWaveform", Napi::Function::New(env, GetWaveform));
 
   // Classes
   AudioDecoderAddon::Init(env, exports);

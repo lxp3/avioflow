@@ -91,4 +91,11 @@ if (!addon) {
   }
 }
 
+// Export individual functions for easier access
+export const setLogLevel = addon.setLogLevel;
+export const listAudioDevices = addon.listAudioDevices;
+export const load = addon.load;
+export const getWaveform = addon.getWaveform;
+export const AudioDecoder = addon.AudioDecoder;
+
 export default addon;

@@ -3,6 +3,8 @@
 
     let metadata: any = null;
     let samples: Float32Array[] = [];
+    let minData: Float32Array[] = [];
+    let maxData: Float32Array[] = [];
     let isPlaying = false;
     let currentTime = 0;
     let duration = 0;
@@ -10,6 +12,8 @@
     let canvasWidth = 0;
     let canvasHeight = 0;
     let filePath = "";
+    let uiStartTime = 0;
+    let finalTotalTime = 0;
 
     let audioContext: AudioContext;
     let audioBuffer: AudioBuffer | null = null;
@@ -22,15 +26,42 @@
     let waveformSummary: { min: Float32Array; max: Float32Array }[] = [];
 
     onMount(() => {
+        const handleInteraction = () => {
+            if (audioContext && audioContext.state === "suspended") {
+                audioContext.resume();
+            }
+        };
+        window.addEventListener("click", handleInteraction);
+        window.addEventListener("keydown", handleInteraction);
+
         window.addEventListener("message", (event) => {
             const message = event.data;
             switch (message.type) {
+                case "loading":
+                    uiStartTime = Date.now();
+                    break;
                 case "init":
                     filePath = message.filePath || "";
                     metadata = message.metadata;
-                    samples = message.samples.map((ch: any) =>
-                        ch instanceof Float32Array ? ch : new Float32Array(ch),
-                    );
+                    
+                    // Calculate total time from click to UI display
+                    if (uiStartTime > 0) {
+                        finalTotalTime = Date.now() - uiStartTime;
+                    }
+
+                    if (message.samples) {
+                        samples = message.samples.map((ch: any) =>
+                            ch instanceof Float32Array ? ch : new Float32Array(ch),
+                        );
+                    }
+                    if (message.min && message.max) {
+                        minData = message.min.map((ch: any) =>
+                            ch instanceof Float32Array ? ch : new Float32Array(ch),
+                        );
+                        maxData = message.max.map((ch: any) =>
+                            ch instanceof Float32Array ? ch : new Float32Array(ch),
+                        );
+                    }
                     duration = metadata.duration;
                     initAudio();
                     break;
@@ -65,17 +96,23 @@
                 (window as any).webkitAudioContext)();
         }
 
-        // Create AudioBuffer from samples
-        const numChannels = samples.length;
-        const length = samples[0].length;
-        audioBuffer = audioContext.createBuffer(
-            numChannels,
-            length,
-            metadata.sampleRate,
-        );
+        // Create AudioBuffer from samples if available
+        if (samples && samples.length > 0) {
+            const numChannels = samples.length;
+            const length = samples[0].length;
+            audioBuffer = audioContext.createBuffer(
+                numChannels,
+                length,
+                metadata.sampleRate,
+            );
 
-        for (let i = 0; i < numChannels; i++) {
-            audioBuffer.copyToChannel(samples[i], i);
+            for (let i = 0; i < numChannels; i++) {
+                // Ensure we have a Float32Array
+                const channelData = samples[i] instanceof Float32Array 
+                    ? samples[i] 
+                    : new Float32Array(samples[i]);
+                audioBuffer.copyToChannel(channelData, i);
+            }
         }
 
         calculateSummary();
@@ -83,6 +120,15 @@
     }
 
     function calculateSummary() {
+        // If we already have minData/maxData from C++, use them directly
+        if (minData.length > 0 && maxData.length > 0) {
+            waveformSummary = minData.map((min, i) => ({
+                min: min,
+                max: maxData[i]
+            }));
+            return;
+        }
+
         if (samples.length === 0 || canvasWidth === 0) return;
 
         const width = Math.ceil(canvasWidth);
@@ -143,7 +189,7 @@
     }
 
     function drawWaveform() {
-        if (!canvas || waveformSummary.length === 0) return;
+        if (!canvas || (waveformSummary.length === 0 && minData.length === 0)) return;
 
         const dpr = window.devicePixelRatio || 1;
         const displayWidth = canvas.offsetWidth;
@@ -176,25 +222,32 @@
         waveformSummary.forEach((summary, chIndex) => {
             const yBase = chIndex * channelHeight + halfChannelHeight;
             const playedWidth = Math.floor((currentTime / duration) * width);
+            
+            const numPoints = summary.min.length;
+            const stepX = width / numPoints;
 
             // 1. Draw unplayed part (background)
             ctx.beginPath();
             ctx.strokeStyle = "#d1d1d6";
-            ctx.lineWidth = 1;
-            for (let i = playedWidth; i < width; i++) {
-                const x = i + 0.5;
+            ctx.lineWidth = Math.max(1, stepX);
+            
+            // Calculate which point to start drawing from based on playedWidth
+            const startPoint = Math.floor(playedWidth / stepX);
+            
+            for (let i = startPoint; i < numPoints; i++) {
+                const x = i * stepX + 0.5;
                 ctx.moveTo(x, yBase + summary.min[i] * drawHeight);
                 ctx.lineTo(x, yBase + summary.max[i] * drawHeight);
             }
             ctx.stroke();
 
             // 2. Draw played part (foreground)
-            if (playedWidth > 0) {
+            if (startPoint > 0) {
                 ctx.beginPath();
                 ctx.strokeStyle = "#007aff";
-                ctx.lineWidth = 1;
-                for (let i = 0; i < playedWidth; i++) {
-                    const x = i + 0.5;
+                ctx.lineWidth = Math.max(1, stepX);
+                for (let i = 0; i < startPoint; i++) {
+                    const x = i * stepX + 0.5;
                     ctx.moveTo(x, yBase + summary.min[i] * drawHeight);
                     ctx.lineTo(x, yBase + summary.max[i] * drawHeight);
                 }
@@ -232,9 +285,22 @@
     }
 
     function play() {
+        console.log("[App] Play requested", { hasBuffer: !!audioBuffer, state: audioContext?.state });
         if (!audioBuffer) return;
+        
         if (audioContext.state === "suspended") {
-            audioContext.resume();
+            audioContext.resume().then(() => {
+                console.log("[App] AudioContext resumed");
+                startSourceNode();
+            });
+        } else {
+            startSourceNode();
+        }
+    }
+
+    function startSourceNode() {
+        if (sourceNode) {
+            sourceNode.stop();
         }
 
         sourceNode = audioContext.createBufferSource();
@@ -353,6 +419,10 @@
                         >
                     </button>
                 </div>
+                <div class="stats-row">
+                    <span class="stat-item">total time: <span class="stat-value">{finalTotalTime}ms</span></span>
+                    <span class="stat-item">decode time: <span class="stat-value">{metadata.nativeDecodeTimeMs || 0}ms</span></span>
+                </div>
                 <div class="title-row">
                     <svg
                         class="file-icon"
@@ -417,7 +487,8 @@
             <div
                 class="waveform-container"
                 bind:clientWidth={canvasWidth}
-                style="height: {metadata.numChannels * 160}px"
+                bind:clientHeight={canvasHeight}
+                style="height: {metadata.numChannels * 200}px; min-height: 200px; max-height: 600px;"
             >
                 <canvas bind:this={canvas} on:click={handleSeek}></canvas>
                 <div class="channel-overlay">
@@ -580,6 +651,23 @@
         color: #007aff;
     }
 
+    .stats-row {
+        display: flex;
+        gap: 16px;
+        margin-top: 4px;
+    }
+
+    .stat-item {
+        font-size: 12px;
+        color: #86868b;
+        font-weight: 500;
+    }
+
+    .stat-value {
+        color: #007aff;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    }
+
     .metadata-card {
         background: rgba(255, 255, 255, 0.8);
         backdrop-filter: blur(20px);
@@ -627,7 +715,7 @@
         flex: 1;
         display: flex;
         min-height: 0;
-        overflow-y: auto;
+        overflow-y: auto; /* Allow scrolling if waveform is tall */
     }
 
     .waveform-container {
@@ -639,6 +727,7 @@
         cursor: pointer;
         overflow: hidden;
         box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.02);
+        flex-shrink: 0; /* Prevent shrinking below fixed height */
     }
 
     .channel-overlay {

@@ -6,6 +6,8 @@ High-performance audio previewer for VS Code using the `avioflow` native engine.
 
 To ensure stability and performance, this extension uses a decoupled architecture where the heavy audio decoding is offloaded to a persistent external Node.js process. This bypasses Electron ABI compatibility issues and prevents the extension host from crashing.
 
+code --install-extension avioflow-0.1.0.vsix
+
 ```mermaid
 avioflow-0.1.0.vsix
 ├─ [Content_Types].xml

@@ -64,6 +64,16 @@ export interface LoadResult {
     samples: Float32Array[];
 }
 
+/** Result from the getWaveform() function */
+export interface WaveformResult {
+    /** Audio stream metadata */
+    metadata: Metadata;
+    /** Minimum values for each pixel column. Array of Float32Array, one per channel. */
+    min: Float32Array[];
+    /** Maximum values for each pixel column. Array of Float32Array, one per channel. */
+    max: Float32Array[];
+}
+
 /**
  * High-performance audio decoder with file and streaming support.
  * 
@@ -157,11 +167,24 @@ export function listAudioDevices(): DeviceInfo[];
  */
 export function load(path: string, options?: Pick<AudioDecoderOptions, 'outputSampleRate' | 'outputNumChannels'>): LoadResult;
 
+/**
+ * Get waveform summary for visualization.
+ * 
+ * This function decodes the audio at a reduced sample rate (16000 Hz) and
+ * calculates the min/max values for each pixel column to support zooming.
+ * 
+ * @param path Path to audio file or URL
+ * @param samplesPerPixel How many samples to compress into one pixel (zoom level)
+ * @returns Object containing metadata and min/max waveform data
+ */
+export function getWaveform(path: string, samplesPerPixel: number): WaveformResult;
+
 declare const avioflow: {
     AudioDecoder: typeof AudioDecoder;
     setLogLevel: typeof setLogLevel;
     listAudioDevices: typeof listAudioDevices;
     load: typeof load;
+    getWaveform: typeof getWaveform;
 };
 
 export default avioflow;
