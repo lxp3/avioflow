@@ -32,7 +32,7 @@ wasm/
 
 ## Build Requirements
 
-### Install Emscripten SDK
+### 1. Install Emscripten SDK
 
 ```bash
 # Clone emsdk
@@ -49,16 +49,45 @@ source ./emsdk_env.sh   # Linux/macOS
 emsdk_env.bat           # Windows
 ```
 
-### Build WASM Module
+### 2. Build FFmpeg for WebAssembly
+
+**Important:** FFmpeg must be compiled from source to WASM format. This project uses FFmpeg 7.1 with only audio decoders enabled.
+
+**On Linux/macOS/WSL:**
+```bash
+cd wasm/scripts
+chmod +x build-ffmpeg-wasm.sh
+./build-ffmpeg-wasm.sh
+```
+
+**On Windows (requires WSL):**
+```powershell
+cd wasm/scripts
+./build-ffmpeg-wasm.ps1   # Automatically calls WSL
+```
+
+This will:
+- Download FFmpeg 7.1 source code (~15MB)
+- Compile with minimal audio decoders (MP3, AAC, FLAC, Opus, Vorbis, PCM)
+- Output to `wasm/ffmpeg-wasm/` (~8MB)
+
+⏱️ **Build time:** 15-30 minutes depending on your machine.
+
+### 3. Build avioflow WASM Module
 
 ```powershell
-cd avioflow/wasm
+cd wasm
 ./build.ps1
 ```
 
+Or build FFmpeg and avioflow together:
+```powershell
+./build.ps1 -BuildFFmpeg
+```
+
 Output files:
-- `dist/avioflow.js` - JavaScript loader
-- `dist/avioflow.wasm` - WebAssembly binary
+- `dist/avioflow.js` - JavaScript loader + glue code
+- `dist/avioflow.wasm` - WebAssembly binary (~5-10MB)
 
 ## Usage
 

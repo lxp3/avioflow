@@ -1,7 +1,12 @@
 include(FetchContent)
 
 # 1. Determine Platform Config and Include it
-if(WIN32)
+if(EMSCRIPTEN)
+    # WebAssembly build - use pre-compiled FFmpeg WASM
+    set(FFMPEG_PLATFORM_CONFIG "cmake/ffmpeg-wasm.cmake")
+    include(${FFMPEG_PLATFORM_CONFIG})
+    return()  # ffmpeg-wasm.cmake handles everything
+elseif(WIN32)
     if(BUILD_SHARED_LIBS STREQUAL "ON")
         set(FFMPEG_PLATFORM_CONFIG "cmake/ffmpeg-win-shared.cmake")
     else()
