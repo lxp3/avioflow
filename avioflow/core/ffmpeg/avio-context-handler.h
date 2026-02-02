@@ -37,8 +37,7 @@ namespace avioflow
   private:
     struct MemoryContext
     {
-      const uint8_t *data;
-      size_t size;
+      std::vector<uint8_t> data;  // Owns the data copy
       size_t pos;
     };
 
