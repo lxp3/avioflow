@@ -249,13 +249,19 @@ PYBIND11_MODULE(_avioflow, m) {
         
         .def("__call__", [](AudioDecoder& self, py::bytes data) -> py::array_t<float> {
             std::string s = data;
-            self.push(reinterpret_cast<const uint8_t*>(s.data()), s.size());
+            if (s.size() > 0) {
+                self.push(reinterpret_cast<const uint8_t*>(s.data()), s.size());
+            }
             
             std::vector<std::vector<float>> total_samples;
-            while (true) {
-                auto frame = self.decode_next();
+            int max_frames_per_call = 100; // Prevent infinite loop
+            int frames_decoded = 0;
+
+            while (frames_decoded < max_frames_per_call) {
+                FrameData frame = self.decode_next();
                 if (!frame) break;
                 
+                frames_decoded++;
                 if (total_samples.empty()) {
                     total_samples.resize(frame.num_channels);
                 }
@@ -265,7 +271,9 @@ PYBIND11_MODULE(_avioflow, m) {
                 }
             }
             
-            if (total_samples.empty()) return py::array_t<float>();
+            if (total_samples.empty()) {
+                return py::array_t<float>(std::vector<size_t>{0, 0});
+            }
             
             size_t num_channels = total_samples.size();
             size_t num_samples = total_samples[0].size();
@@ -307,7 +315,7 @@ PYBIND11_MODULE(_avioflow, m) {
         .def("get_all_samples", [](AudioDecoder& self) -> py::array_t<float> {
             std::vector<std::vector<float>> total_samples;
             while (!self.is_finished()) {
-                auto frame = self.decode_next();
+                FrameData frame = self.decode_next();
                 if (!frame) break;
                 
                 if (total_samples.empty()) {
@@ -319,7 +327,9 @@ PYBIND11_MODULE(_avioflow, m) {
                 }
             }
             
-            if (total_samples.empty()) return py::array_t<float>();
+            if (total_samples.empty()) {
+                return py::array_t<float>(std::vector<size_t>{0, 0});
+            }
             
             size_t num_channels = total_samples.size();
             size_t num_samples = total_samples[0].size();
@@ -351,12 +361,52 @@ PYBIND11_MODULE(_avioflow, m) {
                 >>> print(f"Shape: {samples.shape}")  # e.g., (1, 160000) for 10s mono
         )pbdoc")
         
+        .def("push", [](AudioDecoder& self, py::bytes data, size_t size) {
+            std::string s = data;
+            if (s.size() < size) {
+                throw std::invalid_argument("Data size smaller than specified size");
+            }
+            self.push(reinterpret_cast<const uint8_t*>(s.data()), size);
+        },
+        py::arg("data"),
+        py::arg("size"),
+        R"pbdoc(
+            Push raw audio data bytes to the decoder (stream mode only).
+            
+            Args:
+                data (bytes): Raw audio data bytes
+                size (int): Number of bytes to push
+            
+            Note:
+                This method initializes the decoder on first call.
+                Use decode_next() or __call__() to retrieve decoded frames.
+            
+            Example:
+                >>> decoder = AudioDecoder(input_format="s16le", input_sample_rate=16000, input_channels=1)
+                >>> with open("audio.raw", "rb") as f:
+                ...     chunk = f.read(3200)  # 100ms @ 16kHz mono
+                ...     decoder.push(chunk, len(chunk))
+                ...     samples = decoder.decode_next()
+        )pbdoc")
+        
         .def("is_finished", &AudioDecoder::is_finished,
         R"pbdoc(
             Check if end of stream has been reached.
             
             Returns:
                 bool: True if all audio data has been decoded.
+        )pbdoc")
+        
+        .def("get_metadata", &AudioDecoder::get_metadata,
+        py::return_value_policy::reference_internal,
+        R"pbdoc(
+            Get current audio stream metadata.
+            
+            Returns:
+                Metadata: Audio stream metadata object.
+            
+            Note:
+                For stream mode, metadata is only available after first push().
         )pbdoc");
 
     // --- DeviceManager ---
