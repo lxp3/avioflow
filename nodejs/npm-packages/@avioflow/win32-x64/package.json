@@ -1,0 +1,15 @@
+{
+  "name": "@avioflow/win32-x64",
+  "version": "0.1.14",
+  "description": "Windows x64 native bindings for avioflow",
+  "os": ["win32"],
+  "cpu": ["x64"],
+  "main": "avioflow.node",
+  "files": ["avioflow.node"],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AkitoLX/avioflow.git",
+    "directory": "nodejs/npm-packages/@avioflow/win32-x64"
+  }
+}

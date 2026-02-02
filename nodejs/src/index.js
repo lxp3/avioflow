@@ -7,7 +7,9 @@
  * - Node.js 16, 18, 20, 22+ (all versions supporting Node-API 8)
  * - Electron 28, 30, 32, 34, 37, 38, 39+ (all versions with Node-API 8)
  * 
- * NO separate Electron-specific builds are required!
+ * Native bindings are loaded from platform-specific optional dependencies:
+ * - @avioflow/win32-x64 (Windows x64)
+ * - @avioflow/linux-x64 (Linux x64)
  */
 
 import { createRequire } from 'module';
@@ -20,9 +22,9 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const nodejsDir = join(__dirname, '..');  // nodejs/ directory
 
 // Platform detection
-const platform = process.platform === 'win32' ? 'win32' : process.platform === 'darwin' ? 'darwin' : 'linux';
+const platform = process.platform;
 const arch = process.arch;
-const prebuildsDir = join(nodejsDir, 'prebuilds', `${platform}-${arch}`);
+const platformKey = `${platform}-${arch}`;
 
 // Runtime info for debugging
 const isElectron = !!(process.versions && process.versions.electron);
@@ -52,10 +54,27 @@ function tryLoad(modulePath, description) {
   }
 }
 
-// === Loading Strategy ===
-// Node-API modules are ABI-stable, so we use ONE binary for all runtimes
+/**
+ * Try to require a package by name
+ * @param {string} packageName - NPM package name
+ * @param {string} description - Description for logging
+ * @returns {boolean} - True if loaded successfully
+ */
+function tryRequire(packageName, description) {
+  try {
+    addon = require(packageName);
+    console.log(`[avioflow] Loaded ${description} from package: ${packageName}`);
+    return true;
+  } catch (e) {
+    // Package not installed (expected for non-matching platforms)
+    return false;
+  }
+}
 
-// 1. Development builds (cmake-js output)
+// === Loading Strategy ===
+// Priority: 1) Dev builds -> 2) Platform packages -> 3) Legacy prebuilds
+
+// 1. Development builds (cmake-js output) - for local development
 const devPaths = [
   join(nodejsDir, 'build/bin/Release/avioflow.node'),
   join(nodejsDir, 'build/bin/avioflow.node'),
@@ -67,28 +86,42 @@ for (const p of devPaths) {
   if (tryLoad(p, 'development build')) break;
 }
 
-// 2. Prebuilt binaries (npm distribution)
-// Node-API 8 binary works for BOTH Node.js and Electron!
+// 2. Platform-specific npm packages (recommended for production)
+// npm automatically installs only the package for current platform via optionalDependencies
 if (!addon) {
-  console.log(`[avioflow] Runtime: ${runtimeInfo}`);
-  console.log(`[avioflow] Searching prebuilds in: ${prebuildsDir}`);
+  console.log(`[avioflow] Runtime: ${runtimeInfo}, Platform: ${platformKey}`);
   
-  // Single prebuild file for all runtimes (Node-API ABI stability)
-  const prebuildPath = join(prebuildsDir, 'avioflow.napi.node');
-  tryLoad(prebuildPath, 'prebuild (Node-API 8)');
+  // Map platform to package name
+  const platformPackages = {
+    'win32-x64': '@avioflow/win32-x64',
+    'linux-x64': '@avioflow/linux-x64',
+    'darwin-x64': '@avioflow/darwin-x64',
+    'darwin-arm64': '@avioflow/darwin-arm64',
+  };
+  
+  const packageName = platformPackages[platformKey];
+  if (packageName) {
+    tryRequire(packageName, `platform package (${platformKey})`);
+  }
 }
 
-// 3. Fallback to node-gyp-build (for compatibility with various build systems)
+// 3. Legacy: prebuilds directory (for backward compatibility)
 if (!addon) {
-  try {
-    console.log('[avioflow] Attempting node-gyp-build fallback...');
-    addon = require('node-gyp-build')(nodejsDir);
-    console.log('[avioflow] Loaded via node-gyp-build');
-  } catch (e) {
-    console.error(`[avioflow] Failed to load native module: ${e.message}`);
-    console.error('[avioflow] Please ensure the native module is built or prebuilds are available.');
-    throw new Error(`avioflow native module not found. Runtime: ${runtimeInfo}, Platform: ${platform}-${arch}`);
-  }
+  const prebuildsDir = join(nodejsDir, 'prebuilds', platformKey);
+  const prebuildPath = join(prebuildsDir, 'avioflow.napi.node');
+  tryLoad(prebuildPath, 'legacy prebuild');
+}
+
+// 4. Final check
+if (!addon) {
+  const supportedPlatforms = ['win32-x64', 'linux-x64'];
+  const errorMsg = supportedPlatforms.includes(platformKey)
+    ? `Native module not found. Please reinstall: npm install avioflow`
+    : `Platform ${platformKey} is not supported. Supported: ${supportedPlatforms.join(', ')}`;
+  
+  console.error(`[avioflow] ${errorMsg}`);
+  console.error(`[avioflow] Runtime: ${runtimeInfo}`);
+  throw new Error(`avioflow: ${errorMsg}`);
 }
 
 // Export individual functions for easier access
