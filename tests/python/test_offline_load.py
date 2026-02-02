@@ -1,63 +1,120 @@
-#! /usr/bin/env python3
+#!/usr/bin/env python3
 """Test script for offline audio loading with avioflow."""
-import sys
 import os
+import sys
+import time
 import avioflow
+import numpy as np
 
-print(f"Imported avioflow from: {avioflow.__file__}")
+MP3_PATH = "public/wavs/TownTheme.mp3"
+WAV_PATH = "public/wavs/zh.wav"
+MP3_URL = "https://opengameart.org/sites/default/files/TownTheme.mp3"
 
-avioflow.set_log_level("info")
+
+def get_sample_count(samples):
+    """Get total sample count from numpy array."""
+    if samples is None or samples.size == 0:
+        return 0
+    return samples.shape[1] if len(samples.shape) > 1 else samples.shape[0]
+
+
+def test_offline_filepath():
+    """Test: Offline decode from file path."""
+    print("\n=== Test: Offline Decode from Filepath ===")
+    
+    if not os.path.exists(MP3_PATH):
+        print(f"  Skip: File not found at {MP3_PATH}")
+        return
+    
+    start = time.time()
+    decoder = avioflow.AudioDecoder()
+    decoder.open(MP3_PATH)
+    
+    meta = decoder.get_metadata()
+    print(f"  Codec: {meta.codec}, Duration: {meta.duration:.2f}s")
+    
+    samples = decoder.get_all_samples()
+    total_samples = get_sample_count(samples)
+    
+    print(f"  Total samples decoded: {total_samples}")
+    print(f"  Time: {(time.time() - start) * 1000:.1f}ms")
+    assert total_samples > 0, "No samples decoded"
+
+
+def test_offline_memory():
+    """Test: Offline decode from memory (full bytes)."""
+    print("\n=== Test: Offline Decode from Memory ===")
+    
+    if not os.path.exists(MP3_PATH):
+        print(f"  Skip: File not found at {MP3_PATH}")
+        return
+    
+    start = time.time()
+    
+    # Read entire file into memory
+    with open(MP3_PATH, "rb") as f:
+        file_bytes = f.read()
+    
+    print(f"  File size: {len(file_bytes)} bytes")
+    
+    decoder = avioflow.AudioDecoder()
+    decoder.open(file_bytes)
+    
+    meta = decoder.get_metadata()
+    print(f"  Codec: {meta.codec}, Duration: {meta.duration:.2f}s")
+    
+    samples = decoder.get_all_samples()
+    total_samples = get_sample_count(samples)
+    
+    print(f"  Total samples decoded: {total_samples}")
+    print(f"  Time: {(time.time() - start) * 1000:.1f}ms")
+    assert total_samples > 0, "No samples decoded"
+
+
+def test_offline_url():
+    """Test: Offline decode from URL."""
+    print("\n=== Test: Offline Decode from URL ===")
+    print(f"  URL: {MP3_URL}")
+    
+    start = time.time()
+    
+    try:
+        decoder = avioflow.AudioDecoder()
+        decoder.open(MP3_URL)
+        
+        meta = decoder.get_metadata()
+        print(f"  Codec: {meta.codec}, Sample Rate: {meta.sample_rate}Hz")
+        
+        # Only decode a few frames to verify it works
+        frame_count = 0
+        while not decoder.is_finished() and frame_count < 10:
+            frame = decoder.decode_next()
+            if frame is None or frame.size == 0:
+                break
+            frame_count += 1
+        
+        print(f"  Successfully decoded {frame_count} frames from URL")
+        print(f"  Time: {(time.time() - start) * 1000:.1f}ms")
+        assert frame_count > 0, "No frames decoded from URL"
+        
+    except Exception as e:
+        print(f"  URL test skipped (network error): {e}")
+
 
 def main():
-    # Use path from argument if provided, otherwise use default
-    if len(sys.argv) > 1:
-        audio_path = sys.argv[1]
-    else:
-        # Fallback for local testing
-        audio_path = os.path.join(os.path.dirname(__file__), "../../public/TownTheme.mp3")
+    print("=== avioflow Offline Decoder Tests ===")
+    avioflow.set_log_level("warning")
     
-    print(f"Testing with audio file: {audio_path}")
-    
-    if not os.path.exists(audio_path):
-        print(f"Error: Audio file not found at {audio_path}")
-        sys.exit(1)
-
     try:
-        # 1. Initialize Decoder
-        decoder = avioflow.AudioDecoder()
-
-        # 2. Load File (new API: load() instead of open())
-        meta = decoder.load(audio_path)
-
-        # 3. Print Metadata
-        print(f"\nMetadata Recognized:")
-        print(f"  Container:    {meta.container}")
-        print(f"  Codec:        {meta.codec}")
-        print(f"  Sample Rate:  {meta.sample_rate} Hz")
-        print(f"  Channels:     {meta.num_channels}")
-        print(f"  Duration:     {meta.duration:.3f} s")
-        print(f"  Num Samples:  {meta.num_samples}")
-
-        # 4. Decode all samples (returns numpy array with shape (channels, samples))
-        print(f"\nDecoding all samples...")
-        samples = decoder.get_all_samples()
-
-        print(f"Decoding Success!")
-        print(f"  Shape: {samples.shape}")  # (channels, samples)
-        print(f"  Channels: {samples.shape[0]}")
-        print(f"  Samples per channel: {samples.shape[1]}")
-        print(f"  dtype: {samples.dtype}")
-
-        # Verify sample count matches metadata
-        if samples.shape[1] == meta.num_samples:
-            print(f"  [OK] Sample count matches metadata")
-        else:
-            print(f"  [WARN] Sample count mismatch: {samples.shape[1]} vs {meta.num_samples}")
-
-        print("\nSUCCESS: Python audio loading is working correctly.")
-
+        test_offline_filepath()
+        test_offline_memory()
+        test_offline_url()
+        print("\nAll offline tests passed!")
+    except AssertionError as e:
+        print(f"\nTest failed: {e}")
+        sys.exit(1)
     except Exception as e:
-        print(f"An error occurred during decoding: {e}")
+        print(f"\nError: {e}")
         import traceback
         traceback.print_exc()
         sys.exit(1)

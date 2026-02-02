@@ -25,9 +25,10 @@ namespace avioflow
     // Mode 1: Open from file path, URL, or device (e.g., "audio=Microphone")
     void open(const std::string &source);
 
+    // Mode 1b: Open from memory (full bytes)
+    void open(const uint8_t *data, size_t size);
+
     // Mode 2: Push-based streaming
-    // - First call auto-initializes the streaming context using options_
-    // - Subsequent calls append data to internal buffer
     // - Requires input_format to be set in options
     void push(const uint8_t *data, size_t size);
 

@@ -32,6 +32,10 @@ void AudioDecoder::open(const std::string &source) {
   impl_->decoder_.open(source);
 }
 
+void AudioDecoder::open(const uint8_t *data, size_t size) {
+  impl_->decoder_.open(data, size);
+}
+
 void AudioDecoder::push(const uint8_t *data, size_t size) {
   impl_->decoder_.push(data, size);
 }

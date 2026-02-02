@@ -48,6 +48,16 @@ namespace avioflow
     setup_decoder();
   }
 
+  void SingleStreamDecoder::open(const uint8_t *data, size_t size)
+  {
+    if (mode_ != Mode::None)
+      throw std::runtime_error("Decoder already initialized");
+    mode_ = Mode::File;
+
+    fmt_ctx_.reset(AvioContextHandler::open_memory(data, size, options_));
+    setup_decoder();
+  }
+
   void SingleStreamDecoder::push(const uint8_t *data, size_t size)
   {
     if (mode_ == Mode::File)
@@ -55,16 +65,15 @@ namespace avioflow
       throw std::runtime_error("Cannot push data: decoder opened in file mode");
     }
 
-    // Add data to buffer FIRST, before any initialization
+    // Add data to buffer
     {
       std::lock_guard<std::mutex> lock(buffer_mtx_);
       push_buffer_.insert(push_buffer_.end(), data, data + size);
     }
 
-    // Auto-initialize stream context on first push (now buffer has data)
+    // Mark as stream mode, but delay initialization until decode_next
     if (mode_ == Mode::None)
     {
-      init_stream_context();
       mode_ = Mode::Stream;
     }
   }
@@ -76,16 +85,40 @@ namespace avioflow
       throw std::runtime_error("input_format must be specified for streaming mode");
     }
 
+    // Special handling for WAV to PCM fallback
+    if (options_.input_format.value() == "wav")
+    {
+      std::lock_guard<std::mutex> lock(buffer_mtx_);
+      bool has_wav_header = false;
+      if (push_buffer_.size() >= 12)
+      {
+        if (std::memcmp(push_buffer_.data(), "RIFF", 4) == 0 &&
+            std::memcmp(push_buffer_.data() + 8, "WAVE", 4) == 0)
+        {
+          has_wav_header = true;
+        }
+      }
+
+      if (!has_wav_header)
+      {
+        // Fallback to PCM s16le if no WAV header found
+        options_.input_format = "s16le";
+      }
+    }
+
     // Create AVIO context that reads from our internal push_buffer_
-    fmt_ctx_.reset(AvioContextHandler::open_stream([this](uint8_t* buf, int buf_size) {
+    // Note: open_stream internally calls avformat_open_input with options_.input_format
+    // probesize/max_analyze_duration are set in create_avio_context before avformat_open_input
+    fmt_ctx_.reset(AvioContextHandler::open_stream([this](uint8_t *buf, int buf_size)
+                                                   {
         std::lock_guard<std::mutex> lock(buffer_mtx_);
         if (push_buffer_.empty()) return -1; // AVERROR(EAGAIN)
         int read = std::min(static_cast<int>(push_buffer_.size()), buf_size);
         std::memcpy(buf, push_buffer_.data(), read);
         push_buffer_.erase(push_buffer_.begin(), push_buffer_.begin() + read);
-        return read;
-    }, options_));
-    
+        return read; },
+                                                   options_));
+
     setup_decoder();
   }
 
@@ -223,6 +256,22 @@ namespace avioflow
 
   AVFrame *SingleStreamDecoder::decode_next()
   {
+    // Lazy initialization for stream mode - wait until we have enough data
+    if (mode_ == Mode::Stream && !fmt_ctx_)
+    {
+      size_t buffer_size;
+      {
+        std::lock_guard<std::mutex> lock(buffer_mtx_);
+        buffer_size = push_buffer_.size();
+      }
+      // Need at least 32KB for format probing (matches probesize setting)
+      if (buffer_size < 32 * 1024)
+      {
+        return nullptr; // Not enough data yet, caller should push more
+      }
+      init_stream_context();
+    }
+
 #ifdef AVIOFLOW_HAS_WASAPI
     if (is_wasapi_mode_)
     {
@@ -284,10 +333,19 @@ namespace avioflow
 
       if (eof_reached_)
       {
+        // Flush the decoder
         ret = avcodec_send_packet(codec_ctx_.get(), nullptr);
         if (ret < 0 && ret != AVERROR_EOF)
           throw std::runtime_error("Error sending flush packet");
-        continue;
+        
+        // Try to receive one last time after flush
+        ret = avcodec_receive_frame(codec_ctx_.get(), frame_.get());
+        if (ret >= 0) {
+            AVFrame* decoded = process_decoded_frame();
+            if (decoded) total_samples_decoded_ += decoded->nb_samples;
+            return decoded;
+        }
+        return nullptr; // Truly finished
       }
 
       ret = av_read_frame(fmt_ctx_.get(), packet_.get());
@@ -295,13 +353,17 @@ namespace avioflow
       {
         if (ret == AVERROR(EAGAIN))
           return nullptr;
-        
-        if (ret == AVERROR_EOF) {
+
+        if (ret == AVERROR_EOF)
+        {
           eof_reached_ = true;
+          // Send flush packet to decoder immediately when input EOF is reached
+          avcodec_send_packet(codec_ctx_.get(), nullptr);
           continue;
         }
-        
-        throw std::runtime_error("Error reading frame");
+
+        // Strict error handling for stream mode
+        throw std::runtime_error("Error reading frame: " + std::to_string(ret));
       }
 
       if (packet_->stream_index != audio_stream_index_)

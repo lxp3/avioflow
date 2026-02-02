@@ -108,6 +108,14 @@ public:
   void open(const std::string &source);
 
   /**
+   * @brief Open audio from memory (full bytes).
+   * @param data Pointer to full audio file bytes
+   * @param size Number of bytes
+   * @throws std::runtime_error if data cannot be parsed
+   */
+  void open(const uint8_t *data, size_t size);
+
+  /**
    * @brief Push raw bytes for streaming decode.
    *
    * First call auto-initializes the streaming context using constructor

@@ -49,6 +49,16 @@ namespace avioflow
 
     fmt_ctx->pb = avio_ctx;
     
+    // Set probesize BEFORE avformat_open_input
+    // For streaming mode (no seek), use small probesize for low latency
+    // For offline mode (with seek), use default probesize for better detection
+    if (seek == nullptr) {
+      // Streaming mode: low latency settings
+      fmt_ctx->probesize = 32 * 1024;
+      fmt_ctx->max_analyze_duration = 0;
+    }
+    // else: keep default probesize for offline mode
+    
     // Allow explicitly specifying input format if auto-detection fails
     const AVInputFormat *iformat = nullptr;
     if (options.input_format.has_value())
@@ -94,7 +104,11 @@ namespace avioflow
                                                    size_t size,
                                                    const AudioStreamOptions &options)
   {
-    MemoryContext *m_ctx = new MemoryContext{data, size, 0};
+    // Copy data to ensure it outlives the decoder
+    MemoryContext *m_ctx = new MemoryContext{
+        std::vector<uint8_t>(data, data + size),
+        0
+    };
     try
     {
       return create_avio_context(static_cast<void*>(m_ctx), 
@@ -112,17 +126,17 @@ namespace avioflow
   int AvioContextHandler::read_packet_memory(void *opaque, uint8_t *buf, int buf_size)
   {
     MemoryContext *m_ctx = static_cast<MemoryContext *>(opaque);
-    if (m_ctx->pos >= m_ctx->size) {
+    if (m_ctx->pos >= m_ctx->data.size()) {
         return AVERROR_EOF;
     }
     
-    size_t available = m_ctx->size - m_ctx->pos;
+    size_t available = m_ctx->data.size() - m_ctx->pos;
     int read = std::min(static_cast<int>(available), buf_size);
     
     if (read <= 0)
       return AVERROR_EOF;
 
-    std::memcpy(buf, m_ctx->data + m_ctx->pos, read);
+    std::memcpy(buf, m_ctx->data.data() + m_ctx->pos, read);
     m_ctx->pos += read;
     return read;
   }
@@ -130,22 +144,32 @@ namespace avioflow
   int64_t AvioContextHandler::seek_memory(void *opaque, int64_t offset, int whence)
   {
     MemoryContext *m_ctx = static_cast<MemoryContext *>(opaque);
-    int64_t ret = -1;
+    int64_t new_pos = -1;
+    int64_t data_size = static_cast<int64_t>(m_ctx->data.size());
 
     switch (whence)
     {
     case AVSEEK_SIZE:
-      ret = static_cast<int64_t>(m_ctx->size);
-      break;
+      return data_size;
     case SEEK_SET:
-      m_ctx->pos = static_cast<size_t>(offset);
-      ret = offset;
+      new_pos = offset;
+      break;
+    case SEEK_CUR:
+      new_pos = static_cast<int64_t>(m_ctx->pos) + offset;
+      break;
+    case SEEK_END:
+      new_pos = data_size + offset;
       break;
     default:
-      break;  // Return -1 for unsupported operations
+      return -1;
     }
 
-    return ret;
+    if (new_pos < 0 || new_pos > data_size) {
+      return -1;
+    }
+    
+    m_ctx->pos = static_cast<size_t>(new_pos);
+    return new_pos;
   }
 
   int AvioContextHandler::read_packet_stream(void *opaque, uint8_t *buf, int buf_size)
