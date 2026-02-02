@@ -19,10 +19,10 @@
 
 # Use fallback paths for node module headers (cmake-js provides CMAKE_JS_INC)
 if(NOT NODE_ADDON_API_DIR)
-    set(NODE_ADDON_API_DIR "${CMAKE_SOURCE_DIR}/node_modules/node-addon-api")
+    set(NODE_ADDON_API_DIR "${CMAKE_SOURCE_DIR}/nodejs/node_modules/node-addon-api")
 endif()
 if(NOT NODE_API_HEADERS_DIR)
-    set(NODE_API_HEADERS_DIR "${CMAKE_SOURCE_DIR}/node_modules/node-api-headers/include")
+    set(NODE_API_HEADERS_DIR "${CMAKE_SOURCE_DIR}/nodejs/node_modules/node-api-headers/include")
 endif()
 
 add_library(avioflow_nodejs SHARED bindings.cpp)
@@ -35,7 +35,7 @@ set_target_properties(avioflow_nodejs PROPERTIES
 )
 
 target_include_directories(avioflow_nodejs PRIVATE 
-    ../include
+    ${CMAKE_SOURCE_DIR}/avioflow/include
     ${CMAKE_JS_INC}
     ${NODE_ADDON_API_DIR}
     ${NODE_API_HEADERS_DIR}

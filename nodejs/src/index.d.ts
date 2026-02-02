@@ -102,12 +102,25 @@ export class AudioDecoder {
     constructor(options?: AudioDecoderOptions);
 
     /**
-     * Load audio from file path, URL, or device.
-     * @param source File path, URL, or device identifier
+     * Load audio from file path, URL, device, or Buffer.
+     * @param source File path, URL, device identifier, or Buffer with full audio bytes
      * @returns Metadata object with audio stream information
      * @throws Error if source cannot be opened or decoded
      */
-    load(source: string): Metadata;
+    load(source: string | Buffer): Metadata;
+
+    /**
+     * Open audio from file path, URL, device, or Buffer (doesn't return metadata).
+     * @param source File path, URL, device identifier, or Buffer with full audio bytes
+     * @throws Error if source cannot be opened
+     */
+    open(source: string | Buffer): void;
+
+    /**
+     * Get current audio stream metadata.
+     * @returns Metadata object
+     */
+    getMetadata(): Metadata;
 
     /**
      * Push raw encoded bytes for streaming decode.

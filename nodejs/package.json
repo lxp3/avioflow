@@ -5,18 +5,19 @@
   "author": "lxp3",
   "license": "MIT",
   "type": "module",
-  "main": "avioflow/nodejs/index.js",
-  "types": "avioflow/nodejs/index.d.ts",
+  "main": "src/index.js",
+  "types": "src/index.d.ts",
   "exports": {
     ".": {
-      "types": "./avioflow/nodejs/index.d.ts",
-      "import": "./avioflow/nodejs/index.js",
-      "require": "./avioflow/nodejs/index.js"
+      "types": "./src/index.d.ts",
+      "import": "./src/index.js",
+      "require": "./src/index.cjs"
     }
   },
   "files": [
-    "avioflow/nodejs/index.js",
-    "avioflow/nodejs/index.d.ts",
+    "src/index.js",
+    "src/index.cjs",
+    "src/index.d.ts",
     "prebuilds/"
   ],
   "repository": {
@@ -40,7 +41,7 @@
     "node": ">=16"
   },
   "scripts": {
-    "test": "node tests/nodejs/test-local.js",
+    "test": "node tests/test-offline-load.js",
     "build": "cmake-js compile",
     "prebuild": "prebuildify --napi --strip --tag-libc",
     "install": "node-gyp-build || echo 'Prebuild not found, native module may need to be built manually'"

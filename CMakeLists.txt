@@ -162,19 +162,14 @@ if(ENABLE_BINARY)
     add_subdirectory(avioflow/bin)
 endif()
 
-# Tests and examples
-if(BUILD_TESTS)
-    add_subdirectory(tests)
-endif()
-
 # --- Python Bindings ---
 if(ENABLE_PYTHON)
-    add_subdirectory(avioflow/python)
+    add_subdirectory(python/csrc)
 endif()
 
 # --- Node.js Bindings ---
 if(ENABLE_NODE_JS)
-    add_subdirectory(avioflow/nodejs)
+    add_subdirectory(nodejs/csrc)
 endif()
 
 
