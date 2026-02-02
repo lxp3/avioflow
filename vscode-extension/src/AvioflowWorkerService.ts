@@ -7,8 +7,11 @@ export interface WorkerResponse {
     type: 'done' | 'error' | 'ready';
     metadata?: any;
     samples?: any[];
+    min?: any[];
+    max?: any[];
     message?: string;
     stack?: string;
+    loadTimeMs?: number;  // Add loading time in milliseconds
 }
 
 export class AvioflowWorkerService {
@@ -40,12 +43,12 @@ export class AvioflowWorkerService {
             this.worker.kill();
         }
 
-        const workerPath = path.join(this.extensionPath, 'out', 'src', 'avioflowWorker.js');
+        // Use .mjs file to support native ESM avioflow package
+        const workerPath = path.join(this.extensionPath, 'out', 'src', 'avioflowWorker.mjs');
         if (!fs.existsSync(workerPath)) {
             console.error(`[AvioflowService] Worker script not found at ${workerPath}`);
             return;
         }
-
 
         this.worker = child_process.spawn('node', [workerPath], {
             stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
@@ -102,14 +105,20 @@ export class AvioflowWorkerService {
             this.pendingRequests.delete(firstKey);
 
             if (msg.type === 'done') {
-                resolve({ metadata: msg.metadata, samples: msg.samples });
+                resolve({ 
+                    metadata: msg.metadata, 
+                    samples: msg.samples,
+                    min: msg.min,
+                    max: msg.max,
+                    loadTimeMs: msg.loadTimeMs 
+                });
             } else {
                 reject(new Error(msg.message || 'Unknown worker error'));
             }
         }
     }
 
-    public async load(filePath: string): Promise<{ metadata: any, samples: any[] }> {
+    public async load(filePath: string, samplesPerPixel?: number): Promise<{ metadata: any, samples?: any[], min?: any[], max?: any[], loadTimeMs?: number }> {
         if (!this.worker) {
             console.log('[AvioflowService] First request received, starting worker lazy...');
             this.startWorker();
@@ -124,7 +133,7 @@ export class AvioflowWorkerService {
             // Actually, let's just use the filePath as the key for simplicity.
             // If multiple editors open the same file, it's fine.
             this.pendingRequests.set(filePath, { resolve, reject });
-            this.worker!.send({ type: 'load', filePath });
+            this.worker!.send({ type: 'load', filePath, samplesPerPixel });
         });
     }
 

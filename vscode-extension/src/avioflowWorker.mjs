@@ -1,24 +1,33 @@
 /**
- * @file avioflowWorker.ts
- * @brief Standalone worker for avioflow decoding to avoid Electron ABI issues.
+ * @file avioflowWorker.mjs
+ * @brief Standalone worker for avioflow decoding (Pure ES Module)
+ * 
+ * This file is .mjs to ensure Node.js treats it as a native ES Module,
+ * allowing proper dynamic import of the ESM-based avioflow package.
  */
 
-// This will be loaded asynchronously in main()
-let avioflow: any;
+import { statSync } from 'fs';
+
+let avioflow;
 
 async function main() {
-    // Load avioflow module first (ESM import in async context)
-    const mod = await import('avioflow');
-    avioflow = mod.default || mod;
-    console.log('[AvioflowWorker] Avioflow module loaded');
+    // Load avioflow module (native ESM import)
+    try {
+        const mod = await import('avioflow');
+        avioflow = mod.default || mod;
+        console.log('[AvioflowWorker] Avioflow module loaded successfully');
+    } catch (error) {
+        console.error('[AvioflowWorker] Failed to load avioflow:', error);
+        process.exit(1);
+    }
 
-    process.on('message', async (msg: any) => {
+    process.on('message', async (msg) => {
         if (msg.type === 'load') {
             const { filePath, samplesPerPixel } = msg;
             try {
                 const start = Date.now();
                 
-                // Always load full samples for playback, and calculate waveform
+                // Always load full samples for playback
                 const result = avioflow.load(filePath);
                 
                 // Calculate waveform summary in worker to avoid UI lag
@@ -68,7 +77,7 @@ async function main() {
                 }
 
                 const loadTimeMs = Date.now() - start;
-                const stats = require('fs').statSync(filePath);
+                const stats = statSync(filePath);
                 
                 // Log to stderr so it appears in VS Code's output
                 console.error(`[AvioflowWorker] Native load/decode complete in ${loadTimeMs}ms`);
@@ -80,29 +89,28 @@ async function main() {
                         ...result.metadata,
                         fileSize: stats.size
                     },
-                    // Return min/max if available, and always samples for playback
                     min: min,
                     max: max,
                     samples: result.samples,
-                    loadTimeMs: loadTimeMs
+                    loadTimeMs: loadTimeMs  // Include load time in response
                 };
 
                 // Use advanced serialization to transfer ArrayBuffers without copying
+                // This significantly reduces IPC overhead for large audio data
                 if (process.send) {
+                    // Extract ArrayBuffers for zero-copy transfer
                     const transferList = [];
-                    // Add min/max buffers to transfer list
-                    if (min) min.forEach((ch: any) => transferList.push(ch.buffer));
-                    if (max) max.forEach((ch: any) => transferList.push(ch.buffer));
-                    // Add samples buffers to transfer list
-                    if (result.samples) result.samples.forEach((ch: any) => transferList.push(ch.buffer));
+                    if (result.min) result.min.forEach(ch => transferList.push(ch.buffer));
+                    if (result.max) result.max.forEach(ch => transferList.push(ch.buffer));
+                    if (result.samples) result.samples.forEach(ch => transferList.push(ch.buffer));
                     
                     process.send(response, undefined, undefined, (err) => {
                         if (err) console.error('[AvioflowWorker] IPC Send Error:', err);
                     });
                 }
-            } catch (error: any) {
+            } catch (error) {
                 console.error(`[AvioflowWorker] Error loading ${filePath}:`, error.message);
-                process.send!({
+                process.send({
                     type: 'error',
                     message: error.message,
                     stack: error.stack
@@ -117,4 +125,7 @@ async function main() {
     }
 }
 
-main();
+main().catch(error => {
+    console.error('[AvioflowWorker] Fatal error:', error);
+    process.exit(1);
+});

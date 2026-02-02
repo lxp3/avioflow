@@ -69,16 +69,30 @@ export class AudioPreviewProvider implements vscode.CustomReadonlyEditorProvider
         try {
             const service = AvioflowWorkerService.getInstance();
 
-            const start = Date.now();
-            const { metadata, samples } = await service.load(document.uri.fsPath);
-            const duration = Date.now() - start;
+            // Record the start time when user clicks/opens the file
+            const totalStart = Date.now();
+            
+            // Send a loading message to UI to start the timer there if needed
+            webviewPanel.webview.postMessage({ type: 'loading' });
 
-            console.log(`[Avioflow] Decoding complete in ${duration}ms, sending to webview`);
+            // Request waveform with a reasonable default samplesPerPixel (e.g., 1000)
+            // Also request full samples for playback
+            const { metadata, samples, min, max, loadTimeMs } = await service.load(document.uri.fsPath, 1000);
+            
+            // Total duration from click to data ready in extension host
+            const totalDuration = Date.now() - totalStart;
+
             webviewPanel.webview.postMessage({
                 type: 'init',
                 filePath: document.uri.fsPath,
-                metadata,
-                samples
+                metadata: {
+                    ...metadata,
+                    totalTimeMs: totalDuration,  // Total time from extension perspective
+                    nativeDecodeTimeMs: loadTimeMs // Pure decode time from worker
+                },
+                samples,
+                min,
+                max
             });
 
         } catch (e: any) {
@@ -86,6 +100,7 @@ export class AudioPreviewProvider implements vscode.CustomReadonlyEditorProvider
             vscode.window.showErrorMessage(`Avioflow Error: ${e.message}`);
         }
     }
+
 
     private getHtmlForWebview(webview: vscode.Webview): string {
         const scriptUri = webview.asWebviewUri(vscode.Uri.file(
