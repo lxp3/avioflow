@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>avioflow WASM Test</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #1a1a2e;
+            color: #eee;
+        }
+        h1 { color: #00d9ff; }
+        .test-section {
+            background: #16213e;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        .test-section h2 {
+            margin-top: 0;
+            color: #e94560;
+        }
+        .status {
+            padding: 8px 16px;
+            border-radius: 4px;
+            display: inline-block;
+            margin: 5px 0;
+        }
+        .status.pass { background: #2e7d32; }
+        .status.fail { background: #c62828; }
+        .status.running { background: #ff9800; }
+        pre {
+            background: #0f0f23;
+            padding: 15px;
+            border-radius: 4px;
+            overflow-x: auto;
+            font-size: 13px;
+        }
+        input[type="file"] {
+            margin: 10px 0;
+        }
+        button {
+            background: #00d9ff;
+            color: #000;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        button:hover { background: #00b8d9; }
+        #waveform {
+            width: 100%;
+            height: 150px;
+            background: #0f0f23;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🎵 avioflow WASM Test</h1>
+    
+    <div class="test-section">
+        <h2>Module Loading</h2>
+        <div id="load-status" class="status running">Loading WASM module...</div>
+        <pre id="load-log"></pre>
+    </div>
+    
+    <div class="test-section">
+        <h2>File Decode Test</h2>
+        <input type="file" id="audio-file" accept="audio/*">
+        <button onclick="testFileDecode()">Decode File</button>
+        <pre id="decode-log"></pre>
+        <canvas id="waveform"></canvas>
+    </div>
+    
+    <div class="test-section">
+        <h2>URL Decode Test</h2>
+        <button onclick="testUrlDecode()">Decode from URL</button>
+        <pre id="url-log"></pre>
+    </div>
+    
+    <div class="test-section">
+        <h2>Streaming Test</h2>
+        <button onclick="testStreaming()">Test Streaming Decode</button>
+        <pre id="stream-log"></pre>
+    </div>
+
+    <script type="module">
+        // Import WASM module
+        import createAvioflow from '../dist/avioflow.js';
+        
+        let avioflow = null;
+        
+        // Initialize module
+        async function init() {
+            const loadLog = document.getElementById('load-log');
+            const loadStatus = document.getElementById('load-status');
+            
+            try {
+                loadLog.textContent = 'Initializing WASM module...\n';
+                const start = performance.now();
+                
+                avioflow = await createAvioflow();
+                
+                const elapsed = (performance.now() - start).toFixed(1);
+                loadLog.textContent += `Module loaded in ${elapsed}ms\n`;
+                loadLog.textContent += `Available functions: ${Object.keys(avioflow).join(', ')}\n`;
+                
+                loadStatus.textContent = 'WASM Module Loaded ✓';
+                loadStatus.className = 'status pass';
+                
+                // Set log level
+                avioflow.setLogLevel('warning');
+                
+            } catch (e) {
+                loadLog.textContent = `Error: ${e.message}\n${e.stack}`;
+                loadStatus.textContent = 'Failed to load WASM module ✗';
+                loadStatus.className = 'status fail';
+            }
+        }
+        
+        // Test file decode
+        window.testFileDecode = async function() {
+            const log = document.getElementById('decode-log');
+            const fileInput = document.getElementById('audio-file');
+            
+            if (!avioflow) {
+                log.textContent = 'Error: WASM module not loaded';
+                return;
+            }
+            
+            if (!fileInput.files.length) {
+                log.textContent = 'Please select an audio file';
+                return;
+            }
+            
+            try {
+                log.textContent = 'Reading file...\n';
+                const file = fileInput.files[0];
+                const buffer = await file.arrayBuffer();
+                
+                log.textContent += `File: ${file.name} (${buffer.byteLength} bytes)\n`;
+                log.textContent += 'Decoding...\n';
+                
+                const start = performance.now();
+                const result = avioflow.loadBuffer(new Uint8Array(buffer), {});
+                const elapsed = (performance.now() - start).toFixed(1);
+                
+                log.textContent += `\nMetadata:\n`;
+                log.textContent += `  Duration: ${result.metadata.duration.toFixed(2)}s\n`;
+                log.textContent += `  Sample Rate: ${result.metadata.sampleRate}Hz\n`;
+                log.textContent += `  Channels: ${result.metadata.numChannels}\n`;
+                log.textContent += `  Codec: ${result.metadata.codec}\n`;
+                log.textContent += `  Samples: ${result.samples[0]?.length || 0}\n`;
+                log.textContent += `\nDecode time: ${elapsed}ms\n`;
+                log.textContent += 'Decode successful! ✓';
+                
+                // Draw waveform
+                drawWaveform(result.samples[0]);
+                
+            } catch (e) {
+                log.textContent += `\nError: ${e.message}`;
+            }
+        };
+        
+        // Test URL decode
+        window.testUrlDecode = async function() {
+            const log = document.getElementById('url-log');
+            const testUrl = '../tests/test.mp3';  // Adjust path as needed
+            
+            if (!avioflow) {
+                log.textContent = 'Error: WASM module not loaded';
+                return;
+            }
+            
+            try {
+                log.textContent = `Fetching ${testUrl}...\n`;
+                
+                // Fetch manually for browser
+                const response = await fetch(testUrl);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                const buffer = await response.arrayBuffer();
+                
+                log.textContent += `Received ${buffer.byteLength} bytes\n`;
+                log.textContent += 'Decoding...\n';
+                
+                const start = performance.now();
+                const result = avioflow.loadBuffer(new Uint8Array(buffer), {
+                    outputSampleRate: 16000,
+                    outputNumChannels: 1
+                });
+                const elapsed = (performance.now() - start).toFixed(1);
+                
+                log.textContent += `\nResampled to: ${result.metadata.sampleRate}Hz, ${result.samples.length}ch\n`;
+                log.textContent += `Samples: ${result.samples[0]?.length || 0}\n`;
+                log.textContent += `Decode time: ${elapsed}ms\n`;
+                log.textContent += 'URL decode successful! ✓';
+                
+            } catch (e) {
+                log.textContent += `\nError: ${e.message}`;
+            }
+        };
+        
+        // Test streaming decode
+        window.testStreaming = async function() {
+            const log = document.getElementById('stream-log');
+            const fileInput = document.getElementById('audio-file');
+            
+            if (!avioflow) {
+                log.textContent = 'Error: WASM module not loaded';
+                return;
+            }
+            
+            if (!fileInput.files.length) {
+                log.textContent = 'Please select an audio file first';
+                return;
+            }
+            
+            try {
+                const file = fileInput.files[0];
+                const buffer = await file.arrayBuffer();
+                const data = new Uint8Array(buffer);
+                
+                log.textContent = `Testing streaming decode with ${file.name}\n`;
+                log.textContent += `File size: ${data.length} bytes\n\n`;
+                
+                // Create streaming decoder
+                const decoder = new avioflow.AudioDecoder({
+                    inputFormat: 'mp3'  // Adjust based on file type
+                });
+                
+                // Push data in chunks
+                const chunkSize = 4096;
+                let offset = 0;
+                let totalSamples = 0;
+                let frameCount = 0;
+                
+                const start = performance.now();
+                
+                while (offset < data.length) {
+                    const chunk = data.slice(offset, offset + chunkSize);
+                    decoder.push(chunk);
+                    offset += chunkSize;
+                    
+                    // Decode available frames
+                    let frame;
+                    while ((frame = decoder.decodeNext()) !== null) {
+                        totalSamples += frame[0]?.length || 0;
+                        frameCount++;
+                    }
+                }
+                
+                // Drain remaining
+                while (!decoder.isFinished()) {
+                    const frame = decoder.decodeNext();
+                    if (!frame) break;
+                    totalSamples += frame[0]?.length || 0;
+                    frameCount++;
+                }
+                
+                const elapsed = (performance.now() - start).toFixed(1);
+                
+                log.textContent += `Pushed ${Math.ceil(data.length / chunkSize)} chunks\n`;
+                log.textContent += `Decoded ${frameCount} frames\n`;
+                log.textContent += `Total samples: ${totalSamples}\n`;
+                log.textContent += `Time: ${elapsed}ms\n`;
+                log.textContent += '\nStreaming decode successful! ✓';
+                
+            } catch (e) {
+                log.textContent += `\nError: ${e.message}\n${e.stack}`;
+            }
+        };
+        
+        // Draw waveform
+        function drawWaveform(samples) {
+            const canvas = document.getElementById('waveform');
+            const ctx = canvas.getContext('2d');
+            const width = canvas.width = canvas.offsetWidth * 2;
+            const height = canvas.height = 300;
+            
+            ctx.fillStyle = '#0f0f23';
+            ctx.fillRect(0, 0, width, height);
+            
+            if (!samples || !samples.length) return;
+            
+            const step = Math.ceil(samples.length / width);
+            const mid = height / 2;
+            
+            ctx.strokeStyle = '#00d9ff';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            
+            for (let i = 0; i < width; i++) {
+                const idx = i * step;
+                let min = 0, max = 0;
+                for (let j = 0; j < step && idx + j < samples.length; j++) {
+                    const val = samples[idx + j];
+                    if (val < min) min = val;
+                    if (val > max) max = val;
+                }
+                const y1 = mid + min * mid * 0.9;
+                const y2 = mid + max * mid * 0.9;
+                ctx.moveTo(i, y1);
+                ctx.lineTo(i, y2);
+            }
+            
+            ctx.stroke();
+        }
+        
+        // Initialize on load
+        init();
+    </script>
+</body>
+</html>
