@@ -4,20 +4,26 @@
 
 .DESCRIPTION
     This script builds the avioflow library as a WebAssembly module.
-    Requires Emscripten SDK to be installed and activated.
+    Requires:
+    1. Emscripten SDK installed and activated
+    2. FFmpeg compiled for WASM (run scripts/build-ffmpeg-wasm.sh first)
 
 .PARAMETER Clean
     Clean build directory before building
+
+.PARAMETER BuildFFmpeg
+    Build FFmpeg WASM first (requires WSL on Windows)
 
 .EXAMPLE
     .\build.ps1
     
 .EXAMPLE
-    .\build.ps1 -Clean
+    .\build.ps1 -Clean -BuildFFmpeg
 #>
 
 param(
-    [switch]$Clean = $false
+    [switch]$Clean = $false,
+    [switch]$BuildFFmpeg = $false
 )
 
 $ErrorActionPreference = "Stop"
@@ -25,6 +31,7 @@ $ProjectDir = Split-Path -Parent $PSScriptRoot  # Root project directory
 $WasmDir = $PSScriptRoot
 $BuildDir = Join-Path $WasmDir "build"
 $DistDir = Join-Path $WasmDir "dist"
+$FFmpegWasmDir = Join-Path $WasmDir "ffmpeg-wasm"
 
 Write-Host ""
 Write-Host "============================================" -ForegroundColor Cyan
@@ -46,6 +53,37 @@ if (-not $emcmake) {
 }
 
 Write-Host "Emscripten found: $($emcmake.Source)" -ForegroundColor Green
+Write-Host ""
+
+# Build FFmpeg WASM if requested
+if ($BuildFFmpeg) {
+    Write-Host "[0/3] Building FFmpeg WASM..." -ForegroundColor Yellow
+    $ffmpegScript = Join-Path $WasmDir "scripts\build-ffmpeg-wasm.ps1"
+    & $ffmpegScript
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "FFmpeg WASM build failed!" -ForegroundColor Red
+        exit 1
+    }
+}
+
+# Check if FFmpeg WASM exists
+$FFmpegLib = Join-Path $FFmpegWasmDir "lib\libavcodec.a"
+if (-not (Test-Path $FFmpegLib)) {
+    Write-Host "Error: FFmpeg WASM not found!" -ForegroundColor Red
+    Write-Host ""
+    Write-Host "Please build FFmpeg for WebAssembly first:" -ForegroundColor Yellow
+    Write-Host "  cd wasm/scripts" -ForegroundColor Gray
+    Write-Host "  ./build-ffmpeg-wasm.ps1   # Windows (requires WSL)" -ForegroundColor Gray
+    Write-Host "  # or" -ForegroundColor Gray
+    Write-Host "  bash ./build-ffmpeg-wasm.sh  # Linux/macOS/WSL" -ForegroundColor Gray
+    Write-Host ""
+    Write-Host "Or run this script with -BuildFFmpeg flag:" -ForegroundColor Yellow
+    Write-Host "  ./build.ps1 -BuildFFmpeg" -ForegroundColor Cyan
+    Write-Host ""
+    exit 1
+}
+
+Write-Host "FFmpeg WASM found: $FFmpegWasmDir" -ForegroundColor Green
 Write-Host ""
 
 # Clean if requested

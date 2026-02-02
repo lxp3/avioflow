@@ -129,6 +129,7 @@ jobs:
       # --- Build Node.js Addon (Static, Node-API 8 for Node.js >= 16) ---
       - name: Build Node.js Addon (Node-API 8)
         if: needs.check-tag.outputs.build-npm == 'true'
+        working-directory: nodejs
         run: |
           npm install
           
@@ -149,10 +150,11 @@ jobs:
       # Verify the built module works
       - name: Verify Node.js Addon
         if: needs.check-tag.outputs.build-npm == 'true'
+        working-directory: nodejs
         run: |
           echo "Verifying native module loads correctly..."
           node -e "const m = require('./prebuilds/linux-x64/avioflow.napi.node'); console.log('Exports:', Object.keys(m));"
-          node tests/nodejs/test-local.js
+          node tests/test-offline-load.js
           echo "Verification passed!"
 
       # --- Upload Artifacts ---
@@ -166,7 +168,7 @@ jobs:
         if: needs.check-tag.outputs.build-npm == 'true'
         with:
           name: linux-nodejs-prebuilds
-          path: prebuilds/
+          path: nodejs/prebuilds/
 
       - name: Cancel workflow on failure
         if: failure()
@@ -187,6 +189,8 @@ jobs:
 
       - name: Build wheels
         uses: pypa/cibuildwheel@v2.22.0
+        with:
+          package-dir: python
         env:
           CIBW_ARCHS_LINUX: x86_64
           CIBW_BUILD: "cp38-* cp39-* cp310-* cp311-* cp312-* cp313-* cp314-*"
@@ -200,7 +204,7 @@ jobs:
             export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$(find /project -name "libavformat.so*" -exec dirname {} \; | head -n 1) &&
             auditwheel repair -w {dest_dir} {wheel}
           CIBW_TEST_REQUIRES: numpy
-          CIBW_TEST_COMMAND: "python {project}/tests/python/test_offline_load.py {project}/public/wavs/TownTheme.mp3"
+          CIBW_TEST_COMMAND: "python {project}/python/tests/test_offline_load.py {project}/public/wavs/TownTheme.mp3"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -257,6 +261,7 @@ jobs:
       - name: Build Node.js Addon (Node-API 8)
         if: needs.check-tag.outputs.build-npm == 'true'
         shell: pwsh
+        working-directory: nodejs
         run: |
           npm install
           
@@ -278,10 +283,11 @@ jobs:
       - name: Verify Node.js Addon
         if: needs.check-tag.outputs.build-npm == 'true'
         shell: pwsh
+        working-directory: nodejs
         run: |
           Write-Host "Verifying native module loads correctly..."
           node -e "const m = require('./prebuilds/win32-x64/avioflow.napi.node'); console.log('Exports:', Object.keys(m));"
-          node tests/nodejs/test-local.js
+          node tests/test-offline-load.js
           Write-Host "Verification passed!"
 
       # --- Upload Artifacts ---
@@ -295,7 +301,7 @@ jobs:
         if: needs.check-tag.outputs.build-npm == 'true'
         with:
           name: windows-nodejs-prebuilds
-          path: prebuilds/
+          path: nodejs/prebuilds/
 
       - name: Cancel workflow on failure
         if: failure()
@@ -313,13 +319,15 @@ jobs:
 
       - name: Build wheels
         uses: pypa/cibuildwheel@v2.22.0
+        with:
+          package-dir: python
         env:
           CIBW_ARCHS_WINDOWS: AMD64
           CIBW_BUILD: "cp38-* cp39-* cp310-* cp311-* cp312-* cp313-* cp314-*"
           CIBW_SKIP: "pp* *-win32"
           CIBW_ENVIRONMENT_WINDOWS: "CMAKE_ARGS=-DBUILD_SHARED_LIBS=ON"
           CIBW_TEST_REQUIRES: numpy
-          CIBW_TEST_COMMAND: "python {project}/tests/python/test_offline_load.py {project}/public/wavs/TownTheme.mp3"
+          CIBW_TEST_COMMAND: "python {project}/python/tests/test_offline_load.py {project}/public/wavs/TownTheme.mp3"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -503,7 +511,11 @@ jobs:
 
       - name: Publish to NPM
         if: needs.check-tag.outputs.build-npm == 'true'
+        working-directory: nodejs
         run: |
+          # Copy prebuilds from artifacts
+          cp -r ../prebuilds/* prebuilds/ || true
+          
           PACKAGE_NAME=$(node -p "require('./package.json').name")
           PACKAGE_VERSION=$(node -p "require('./package.json').version")
           if npm view "$PACKAGE_NAME@$PACKAGE_VERSION" version > /dev/null 2>&1; then

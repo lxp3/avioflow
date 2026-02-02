@@ -5,16 +5,23 @@ dist/
 node_modules/
 prebuilds/
 
+# WASM build artifacts
+wasm/ffmpeg-wasm/
+wasm/scripts/ffmpeg-build/
+wasm/build/
+wasm/dist/
+
 # IDE and editor
 .cache/
 .vs/
 __pycache__/
+*.pyc
+
 # Logs
 *.log
 *.txt
 
-# Exceptions
-public/downloads/miniaudio.h
-
-# Keep CMakeLists.txt
+# Exceptions - keep these
+!README.md
 !CMakeLists.txt
+public/downloads/miniaudio.h
