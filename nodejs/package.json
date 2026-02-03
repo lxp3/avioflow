@@ -45,11 +45,12 @@
     "prebuild": "prebuildify --napi --strip --tag-libc"
   },
   "optionalDependencies": {
-    "@avioflow/win32-x64": "0.1.14",
-    "@avioflow/linux-x64": "0.1.14"
+    "@avioflow/linux-x64": "0.1.14",
+    "@avioflow/win32-x64": "0.1.14"
   },
   "devDependencies": {
     "cmake-js": "^7.3.0",
+    "electron": "34.0.0",
     "node-addon-api": "^8.0.0",
     "prebuildify": "^6.0.0"
   }
