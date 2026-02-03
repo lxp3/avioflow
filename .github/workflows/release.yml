@@ -17,7 +17,7 @@ jobs:
   # Tag formats:
   #   v0.1.5       -> Build and publish everything (C++, Python, npm)
   #   v0.1.5-cpp   -> Build and publish C++ only
-  #   v0.1.5-wheels -> Build and publish Python wheels only
+  #   v0.1.5-py    -> Build and publish Python wheels only
   #   v0.1.5-npm   -> Build and publish npm only
   #   v0.1.5-vsix  -> Build and publish VS Code extension only
   # ============================================================
@@ -46,8 +46,8 @@ jobs:
           if [[ "$TAG" =~ -cpp$ ]]; then
             echo "Tag ends with -cpp: Building C++ only"
             BUILD_CPP="true"
-          elif [[ "$TAG" =~ -wheels$ ]]; then
-            echo "Tag ends with -wheels: Building Python wheels only"
+          elif [[ "$TAG" =~ -py$ ]]; then
+            echo "Tag ends with -py: Building Python wheels only"
             BUILD_PYTHON="true"
           elif [[ "$TAG" =~ -npm$ ]]; then
             echo "Tag ends with -npm: Building npm only"
@@ -62,7 +62,7 @@ jobs:
             BUILD_NPM="true"
           else
             echo "Unknown tag format: $TAG"
-            echo "Supported formats: v0.1.5, v0.1.5-cpp, v0.1.5-wheels, v0.1.5-npm, v0.1.5-vsix"
+            echo "Supported formats: v0.1.5, v0.1.5-cpp, v0.1.5-py, v0.1.5-npm, v0.1.5-vsix"
             exit 1
           fi
           
@@ -135,7 +135,7 @@ jobs:
           
           # Build with cmake-js for Node.js
           echo "Building Node-API 8 addon for Node.js..."
-          npx cmake-js compile --CDCMAKE_BUILD_TYPE=Release --CDNAPI_VERSION=8
+          npx cmake-js compile --CDCMAKE_BUILD_TYPE=Release --CDNAPI_VERSION=8 --directory "$GITHUB_WORKSPACE" --out "$GITHUB_WORKSPACE/nodejs/build"
           
           # Copy to platform-specific package directory
           cp build/bin/avioflow.node npm-packages/@avioflow/linux-x64/avioflow.node
@@ -266,7 +266,7 @@ jobs:
           
           # Build with cmake-js for Node.js
           Write-Host "Building Node-API 8 addon for Node.js..."
-          npx cmake-js compile --CDNAPI_VERSION=8
+          npx cmake-js compile --CDNAPI_VERSION=8 --directory "$env:GITHUB_WORKSPACE" --out "$env:GITHUB_WORKSPACE/nodejs/build"
           
           # Copy to platform-specific package directory
           Copy-Item build/bin/Release/avioflow.node npm-packages/@avioflow/win32-x64/avioflow.node

@@ -215,7 +215,7 @@ foreach ($ver in $ElectronVersions) {
     Write-Host "  Electron $ver... " -NoNewline
     
     # Set Electron mirror for faster downloads (especially useful in China)
-    $env:ELECTRON_MIRROR = "https://npmmirror.com/mirrors/electron/"
+    # $env:ELECTRON_MIRROR = "https://npmmirror.com/mirrors/electron/"
     
     # Install specific Electron version (saved to devDependencies, kept locally)
     Push-Location $NodejsDir
