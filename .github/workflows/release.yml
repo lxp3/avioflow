@@ -129,22 +129,29 @@ jobs:
       # --- Build Node.js Addon (Static, Node-API 8 for Node.js >= 16) ---
       - name: Build Node.js Addon (Node-API 8)
         if: needs.check-tag.outputs.build-npm == 'true'
-        working-directory: nodejs
         run: |
-          npm install
-          
-          # Build with cmake-js for Node.js
+          # Install dependencies in nodejs directory
+          cd nodejs && npm install && cd ..
+
+          # Prepare root for cmake-js (needs package.json)
+          ln -s nodejs/package.json .
+
+          # Build with cmake-js from Root
           echo "Building Node-API 8 addon for Node.js..."
-          npx cmake-js compile --CDCMAKE_BUILD_TYPE=Release --CDNAPI_VERSION=8 --directory "$GITHUB_WORKSPACE" --out "$GITHUB_WORKSPACE/nodejs/build"
-          
+          ./nodejs/node_modules/.bin/cmake-js compile --CDCMAKE_BUILD_TYPE=Release --CDNAPI_VERSION=8 --out build-nodejs
+
+          # Cleanup
+          rm package.json
+
           # Copy to platform-specific package directory
-          cp build/bin/avioflow.node npm-packages/@avioflow/linux-x64/avioflow.node
-          
+          # Note: Output path on Linux is typically bin/avioflow.node based on CMakeLists.txt
+          cp build-nodejs/bin/avioflow.node nodejs/npm-packages/@avioflow/linux-x64/avioflow.node
+
           echo "=== Platform Package Info ==="
           echo "Package: @avioflow/linux-x64"
           echo "Node-API version: 8"
           echo "Compatible with: Node.js 16+"
-          ls -la npm-packages/@avioflow/linux-x64/
+          ls -la nodejs/npm-packages/@avioflow/linux-x64/
 
       # Verify the built module works
       - name: Verify Node.js Addon
@@ -153,6 +160,9 @@ jobs:
         run: |
           echo "Verifying native module loads correctly..."
           node -e "const m = require('./npm-packages/@avioflow/linux-x64/avioflow.node'); console.log('Exports:', Object.keys(m));"
+
+          # Set path for test script
+          export AVIOFLOW_BINDINGS_PATH="$(pwd)/npm-packages/@avioflow/linux-x64/avioflow.node"
           node tests/test-offline-load.js
           echo "Verification passed!"
 
@@ -260,22 +270,39 @@ jobs:
       - name: Build Node.js Addon (Node-API 8)
         if: needs.check-tag.outputs.build-npm == 'true'
         shell: pwsh
-        working-directory: nodejs
         run: |
+          # Install dependencies
+          Push-Location nodejs
           npm install
-          
-          # Build with cmake-js for Node.js
+          Pop-Location
+
+          # Prepare root (cmake-js needs package.json)
+          Copy-Item nodejs/package.json .
+
+          # Build with cmake-js from Root
           Write-Host "Building Node-API 8 addon for Node.js..."
-          npx cmake-js compile --CDNAPI_VERSION=8 --directory "$env:GITHUB_WORKSPACE" --out "$env:GITHUB_WORKSPACE/nodejs/build"
-          
+          ./nodejs/node_modules/.bin/cmake-js compile --CDCMAKE_BUILD_TYPE=Release --CDNAPI_VERSION=8 --out build-nodejs
+
+          # Clean up
+          Remove-Item package.json
+
           # Copy to platform-specific package directory
-          Copy-Item build/bin/Release/avioflow.node npm-packages/@avioflow/win32-x64/avioflow.node
-          
+          # On Windows, cmake-js/cmake often puts output in build-nodejs/bin/Release/avioflow.node
+          if (Test-Path "build-nodejs/bin/Release/avioflow.node") {
+            Copy-Item "build-nodejs/bin/Release/avioflow.node" "nodejs/npm-packages/@avioflow/win32-x64/avioflow.node"
+          } elseif (Test-Path "build-nodejs/bin/avioflow.node") {
+            Copy-Item "build-nodejs/bin/avioflow.node" "nodejs/npm-packages/@avioflow/win32-x64/avioflow.node"
+          } else {
+            Write-Error "Could not find avioflow.node build artifact"
+            Get-ChildItem -Recurse build-nodejs
+            exit 1
+          }
+
           Write-Host "=== Platform Package Info ==="
           Write-Host "Package: @avioflow/win32-x64"
           Write-Host "Node-API version: 8"
           Write-Host "Compatible with: Node.js 16+"
-          Get-ChildItem npm-packages/@avioflow/win32-x64/
+          Get-ChildItem nodejs/npm-packages/@avioflow/win32-x64/
 
       # Verify the built module works
       - name: Verify Node.js Addon
@@ -285,6 +312,8 @@ jobs:
         run: |
           Write-Host "Verifying native module loads correctly..."
           node -e "const m = require('./npm-packages/@avioflow/win32-x64/avioflow.node'); console.log('Exports:', Object.keys(m));"
+
+          $env:AVIOFLOW_BINDINGS_PATH = "$(Get-Location)/npm-packages/@avioflow/win32-x64/avioflow.node"
           node tests/test-offline-load.js
           Write-Host "Verification passed!"
 
