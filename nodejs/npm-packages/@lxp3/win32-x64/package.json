@@ -1,6 +1,6 @@
 {
-  "name": "@avioflow/win32-x64",
-  "version": "0.1.14",
+  "name": "@lxp3/win32-x64",
+  "version": "0.2.0",
   "description": "Windows x64 native bindings for avioflow",
   "os": ["win32"],
   "cpu": ["x64"],
@@ -10,6 +10,6 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/AkitoLX/avioflow.git",
-    "directory": "nodejs/npm-packages/@avioflow/win32-x64"
+    "directory": "nodejs/npm-packages/@lxp3/win32-x64"
   }
 }

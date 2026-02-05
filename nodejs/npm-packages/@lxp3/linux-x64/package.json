@@ -1,6 +1,6 @@
 {
-  "name": "@avioflow/linux-x64",
-  "version": "0.1.14",
+  "name": "@lxp3/linux-x64",
+  "version": "0.2.0",
   "description": "Linux x64 native bindings for avioflow",
   "os": ["linux"],
   "cpu": ["x64"],
@@ -10,6 +10,6 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/AkitoLX/avioflow.git",
-    "directory": "nodejs/npm-packages/@avioflow/linux-x64"
+    "directory": "nodejs/npm-packages/@lxp3/linux-x64"
   }
 }

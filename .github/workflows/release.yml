@@ -145,13 +145,13 @@ jobs:
 
           # Copy to platform-specific package directory
           # Note: Output path on Linux is typically bin/avioflow.node based on CMakeLists.txt
-          cp build-nodejs/bin/avioflow.node nodejs/npm-packages/@avioflow/linux-x64/avioflow.node
+          cp build-nodejs/bin/avioflow.node nodejs/npm-packages/@lxp3/linux-x64/avioflow.node
 
           echo "=== Platform Package Info ==="
-          echo "Package: @avioflow/linux-x64"
+          echo "Package: @lxp3/linux-x64"
           echo "Node-API version: 8"
           echo "Compatible with: Node.js 16+"
-          ls -la nodejs/npm-packages/@avioflow/linux-x64/
+          ls -la nodejs/npm-packages/@lxp3/linux-x64/
 
       # Verify the built module works
       - name: Verify Node.js Addon
@@ -159,10 +159,10 @@ jobs:
         working-directory: nodejs
         run: |
           echo "Verifying native module loads correctly..."
-          node -e "const m = require('./npm-packages/@avioflow/linux-x64/avioflow.node'); console.log('Exports:', Object.keys(m));"
+          node -e "const m = require('./npm-packages/@lxp3/linux-x64/avioflow.node'); console.log('Exports:', Object.keys(m));"
 
           # Set path for test script
-          export AVIOFLOW_BINDINGS_PATH="$(pwd)/npm-packages/@avioflow/linux-x64/avioflow.node"
+          export AVIOFLOW_BINDINGS_PATH="$(pwd)/npm-packages/@lxp3/linux-x64/avioflow.node"
           node tests/test-offline-load.js
           echo "Verification passed!"
 
@@ -177,7 +177,7 @@ jobs:
         if: needs.check-tag.outputs.build-npm == 'true'
         with:
           name: npm-linux-x64
-          path: nodejs/npm-packages/@avioflow/linux-x64/
+          path: nodejs/npm-packages/@lxp3/linux-x64/
 
       - name: Cancel workflow on failure
         if: failure()
@@ -289,9 +289,9 @@ jobs:
           # Copy to platform-specific package directory
           # On Windows, cmake-js/cmake often puts output in build-nodejs/bin/Release/avioflow.node
           if (Test-Path "build-nodejs/bin/Release/avioflow.node") {
-            Copy-Item "build-nodejs/bin/Release/avioflow.node" "nodejs/npm-packages/@avioflow/win32-x64/avioflow.node"
+            Copy-Item "build-nodejs/bin/Release/avioflow.node" "nodejs/npm-packages/@lxp3/win32-x64/avioflow.node"
           } elseif (Test-Path "build-nodejs/bin/avioflow.node") {
-            Copy-Item "build-nodejs/bin/avioflow.node" "nodejs/npm-packages/@avioflow/win32-x64/avioflow.node"
+            Copy-Item "build-nodejs/bin/avioflow.node" "nodejs/npm-packages/@lxp3/win32-x64/avioflow.node"
           } else {
             Write-Error "Could not find avioflow.node build artifact"
             Get-ChildItem -Recurse build-nodejs
@@ -299,10 +299,10 @@ jobs:
           }
 
           Write-Host "=== Platform Package Info ==="
-          Write-Host "Package: @avioflow/win32-x64"
+          Write-Host "Package: @lxp3/win32-x64"
           Write-Host "Node-API version: 8"
           Write-Host "Compatible with: Node.js 16+"
-          Get-ChildItem nodejs/npm-packages/@avioflow/win32-x64/
+          Get-ChildItem nodejs/npm-packages/@lxp3/win32-x64/
 
       # Verify the built module works
       - name: Verify Node.js Addon
@@ -311,9 +311,9 @@ jobs:
         working-directory: nodejs
         run: |
           Write-Host "Verifying native module loads correctly..."
-          node -e "const m = require('./npm-packages/@avioflow/win32-x64/avioflow.node'); console.log('Exports:', Object.keys(m));"
+          node -e "const m = require('./npm-packages/@lxp3/win32-x64/avioflow.node'); console.log('Exports:', Object.keys(m));"
 
-          $env:AVIOFLOW_BINDINGS_PATH = "$(Get-Location)/npm-packages/@avioflow/win32-x64/avioflow.node"
+          $env:AVIOFLOW_BINDINGS_PATH = "$(Get-Location)/npm-packages/@lxp3/win32-x64/avioflow.node"
           node tests/test-offline-load.js
           Write-Host "Verification passed!"
 
@@ -328,7 +328,7 @@ jobs:
         if: needs.check-tag.outputs.build-npm == 'true'
         with:
           name: npm-win32-x64
-          path: nodejs/npm-packages/@avioflow/win32-x64/
+          path: nodejs/npm-packages/@lxp3/win32-x64/
 
       - name: Cancel workflow on failure
         if: failure()
@@ -499,12 +499,12 @@ jobs:
           if [ "${{ needs.check-tag.outputs.build-npm }}" == "true" ]; then
             echo "Preparing npm platform packages..."
             # Copy the built .node files to the package directories
-            cp artifacts/npm-linux-x64/avioflow.node nodejs/npm-packages/@avioflow/linux-x64/ || true
-            cp artifacts/npm-win32-x64/avioflow.node nodejs/npm-packages/@avioflow/win32-x64/ || true
-            
+            cp artifacts/npm-linux-x64/avioflow.node nodejs/npm-packages/@lxp3/linux-x64/ || true
+            cp artifacts/npm-win32-x64/avioflow.node nodejs/npm-packages/@lxp3/win32-x64/ || true
+
             echo "Platform packages prepared:"
-            ls -la nodejs/npm-packages/@avioflow/linux-x64/ || true
-            ls -la nodejs/npm-packages/@avioflow/win32-x64/ || true
+            ls -la nodejs/npm-packages/@lxp3/linux-x64/ || true
+            ls -la nodejs/npm-packages/@lxp3/win32-x64/ || true
           fi
           
           # VS Code extension (multi-platform)
@@ -541,9 +541,9 @@ jobs:
           skip-existing: true
 
       # Publish platform-specific packages first, then main package
-      - name: Publish @avioflow/linux-x64 to NPM
+      - name: Publish @lxp3/linux-x64 to NPM
         if: needs.check-tag.outputs.build-npm == 'true'
-        working-directory: nodejs/npm-packages/@avioflow/linux-x64
+        working-directory: nodejs/npm-packages/@lxp3/linux-x64
         run: |
           PACKAGE_NAME=$(node -p "require('./package.json').name")
           PACKAGE_VERSION=$(node -p "require('./package.json').version")
@@ -555,9 +555,9 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      - name: Publish @avioflow/win32-x64 to NPM
+      - name: Publish @lxp3/win32-x64 to NPM
         if: needs.check-tag.outputs.build-npm == 'true'
-        working-directory: nodejs/npm-packages/@avioflow/win32-x64
+        working-directory: nodejs/npm-packages/@lxp3/win32-x64
         run: |
           PACKAGE_NAME=$(node -p "require('./package.json').name")
           PACKAGE_VERSION=$(node -p "require('./package.json').version")
