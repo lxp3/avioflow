@@ -9,7 +9,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/AkitoLX/avioflow.git",
+    "url": "git+https://github.com/lxp3/avioflow.git",
     "directory": "nodejs/npm-packages/@lxp3/win32-x64"
   }
 }
