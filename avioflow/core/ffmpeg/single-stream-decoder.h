@@ -35,11 +35,11 @@ namespace avioflow
     // === Decoding ===
 
     // Decode next frame - returns pointer to internal AVFrame
-    // WARNING: Data is only valid until the next decode call
-    AVFrame *decode_next();
+    // WARNING: Data is only valid until the next read call
+    AVFrame *read();
 
-    // Decode entire audio at once (offline mode)
-    std::vector<std::vector<float>> get_all_samples();
+    // Decode all currently available samples
+    std::vector<std::vector<float>> get_samples();
 
     // === Status ===
 

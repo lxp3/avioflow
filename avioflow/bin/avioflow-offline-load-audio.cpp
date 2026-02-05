@@ -19,7 +19,7 @@ void test_file_decode(const std::string &path)
         std::cout << "Duration: " << meta.duration << " s\n";
 
         // Decode all samples at once (offline mode)
-        auto samples = decoder.get_all_samples();
+        auto samples = decoder.get_samples();
         size_t total_samples = samples.empty() ? 0 : samples[0].size();
         
         std::cout << "Decoded " << total_samples << " samples per channel across "

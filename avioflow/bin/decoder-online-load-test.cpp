@@ -61,14 +61,14 @@ void simulate_streaming(const std::string &test_name, const std::string &file_pa
     push_count++;
 
     // Try to decode available frames
-    while (auto frame = decoder.decode_next()) {
+    while (auto frame = decoder.read()) {
       total_decoded += frame.num_samples;
     }
   }
 
   // After all data is pushed, continue decoding until finished
   while (!decoder.is_finished()) {
-    auto frame = decoder.decode_next();
+    auto frame = decoder.read();
     if (!frame) break;
     total_decoded += frame.num_samples;
   }
@@ -114,7 +114,7 @@ void test_online_pcm_fallback() {
       decoder.push(buffer.data() + offset, to_push);
       offset += to_push;
 
-      while (auto frame = decoder.decode_next()) {
+      while (auto frame = decoder.read()) {
           total_decoded += frame.num_samples;
       }
   }

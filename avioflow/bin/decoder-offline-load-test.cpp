@@ -34,7 +34,7 @@ void test_offline_filepath() {
 
   size_t total_samples = 0;
   while (!decoder.is_finished()) {
-    auto frame = decoder.decode_next();
+    auto frame = decoder.read();
     if (!frame) break;
     total_samples += frame.num_samples;
   }
@@ -52,7 +52,7 @@ void test_offline_memory() {
 
   size_t total_samples = 0;
   while (!decoder.is_finished()) {
-    auto frame = decoder.decode_next();
+    auto frame = decoder.read();
     if (!frame) break;
     total_samples += frame.num_samples;
   }
@@ -69,7 +69,7 @@ void test_offline_url() {
 
   int frames = 0;
   while (!decoder.is_finished() && frames < 10) {
-    auto frame = decoder.decode_next();
+    auto frame = decoder.read();
     if (!frame) break;
     frames++;
   }

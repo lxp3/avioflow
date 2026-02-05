@@ -76,6 +76,8 @@ function tryRequire(packageName, description) {
 
 // 1. Development builds (cmake-js output) - for local development
 const devPaths = [
+  process.env.AVIOFLOW_BINDINGS_PATH, // Allow manual override via env var
+  join(nodejsDir, 'build-nodejs/Release/avioflow.node'), // cmake-js custom out dir
   join(nodejsDir, 'build/bin/Release/avioflow.node'),
   join(nodejsDir, 'build/bin/avioflow.node'),
   join(nodejsDir, 'build_static/bin/Release/avioflow.node'),

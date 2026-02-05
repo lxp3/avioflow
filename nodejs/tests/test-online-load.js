@@ -47,14 +47,14 @@ function simulateStreaming(testName, filePath, format, sampleRate = 0, channels 
         
         // Try to decode available frames
         let frame
-        while ((frame = decoder.decodeNext()) !== null) {
+        while ((frame = decoder.read()) !== null) {
             totalDecoded += frame[0]?.length || 0
         }
     }
     
     // Continue decoding until finished
     while (!decoder.isFinished()) {
-        const frame = decoder.decodeNext()
+        const frame = decoder.read()
         if (!frame) break
         totalDecoded += frame[0]?.length || 0
     }
@@ -108,7 +108,7 @@ function testOnlinePcmFallback() {
         offset += toPush
         
         let frame
-        while ((frame = decoder.decodeNext()) !== null) {
+        while ((frame = decoder.read()) !== null) {
             totalDecoded += frame[0]?.length || 0
         }
     }

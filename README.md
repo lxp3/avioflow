@@ -58,26 +58,26 @@ AudioDecoder decoder(options);
 |--------|-------------|
 | `open(source)` | Open file path, URL, or device |
 | `push(data, size)` | Push raw bytes for streaming decode |
-| `decode_next()` | Decode next frame, returns `FrameData` |
-| `get_all_samples()` | Decode all and return `vector<vector<float>>` |
+| `read()` | Decode next frame, returns `FrameData`. (Formerly `decode_next`) |
+| `get_samples()` | Decode all currently available samples. (Formerly `get_all_samples`) |
 | `get_metadata()` | Get audio metadata |
 | `is_finished()` | Check if EOF reached |
 
 #### `FrameData`
 
-Zero-copy frame data structure returned by `decode_next()`.
+Zero-copy frame data structure returned by `read()`.
 
 ```cpp
 struct FrameData {
     float** data;        // Planar channel pointers: data[channel][sample]
     int num_channels;    // Number of channels
     int num_samples;     // Samples per channel
-    
+
     operator bool();     // True if valid data
 };
 ```
 
-> ⚠️ **Warning**: `FrameData.data` points to internal buffer, valid only until next `decode_next()` call.
+> ⚠️ **Warning**: `FrameData.data` points to internal buffer, valid only until next `read()` call.
 
 ### Examples
 
@@ -86,7 +86,7 @@ struct FrameData {
 AudioDecoder decoder({.output_sample_rate = 16000});
 decoder.open("audio.mp3");
 
-auto samples = decoder.get_all_samples();  // vector<vector<float>>
+auto samples = decoder.get_samples();  // vector<vector<float>>
 std::cout << "Channels: " << samples.size() << std::endl;
 std::cout << "Samples: " << samples[0].size() << std::endl;
 ```
@@ -96,7 +96,7 @@ std::cout << "Samples: " << samples[0].size() << std::endl;
 AudioDecoder decoder;
 decoder.open("audio.mp3");
 
-while (auto frame = decoder.decode_next()) {
+while (auto frame = decoder.read()) {
     // frame.data[channel][sample]
     for (int c = 0; c < frame.num_channels; c++) {
         process(frame.data[c], frame.num_samples);
@@ -114,18 +114,10 @@ opts.input_channels = 2;
 AudioDecoder decoder(opts);
 decoder.push(raw_bytes, size);  // Auto-initializes on first call
 
-while (auto frame = decoder.decode_next()) {
+auto samples = decoder.get_samples(); // Decode all buffered data
+// Or frame-by-frame:
+while (auto frame = decoder.read()) {
     // Process decoded audio...
-}
-```
-
-#### WASAPI Loopback Capture
-```cpp
-AudioDecoder decoder;
-decoder.open("wasapi_loopback");
-
-while (auto frame = decoder.decode_next()) {
-    // Capture system audio in real-time
 }
 ```
 
@@ -154,19 +146,18 @@ decoder = avioflow.AudioDecoder(
 |--------|---------|-------------|
 | `load(source)` | `Metadata` | Load file, URL, or `pathlib.Path` |
 | `decoder(bytes)` | `ndarray` | Push bytes and decode (streaming) |
-| `get_all_samples()` | `ndarray` | Decode entire source |
+| `read()` | `ndarray` | Decode next frame |
+| `get_samples()` | `ndarray` | Decode all available samples |
 | `is_finished()` | `bool` | Check if EOF |
 
 #### `Metadata`
 
 ```python
-meta = decoder.load("audio.mp3")
+# Quick metadata inspection without full decoding
+meta = avioflow.info("audio.mp3")
 print(f"Duration: {meta.duration}s")
 print(f"Sample Rate: {meta.sample_rate}Hz")
-print(f"Channels: {meta.num_channels}")
 print(f"Codec: {meta.codec}")
-print(f"Container: {meta.container}")
-print(f"Bit Rate: {meta.bit_rate}bps")
 ```
 
 ### Examples
@@ -175,7 +166,7 @@ print(f"Bit Rate: {meta.bit_rate}bps")
 ```python
 decoder = avioflow.AudioDecoder(output_sample_rate=16000)
 meta = decoder.load("speech.wav")
-samples = decoder.get_all_samples()  # numpy array (channels, samples)
+samples = decoder.get_samples()      # numpy array (channels, samples)
 print(f"Shape: {samples.shape}")     # e.g., (1, 160000)
 ```
 
@@ -189,7 +180,7 @@ decoder = avioflow.AudioDecoder(
 
 while True:
     data = socket.recv(4096)
-    samples = decoder(data)  # Call decoder directly
+    samples = decoder(data)  # Push & get samples in one call
     if samples.size > 0:
         process_audio(samples)
 ```
@@ -199,7 +190,6 @@ while True:
 devices = avioflow.DeviceManager.list_audio_devices()
 for dev in devices:
     print(f"{dev.name}: {dev.description}")
-    # dev.is_output: True for output/loopback devices
 ```
 
 ### Logging
@@ -216,10 +206,8 @@ avioflow.set_log_level("debug")  # quiet, error, warning, info, debug, trace
 | Runtime | Version | Support |
 |---------|---------|---------|
 | **Node.js** | 16, 18, 20, 22+ | ✅ Native (N-API) |
-| **Electron** | All versions | ❌ Not supported |
+| **Electron** | All versions | ✅ Supported (requires rebuild) |
 | **Architectures** | x64 | ✅ Linux, Windows |
-
-> ⚠️ **Electron Not Supported**: Due to V8 ABI compatibility issues, the native addon crashes in Electron environments (including VS Code extensions). For Electron apps, we recommend using an **external FFmpeg process** instead.
 
 ### Installation
 
@@ -259,8 +247,8 @@ const decoder = new avioflow.AudioDecoder({
 |--------|---------|-------------|
 | `load(source)` | `Metadata` | Load file, URL, or device name. Returns metadata. |
 | `push(buffer)` | `void` | Push raw encoded bytes for streaming. |
-| `decodeNext()` | `Float32Array[]` \| `null` | Decode next frame. Returns array of channel data. |
-| `getAllSamples()` | `Float32Array[]` | Decode all remaining samples at once. |
+| `read()` | `Float32Array[]` \| `null` | Decode next frame. Returns array of channel data. |
+| `getSamples()` | `Float32Array[]` | Decode all available samples at once. |
 | `isFinished()` | `boolean` | Check if end of stream reached. |
 
 ### Examples
@@ -268,9 +256,9 @@ const decoder = new avioflow.AudioDecoder({
 #### Quick File Loading (Recommended)
 ```javascript
 // Opens file, resamples to 16kHz mono, and decodes everything
-const { metadata, samples } = avioflow.load("audio.mp3", { 
-    outputSampleRate: 16000, 
-    outputNumChannels: 1 
+const { metadata, samples } = avioflow.load("audio.mp3", {
+    outputSampleRate: 16000,
+    outputNumChannels: 1
 });
 
 console.log(`Duration: ${metadata.duration}s`);
@@ -283,7 +271,7 @@ const decoder = new avioflow.AudioDecoder({ outputSampleRate: 44100 });
 const meta = decoder.load("audio.wav");
 
 // Decodes the entire file into memory
-const allSamples = decoder.getAllSamples(); 
+const allSamples = decoder.getSamples();
 process(allSamples);
 ```
 
@@ -297,10 +285,11 @@ const decoder = new avioflow.AudioDecoder({
 
 socket.on('data', (chunk) => {
     decoder.push(chunk);
-    let frame;
-    // Extract all available frames from the pushed chunk
-    while ((frame = decoder.decodeNext()) !== null) {
-        processAudio(frame); // frame is Float32Array[]
+
+    // Get all samples decoded from this chunk
+    const samples = decoder.getSamples();
+    if (samples.length > 0) {
+        processAudio(samples);
     }
 });
 ```
@@ -324,27 +313,23 @@ devices.forEach(dev => {
 - Python 3.8+ with pybind11 (for Python bindings)
 - Node.js 16+ (for Node.js bindings)
 
-### Windows
-```powershell
-.\build.ps1
-```
-
-### Linux
+### C++ & Python Build
 ```bash
-cmake -B build -DENABLE_PYTHON=ON
-cmake --build build --config Release
+./build.sh
 ```
+This will build the C++ library, Python bindings, and package a Python wheel.
 
-### Node.js Prebuild
+### Node.js Build
 ```bash
-npm run prebuild
+./build-nodejs.sh
 ```
+This will build the Node.js bindings using `cmake-js` and run compatibility tests.
 
 ---
 
 ## Supported Formats
 
-AvioFlow supports a wide range of audio formats, codecs, and devices through FFmpeg. 
+AvioFlow supports a wide range of audio formats, codecs, and devices through FFmpeg.
 
 For a complete and detailed list of supported decoders, encoders, and input formats, please refer to the **[Supported Formats Reference](doc/supported_formats.md)**.
 

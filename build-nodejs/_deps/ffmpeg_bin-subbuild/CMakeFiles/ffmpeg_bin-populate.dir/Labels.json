@@ -1,0 +1,46 @@
+{
+	"sources" : 
+	[
+		{
+			"file" : "/data/user/lxp/docker/avioflow/build-nodejs/_deps/ffmpeg_bin-subbuild/CMakeFiles/ffmpeg_bin-populate"
+		},
+		{
+			"file" : "/data/user/lxp/docker/avioflow/build-nodejs/_deps/ffmpeg_bin-subbuild/CMakeFiles/ffmpeg_bin-populate.rule"
+		},
+		{
+			"file" : "/data/user/lxp/docker/avioflow/build-nodejs/_deps/ffmpeg_bin-subbuild/CMakeFiles/ffmpeg_bin-populate-complete.rule"
+		},
+		{
+			"file" : "/data/user/lxp/docker/avioflow/build-nodejs/_deps/ffmpeg_bin-subbuild/ffmpeg_bin-populate-prefix/src/ffmpeg_bin-populate-stamp/ffmpeg_bin-populate-build.rule"
+		},
+		{
+			"file" : "/data/user/lxp/docker/avioflow/build-nodejs/_deps/ffmpeg_bin-subbuild/ffmpeg_bin-populate-prefix/src/ffmpeg_bin-populate-stamp/ffmpeg_bin-populate-configure.rule"
+		},
+		{
+			"file" : "/data/user/lxp/docker/avioflow/build-nodejs/_deps/ffmpeg_bin-subbuild/ffmpeg_bin-populate-prefix/src/ffmpeg_bin-populate-stamp/ffmpeg_bin-populate-download.rule"
+		},
+		{
+			"file" : "/data/user/lxp/docker/avioflow/build-nodejs/_deps/ffmpeg_bin-subbuild/ffmpeg_bin-populate-prefix/src/ffmpeg_bin-populate-stamp/ffmpeg_bin-populate-install.rule"
+		},
+		{
+			"file" : "/data/user/lxp/docker/avioflow/build-nodejs/_deps/ffmpeg_bin-subbuild/ffmpeg_bin-populate-prefix/src/ffmpeg_bin-populate-stamp/ffmpeg_bin-populate-mkdir.rule"
+		},
+		{
+			"file" : "/data/user/lxp/docker/avioflow/build-nodejs/_deps/ffmpeg_bin-subbuild/ffmpeg_bin-populate-prefix/src/ffmpeg_bin-populate-stamp/ffmpeg_bin-populate-patch.rule"
+		},
+		{
+			"file" : "/data/user/lxp/docker/avioflow/build-nodejs/_deps/ffmpeg_bin-subbuild/ffmpeg_bin-populate-prefix/src/ffmpeg_bin-populate-stamp/ffmpeg_bin-populate-test.rule"
+		},
+		{
+			"file" : "/data/user/lxp/docker/avioflow/build-nodejs/_deps/ffmpeg_bin-subbuild/ffmpeg_bin-populate-prefix/src/ffmpeg_bin-populate-stamp/ffmpeg_bin-populate-update.rule"
+		}
+	],
+	"target" : 
+	{
+		"labels" : 
+		[
+			"ffmpeg_bin-populate"
+		],
+		"name" : "ffmpeg_bin-populate"
+	}
+}

@@ -42,7 +42,7 @@ PYBIND11_MODULE(_avioflow, m) {
     py::arg("level") = "info",
     R"pbdoc(
         Set FFmpeg logging verbosity level.
-        
+
         Args:
             level (str): Log level, one of:
                 - "quiet": No output
@@ -54,8 +54,34 @@ PYBIND11_MODULE(_avioflow, m) {
                 - "trace": Maximum verbosity
     )pbdoc");
 
+    // Get metadata only
+    m.def("info", [](py::object source) {
+        AudioStreamOptions opts;
+        AudioDecoder decoder(opts);
+
+        if (py::isinstance<py::str>(source)) {
+            decoder.open(py::cast<std::string>(source));
+        } else if (py::hasattr(source, "__fspath__")) {
+            decoder.open(py::cast<std::string>(source.attr("__fspath__")()));
+        } else {
+            throw py::type_error("source must be str or PathLike object");
+        }
+
+        return decoder.get_metadata();
+    },
+    py::arg("source"),
+    R"pbdoc(
+        Get audio metadata without decoding samples.
+
+        Args:
+            source (str): Path to audio file or URL.
+
+        Returns:
+            Metadata: Audio stream metadata (duration, sample_rate, etc.)
+    )pbdoc");
+
     // Quick offline loading helper
-    m.def("load", [](const std::string& path,
+    m.def("load", [](py::object source,
                      std::optional<int> output_sample_rate,
                      std::optional<int> output_num_channels) {
         AudioStreamOptions opts;
@@ -63,11 +89,22 @@ PYBIND11_MODULE(_avioflow, m) {
         opts.output_num_channels = output_num_channels;
         
         AudioDecoder decoder(opts);
-        decoder.open(path);
+        
+        // Support both file paths and bytes
+        if (py::isinstance<py::str>(source)) {
+            decoder.open(py::cast<std::string>(source));
+        } else if (py::isinstance<py::bytes>(source)) {
+            py::buffer_info info = py::buffer(source).request();
+            decoder.open(static_cast<const uint8_t*>(info.ptr), static_cast<size_t>(info.size));
+        } else if (py::hasattr(source, "__fspath__")) {
+            decoder.open(py::cast<std::string>(source.attr("__fspath__")()));
+        } else {
+            throw py::type_error("source must be str, bytes, or PathLike object");
+        }
         
         const auto& meta = decoder.get_metadata();
-        auto samples = decoder.get_all_samples();
-        
+        auto samples = decoder.get_samples();
+
         // Convert to numpy array
         if (samples.empty()) {
             std::vector<py::ssize_t> shape = {0, 0};
@@ -87,7 +124,7 @@ PYBIND11_MODULE(_avioflow, m) {
         
         return py::make_tuple(meta, arr);
     },
-    py::arg("path"),
+    py::arg("source"),
     py::arg("output_sample_rate") = py::none(),
     py::arg("output_num_channels") = py::none(),
     R"pbdoc(
@@ -98,7 +135,7 @@ PYBIND11_MODULE(_avioflow, m) {
         control, use AudioDecoder directly.
         
         Args:
-            path (str): Path to audio file or URL.
+            source (str or bytes): Path to audio file, URL, or audio file bytes.
             output_sample_rate (int, optional): Target sample rate in Hz.
                 If None, uses source sample rate.
             output_num_channels (int, optional): Target number of channels.
@@ -284,29 +321,14 @@ PYBIND11_MODULE(_avioflow, m) {
             if (s.size() > 0) {
                 self.push(reinterpret_cast<const uint8_t*>(s.data()), s.size());
             }
-            
-            std::vector<std::vector<float>> total_samples;
-            int max_frames_per_call = 100; // Prevent infinite loop
-            int frames_decoded = 0;
 
-            while (frames_decoded < max_frames_per_call) {
-                FrameData frame = self.decode_next();
-                if (!frame) break;
-                
-                frames_decoded++;
-                if (total_samples.empty()) {
-                    total_samples.resize(frame.num_channels);
-                }
-                for (int c = 0; c < frame.num_channels; ++c) {
-                    const float* src = frame.data[c];
-                    total_samples[c].insert(total_samples[c].end(), src, src + frame.num_samples);
-                }
-            }
-            
+            // Use new C++ get_samples() to get all currently available samples
+            std::vector<std::vector<float>> total_samples = self.get_samples();
+
             if (total_samples.empty()) {
                 return py::array_t<float>(std::vector<size_t>{0, 0});
             }
-            
+
             size_t num_channels = total_samples.size();
             size_t num_samples = total_samples[0].size();
             py::array_t<float> result({num_channels, num_samples});
@@ -315,26 +337,26 @@ PYBIND11_MODULE(_avioflow, m) {
                 std::copy(total_samples[c].begin(), total_samples[c].end(), &buf(c, 0));
             }
             return result;
-        }, 
+        },
         py::arg("data"),
         R"pbdoc(
             Push raw bytes and decode immediately (streaming mode).
-            
+
             This method enables push-based streaming: feed raw encoded bytes
             and receive decoded audio samples.
-            
+
             Args:
                 data (bytes): Raw encoded audio bytes. Format must match
                     the input_format specified in constructor.
-            
+
             Returns:
                 numpy.ndarray: Decoded audio samples with shape (channels, samples).
                     dtype is float32, values in range [-1.0, 1.0].
                     Returns empty array if no complete frames decoded yet.
-            
+
             Raises:
                 RuntimeError: If input_format was not specified in constructor.
-            
+
             Example:
                 >>> decoder = AudioDecoder(input_format="s16le", input_sample_rate=48000, input_channels=2)
                 >>> while True:
@@ -343,26 +365,15 @@ PYBIND11_MODULE(_avioflow, m) {
                 ...     if samples.size > 0:
                 ...         process_audio(samples)
         )pbdoc")
-        
-        .def("get_all_samples", [](AudioDecoder& self) -> py::array_t<float> {
-            std::vector<std::vector<float>> total_samples;
-            while (!self.is_finished()) {
-                FrameData frame = self.decode_next();
-                if (!frame) break;
-                
-                if (total_samples.empty()) {
-                    total_samples.resize(frame.num_channels);
-                }
-                for (int c = 0; c < frame.num_channels; ++c) {
-                    const float* src = frame.data[c];
-                    total_samples[c].insert(total_samples[c].end(), src, src + frame.num_samples);
-                }
-            }
-            
+
+        .def("get_samples", [](AudioDecoder& self) -> py::array_t<float> {
+            // Directly use new C++ get_samples() implementation
+            std::vector<std::vector<float>> total_samples = self.get_samples();
+
             if (total_samples.empty()) {
                 return py::array_t<float>(std::vector<size_t>{0, 0});
             }
-            
+
             size_t num_channels = total_samples.size();
             size_t num_samples = total_samples[0].size();
             py::array_t<float> result({num_channels, num_samples});
@@ -371,28 +382,27 @@ PYBIND11_MODULE(_avioflow, m) {
                 std::copy(total_samples[c].begin(), total_samples[c].end(), &buf(c, 0));
             }
             return result;
-        }, 
+        },
         R"pbdoc(
-            Decode entire audio source and return all samples.
-            
-            This is a convenience method for offline/batch processing.
-            Decodes from current position to end of stream.
-            
+            Decode all currently available samples.
+
+            In File Mode: Decodes from current position to end of stream.
+            In Stream Mode: Decodes all buffered data until more input is required.
+
             Returns:
-                numpy.ndarray: All audio samples with shape (channels, samples).
+                numpy.ndarray: Audio samples with shape (channels, samples).
                     dtype is float32, values in range [-1.0, 1.0].
-            
+
             Note:
-                For large files, consider using frame-by-frame decoding
+                For large files, consider using frame-by-frame decoding (read())
                 to manage memory usage.
-            
+
             Example:
                 >>> decoder = AudioDecoder(output_sample_rate=16000)
                 >>> decoder.load("speech.wav")
-                >>> samples = decoder.get_all_samples()
-                >>> print(f"Shape: {samples.shape}")  # e.g., (1, 160000) for 10s mono
+                >>> samples = decoder.get_samples()
         )pbdoc")
-        
+
         .def("push", [](AudioDecoder& self, py::bytes data) {
             std::string s = data;
             self.push(reinterpret_cast<const uint8_t*>(s.data()), s.size());
@@ -400,28 +410,28 @@ PYBIND11_MODULE(_avioflow, m) {
         py::arg("data"),
         R"pbdoc(
             Push raw audio data bytes to the decoder (stream mode only).
-            
+
             Args:
                 data (bytes): Raw audio data bytes
-            
+
             Note:
                 This method initializes the decoder on first call when enough data is buffered.
-                Use decode_next() or __call__() to retrieve decoded frames.
-            
+                Use read() or __call__() to retrieve decoded frames.
+
             Example:
                 >>> decoder = AudioDecoder(input_format="s16le", input_sample_rate=16000, input_channels=1)
                 >>> with open("audio.raw", "rb") as f:
                 ...     chunk = f.read(3200)  # 100ms @ 16kHz mono
                 ...     decoder.push(chunk)
-                ...     samples = decoder.decode_next()
+                ...     samples = decoder.read()
         )pbdoc")
-        
-        .def("decode_next", [](AudioDecoder& self) -> py::object {
-            FrameData frame = self.decode_next();
+
+        .def("read", [](AudioDecoder& self) -> py::object {
+            FrameData frame = self.read();
             if (!frame) {
                 return py::none();
             }
-            
+
             size_t num_channels = frame.num_channels;
             size_t num_samples = frame.num_samples;
             py::array_t<float> result({num_channels, num_samples});
@@ -433,14 +443,14 @@ PYBIND11_MODULE(_avioflow, m) {
         },
         R"pbdoc(
             Decode next audio frame.
-            
+
             Returns:
                 numpy.ndarray or None: Decoded audio samples with shape (channels, samples),
                     or None if no frame is available (need more data or EOF).
-            
+
             Example:
                 >>> while not decoder.is_finished():
-                ...     frame = decoder.decode_next()
+                ...     frame = decoder.read()
                 ...     if frame is not None:
                 ...         process(frame)
         )pbdoc")

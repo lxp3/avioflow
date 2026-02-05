@@ -111,7 +111,7 @@ void test_online_decode(const std::string& path) {
             int frames_in_chunk = 0;
             size_t samples_in_chunk = 0;
             while (true) {
-                auto frame = decoder.decode_next();
+                auto frame = decoder.read();
                 if (!frame)
                     break;
                 total_samples += frame.num_samples;
@@ -128,7 +128,7 @@ void test_online_decode(const std::string& path) {
         int flush_frames = 0;
         size_t flush_samples = 0;
         while (!decoder.is_finished()) {
-            auto frame = decoder.decode_next();
+            auto frame = decoder.read();
             if (!frame)
                 break;
             total_samples += frame.num_samples;

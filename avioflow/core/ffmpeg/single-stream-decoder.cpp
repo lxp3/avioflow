@@ -254,7 +254,7 @@ namespace avioflow
     }
   }
 
-  AVFrame *SingleStreamDecoder::decode_next()
+  AVFrame *SingleStreamDecoder::read()
   {
     // Lazy initialization for stream mode - wait until we have enough data
     if (mode_ == Mode::Stream && !fmt_ctx_)
@@ -381,12 +381,12 @@ namespace avioflow
     }
   }
 
-  std::vector<std::vector<float>> SingleStreamDecoder::get_all_samples()
+  std::vector<std::vector<float>> SingleStreamDecoder::get_samples()
   {
     std::vector<std::vector<float>> result;
-    while (!is_finished())
+    while (true)
     {
-      auto *f = decode_next();
+      auto *f = read();
       if (!f)
         break;
 

@@ -1,0 +1,14 @@
+prefix=/data/user/lxp/trt/asr/ffmpeg-build/1-manylinux2018/outputs/ffmpeg-7.1-static-x86_64-linux-gnu
+exec_prefix=${prefix}
+libdir=/data/user/lxp/trt/asr/ffmpeg-build/1-manylinux2018/outputs/ffmpeg-7.1-static-x86_64-linux-gnu/lib
+includedir=/data/user/lxp/trt/asr/ffmpeg-build/1-manylinux2018/outputs/ffmpeg-7.1-static-x86_64-linux-gnu/include
+
+Name: libswscale
+Description: FFmpeg image rescaling library
+Version: 8.3.100
+Requires: libavutil >= 59.39.100
+Requires.private: 
+Conflicts:
+Libs: -L${libdir}  -lswscale -lm -latomic
+Libs.private: 
+Cflags: -I${includedir}
