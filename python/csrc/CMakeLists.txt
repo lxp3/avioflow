@@ -39,6 +39,14 @@ add_custom_command(TARGET ${PY_EXT_NAME} POST_BUILD
     COMMENT "Copying __init__.py to package directory"
 )
 
+# Copy _avioflow.pyi to the same directory
+add_custom_command(TARGET ${PY_EXT_NAME} POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy
+        "${CMAKE_SOURCE_DIR}/python/${PY_PACKAGE_NAME}/_avioflow.pyi"
+        "$<TARGET_FILE_DIR:${PY_EXT_NAME}>/_avioflow.pyi"
+    COMMENT "Copying _avioflow.pyi to package directory"
+)
+
 # --- Installation ---
 
 # Set destination to "." so that the package is installed at the root of the wheel
@@ -71,5 +79,9 @@ elseif(WIN32)
 endif()
 
 install(FILES "${CMAKE_SOURCE_DIR}/python/${PY_PACKAGE_NAME}/__init__.py"
+    DESTINATION "${PYTHON_INSTALL_DESTINATION}/${PY_PACKAGE_NAME}"
+)
+
+install(FILES "${CMAKE_SOURCE_DIR}/python/${PY_PACKAGE_NAME}/_avioflow.pyi"
     DESTINATION "${PYTHON_INSTALL_DESTINATION}/${PY_PACKAGE_NAME}"
 )

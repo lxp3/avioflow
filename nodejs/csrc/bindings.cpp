@@ -122,7 +122,7 @@ Napi::Value Load(const Napi::CallbackInfo &info) {
     AudioDecoder decoder(opts);
     decoder.open(path);
     auto meta = decoder.get_metadata();
-    auto samples = decoder.get_all_samples();
+    auto samples = decoder.get_samples();
 
     Napi::Object result = Napi::Object::New(env);
     result.Set("metadata", MetadataToJs(env, meta));
@@ -164,7 +164,7 @@ Napi::Value GetWaveform(const Napi::CallbackInfo &info) {
     AudioDecoder decoder(opts);
     decoder.open(path);
     auto meta = decoder.get_metadata();
-    auto all_samples = decoder.get_all_samples();
+    auto all_samples = decoder.get_samples();
 
     if (all_samples.empty()) return env.Undefined();
 
@@ -230,8 +230,8 @@ public:
         {InstanceMethod("load", &AudioDecoderAddon::Load),
          InstanceMethod("open", &AudioDecoderAddon::Open),
          InstanceMethod("push", &AudioDecoderAddon::Push),
-         InstanceMethod("decodeNext", &AudioDecoderAddon::DecodeNext),
-         InstanceMethod("getAllSamples", &AudioDecoderAddon::GetAllSamples),
+         InstanceMethod("read", &AudioDecoderAddon::Read),
+         InstanceMethod("getSamples", &AudioDecoderAddon::GetSamples),
          InstanceMethod("getMetadata", &AudioDecoderAddon::GetMetadata),
          InstanceMethod("isFinished", &AudioDecoderAddon::IsFinished)});
     constructor = Napi::Persistent(func);
@@ -368,9 +368,9 @@ private:
    * @brief Decode next available audio frame.
    * @return Array of Float32Array (channels), or null if EOF/no data
    */
-  Napi::Value DecodeNext(const Napi::CallbackInfo &info) {
+  Napi::Value Read(const Napi::CallbackInfo &info) {
     try {
-      auto frame = decoder->decode_next();
+      auto frame = decoder->read();
       if (!frame)
         return info.Env().Null();
 
@@ -394,9 +394,9 @@ private:
    * @brief Decode all remaining samples at once.
    * @return Array of Float32Array (one per channel)
    */
-  Napi::Value GetAllSamples(const Napi::CallbackInfo &info) {
+  Napi::Value GetSamples(const Napi::CallbackInfo &info) {
     try {
-      auto samples = decoder->get_all_samples();
+      auto samples = decoder->get_samples();
       return SamplesToJs(info.Env(), samples);
     } catch (const std::exception &e) {
       Napi::Error::New(info.Env(), e.what()).ThrowAsJavaScriptException();

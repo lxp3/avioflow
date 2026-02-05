@@ -28,7 +28,7 @@ int main() {
         int frame_count = 0;
 
         while (std::chrono::steady_clock::now() - start < std::chrono::seconds(3)) {
-            auto frame = decoder.decode_next();
+            auto frame = decoder.read();
             if (frame) {
                 total_samples += frame.num_samples;
                 frame_count++;

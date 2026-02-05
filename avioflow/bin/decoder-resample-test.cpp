@@ -1,5 +1,5 @@
 // Unit tests for SingleStreamDecoder - Resampling
-// Tests cover: output sample rate conversion to common rates using get_all_samples()
+// Tests cover: output sample rate conversion to common rates using get_samples()
 
 #include "avioflow-cxx-api.h"
 #include <cassert>
@@ -53,7 +53,7 @@ void test_resample_8000()
     assert(meta.sample_rate == ORIGINAL_SAMPLE_RATE);
     assert(meta.num_channels == EXPECTED_NUM_CHANNELS);
 
-    auto samples = decoder.get_all_samples();
+    auto samples = decoder.get_samples();
     size_t num_samples = samples.empty() ? 0 : samples[0].size();
     auto diff = static_cast<int64_t>(num_samples) - EXPECTED_SAMPLES_8000;
     std::cout << "sample_rate: " << meta.sample_rate << " -> " << TARGET_RATE 
@@ -75,7 +75,7 @@ void test_resample_16000()
     decoder.open(TEST_FILE_PATH);
     const auto &meta = decoder.get_metadata();
 
-    auto samples = decoder.get_all_samples();
+    auto samples = decoder.get_samples();
     size_t num_samples = samples.empty() ? 0 : samples[0].size();
     auto diff = static_cast<int64_t>(num_samples) - EXPECTED_SAMPLES_16000;
     std::cout << "sample_rate: " << meta.sample_rate << " -> " << TARGET_RATE 
@@ -96,7 +96,7 @@ void test_resample_32000()
     decoder.open(TEST_FILE_PATH);
     const auto &meta = decoder.get_metadata();
 
-    auto samples = decoder.get_all_samples();
+    auto samples = decoder.get_samples();
     size_t num_samples = samples.empty() ? 0 : samples[0].size();
     auto diff = static_cast<int64_t>(num_samples) - EXPECTED_SAMPLES_32000;
     std::cout << "sample_rate: " << meta.sample_rate << " -> " << TARGET_RATE 
@@ -117,7 +117,7 @@ void test_resample_44100()
     decoder.open(TEST_FILE_PATH);
     const auto &meta = decoder.get_metadata();
 
-    auto samples = decoder.get_all_samples();
+    auto samples = decoder.get_samples();
     size_t num_samples = samples.empty() ? 0 : samples[0].size();
     auto diff = static_cast<int64_t>(num_samples) - EXPECTED_SAMPLES_44100;
     std::cout << "sample_rate: " << meta.sample_rate << " -> " << TARGET_RATE 
@@ -138,7 +138,7 @@ void test_resample_48000()
     decoder.open(TEST_FILE_PATH);
     const auto &meta = decoder.get_metadata();
 
-    auto samples = decoder.get_all_samples();
+    auto samples = decoder.get_samples();
     size_t num_samples = samples.empty() ? 0 : samples[0].size();
     auto diff = static_cast<int64_t>(num_samples) - EXPECTED_SAMPLES_48000;
     std::cout << "sample_rate: " << meta.sample_rate << " -> " << TARGET_RATE 
@@ -158,7 +158,7 @@ void test_resample_audio_quality()
     AudioDecoder decoder({TARGET_RATE});
     decoder.open(TEST_FILE_PATH);
 
-    auto samples = decoder.get_all_samples();
+    auto samples = decoder.get_samples();
     size_t num_samples = samples.empty() ? 0 : samples[0].size();
 
     assert((int)samples.size() == EXPECTED_NUM_CHANNELS);
@@ -186,7 +186,7 @@ int main(int argc, char **argv)
     (void)argc;
     (void)argv;
 
-    std::cout << "\n=== avioflow Decoder Resample Tests (get_all_samples) ===" << std::endl;
+    std::cout << "\n=== avioflow Decoder Resample Tests (get_samples) ===" << std::endl;
 
     // Check if test file exists
     std::ifstream check_file(TEST_FILE_PATH);

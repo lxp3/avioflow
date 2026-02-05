@@ -42,8 +42,8 @@ void AudioDecoder::push(const uint8_t *data, size_t size) {
 
 // --- Decoding Methods ---
 
-FrameData AudioDecoder::decode_next() {
-  AVFrame *frame = impl_->decoder_.decode_next();
+FrameData AudioDecoder::read() {
+  AVFrame *frame = impl_->decoder_.read();
   if (!frame)
     return {nullptr, 0, 0};
 
@@ -51,8 +51,8 @@ FrameData AudioDecoder::decode_next() {
           frame->nb_samples};
 }
 
-std::vector<std::vector<float>> AudioDecoder::get_all_samples() {
-  return impl_->decoder_.get_all_samples();
+std::vector<std::vector<float>> AudioDecoder::get_samples() {
+  return impl_->decoder_.get_samples();
 }
 
 // --- Status ---

@@ -137,19 +137,19 @@ public:
    *
    * @return FrameData with valid pointers, or empty FrameData (bool() == false)
    * on EOF/no data
-   * @warning Returned data is only valid until next decode_next() call!
+   * @warning Returned data is only valid until next read() call!
    */
-  FrameData decode_next();
+  FrameData read();
 
   /**
-   * @brief Decode entire audio source at once (offline mode).
+   * @brief Decode all currently available samples.
    *
-   * Convenience method that calls decode_next() in a loop and collects all
-   * samples.
+   * In File Mode: Decodes until EOF.
+   * In Stream Mode: Decodes all buffered data until more input is required.
    *
    * @return All samples as vector[channel][sample]
    */
-  std::vector<std::vector<float>> get_all_samples();
+  std::vector<std::vector<float>> get_samples();
 
   // === Status ===
 

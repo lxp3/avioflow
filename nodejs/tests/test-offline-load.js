@@ -20,7 +20,7 @@ function testOfflineFilepath() {
     const meta = decoder.getMetadata()
     console.log(`  Codec: ${meta.codec}, Duration: ${meta.duration.toFixed(2)}s`)
     
-    const samples = decoder.getAllSamples()
+    const samples = decoder.getSamples()
     const totalSamples = samples[0]?.length || 0
     
     console.log(`  Total samples decoded: ${totalSamples}`)
@@ -39,7 +39,7 @@ function testOfflineMemory() {
     const meta = decoder.getMetadata()
     console.log(`  Codec: ${meta.codec}, Duration: ${meta.duration.toFixed(2)}s`)
     
-    const samples = decoder.getAllSamples()
+    const samples = decoder.getSamples()
     const totalSamples = samples[0]?.length || 0
     
     console.log(`  Total samples decoded: ${totalSamples}`)
@@ -60,7 +60,7 @@ function testOfflineUrl() {
         // Only decode a few frames to verify it works
         let frameCount = 0
         while (!decoder.isFinished() && frameCount < 10) {
-            const frame = decoder.decodeNext()
+            const frame = decoder.read()
             if (!frame) break
             frameCount++
         }
