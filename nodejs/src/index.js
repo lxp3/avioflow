@@ -8,8 +8,8 @@
  * - Electron 28, 30, 32, 34, 37, 38, 39+ (all versions with Node-API 8)
  * 
  * Native bindings are loaded from platform-specific optional dependencies:
- * - @avioflow/win32-x64 (Windows x64)
- * - @avioflow/linux-x64 (Linux x64)
+ * - @lxp3/win32-x64 (Windows x64)
+ * - @lxp3/linux-x64 (Linux x64)
  */
 
 import { createRequire } from 'module';
@@ -95,10 +95,10 @@ if (!addon) {
   
   // Map platform to package name
   const platformPackages = {
-    'win32-x64': '@avioflow/win32-x64',
-    'linux-x64': '@avioflow/linux-x64',
-    'darwin-x64': '@avioflow/darwin-x64',
-    'darwin-arm64': '@avioflow/darwin-arm64',
+    'win32-x64': '@lxp3/win32-x64',
+    'linux-x64': '@lxp3/linux-x64',
+    'darwin-x64': '@lxp3/darwin-x64',
+    'darwin-arm64': '@lxp3/darwin-arm64',
   };
   
   const packageName = platformPackages[platformKey];
