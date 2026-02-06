@@ -29,7 +29,7 @@ val MetadataToJs(const Metadata &meta) {
     obj.set("codec", std::string(meta.codec));
     obj.set("numSamples", static_cast<double>(meta.num_samples));
     obj.set("sampleFormat", std::string(meta.sample_format));
-    obj.set("bitRate", meta.bit_rate);
+    obj.set("bitRate", static_cast<double>(meta.bit_rate));
     obj.set("container", std::string(meta.container));
     return obj;
 }
