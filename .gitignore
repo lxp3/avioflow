@@ -5,12 +5,8 @@ build-*/
 dist/
 node_modules/
 prebuilds/
-
 # WASM build artifacts
-wasm/ffmpeg-wasm/
-wasm/scripts/ffmpeg-build/
-wasm/build/
-wasm/dist/
+!wasm/dist/
 
 # IDE and editor
 .cache/
