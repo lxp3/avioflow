@@ -21,7 +21,10 @@ async function testOfflineLoad() {
     console.log('Decoding audio...');
     // Use loadBuffer for buffer input
     try {
+        const decodeStart = Date.now();
         const result = module.loadBuffer(buffer);
+        const decodeTime = Date.now() - decodeStart;
+        console.log(`⏱️  Decode time: ${decodeTime}ms`);
 
         console.log('Result type:', typeof result);
 
@@ -33,7 +36,9 @@ async function testOfflineLoad() {
             duration: metadata.duration,
             sampleRate: metadata.sampleRate,
             numChannels: metadata.numChannels,
-            codec: metadata.codec
+            codec: metadata.codec,
+            bitRate: metadata.bitRate,
+            container: metadata.container
         });
 
         console.log('Samples info:', {

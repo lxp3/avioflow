@@ -49,27 +49,23 @@ target_link_options(avioflow_wasm PRIVATE
     -sEXPORT_ES6=1              # ES6 module output
     -sMODULARIZE=1              # Wrap in factory function
     -sEXPORT_NAME=createAvioflow
-    
+
     # Memory settings
     -sALLOW_MEMORY_GROWTH=1     # Dynamic memory allocation
     -sINITIAL_MEMORY=64MB       # Initial heap size
     -sMAXIMUM_MEMORY=512MB      # Max heap size
     -sSTACK_SIZE=2MB            # Stack size
-    
+
     # Bindings
     --bind                       # Enable embind
-    
-    # File system (for URL loading via fetch)
-    -sFETCH=1                   # Enable fetch API
-    -sASYNCIFY=1                # Enable async operations
-    
-    # Optimization
+
+    # Optimization (ASYNCIFY removed for better performance)
     -O3
     -flto                       # Link-time optimization
-    
+
     # Environment
     -sENVIRONMENT=web,worker,node
-    
+
     # Error handling
     -sABORTING_MALLOC=0         # Don't abort on malloc failure
 )
