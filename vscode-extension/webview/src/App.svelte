@@ -2,11 +2,16 @@
     import { onMount } from "svelte";
     import "./globals.css";
 
+    // State
     let metadata: any = null;
     let samples: Float32Array[] = [];
     let filePath = "";
     let decodeTimeMs = 0;
+    let totalTimeMs = 0;
+    let isLoadingSamples = false;
+    let loadStartTime = 0;
 
+    // Audio playback
     let audioContext: AudioContext;
     let audioBuffer: AudioBuffer | null = null;
     let sourceNode: AudioBufferSourceNode | null = null;
@@ -17,39 +22,68 @@
     let pauseOffset = 0;
     let animationFrame: number;
 
+    // Canvas & Zoom
     let canvas: HTMLCanvasElement;
     let canvasContainer: HTMLDivElement;
+    const CHANNEL_HEIGHT = 128;
+    let zoom = 1;
+    const MIN_ZOOM = 1;
+    const MAX_ZOOM = 50;
 
     onMount(() => {
         window.addEventListener("message", handleMessage);
+        window.addEventListener("keydown", handleKeyDown);
 
         // @ts-ignore
         const vscode = acquireVsCodeApi();
         vscode.postMessage({ type: "ready" });
+        loadStartTime = Date.now();
 
         return () => {
             window.removeEventListener("message", handleMessage);
+            window.removeEventListener("keydown", handleKeyDown);
             if (animationFrame) cancelAnimationFrame(animationFrame);
             if (sourceNode) sourceNode.stop();
             if (audioContext) audioContext.close();
         };
     });
 
+    function handleKeyDown(e: KeyboardEvent) {
+        if ((e.key === " " || e.code === "Space") && samples.length > 0) {
+            e.preventDefault();
+            togglePlay();
+        }
+    }
+
     function handleMessage(event: MessageEvent) {
         const message = event.data;
-        if (message.type === "init") {
-            filePath = message.filePath || "";
-            metadata = message.metadata;
-            decodeTimeMs = metadata.wasmDecodeTimeMs || 0;
-            duration = metadata.duration || 0;
 
-            if (message.samples && message.samples.length > 0) {
-                samples = message.samples.map((ch: any) =>
-                    ch instanceof Float32Array ? ch : new Float32Array(ch)
-                );
-            }
+        switch (message.type) {
+            case "metadata":
+                filePath = message.filePath || "";
+                metadata = message.metadata;
+                duration = metadata.duration || 0;
+                isLoadingSamples = true;
+                break;
 
-            initAudio();
+            case "samples":
+                isLoadingSamples = false;
+                decodeTimeMs = message.decodeTimeMs || 0;
+                totalTimeMs = Date.now() - loadStartTime;
+
+                if (message.samples && message.samples.length > 0) {
+                    samples = message.samples.map((ch: any) =>
+                        ch instanceof Float32Array ? ch : new Float32Array(ch)
+                    );
+                }
+
+                initAudio();
+                break;
+
+            case "error":
+                isLoadingSamples = false;
+                console.error("Error:", message.message);
+                break;
         }
     }
 
@@ -58,7 +92,7 @@
             audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
         }
 
-        if (samples.length > 0) {
+        if (samples.length > 0 && metadata) {
             const numChannels = samples.length;
             const length = samples[0].length;
             audioBuffer = audioContext.createBuffer(numChannels, length, metadata.sampleRate);
@@ -68,7 +102,6 @@
             }
         }
 
-        // Wait for layout to complete
         setTimeout(() => {
             drawWaveform();
         }, 50);
@@ -77,118 +110,217 @@
     function drawWaveform() {
         if (!canvas || samples.length === 0) return;
 
-        const rect = canvasContainer.getBoundingClientRect();
-        const width = rect.width;
-        const height = rect.height;
+        const containerRect = canvasContainer.getBoundingClientRect();
+        const containerWidth = containerRect.width;
 
-        if (width === 0 || height === 0) {
+        if (containerWidth === 0) {
             setTimeout(drawWaveform, 50);
             return;
         }
 
+        const numChannels = samples.length;
+        const totalHeight = numChannels * CHANNEL_HEIGHT;
+        const totalWidth = containerWidth * zoom;
+
         const dpr = window.devicePixelRatio || 1;
-        canvas.width = width * dpr;
-        canvas.height = height * dpr;
-        canvas.style.width = width + "px";
-        canvas.style.height = height + "px";
+        canvas.width = totalWidth * dpr;
+        canvas.height = totalHeight * dpr;
+        canvas.style.width = totalWidth + "px";
+        canvas.style.height = totalHeight + "px";
 
         const ctx = canvas.getContext("2d")!;
         ctx.scale(dpr, dpr);
-        ctx.clearRect(0, 0, width, height);
+        ctx.clearRect(0, 0, totalWidth, totalHeight);
 
-        const numChannels = samples.length;
-        const channelHeight = height / numChannels;
-
+        // Draw each channel
         for (let ch = 0; ch < numChannels; ch++) {
             const data = samples[ch];
-            const yOffset = ch * channelHeight;
-            const centerY = yOffset + channelHeight / 2;
-            const amplitude = channelHeight / 2 * 0.9;
+            const yOffset = ch * CHANNEL_HEIGHT;
+            const centerY = yOffset + CHANNEL_HEIGHT / 2;
+            const amplitude = CHANNEL_HEIGHT / 2 * 0.85;
+
+            // Draw zero line (y=0 axis)
+            ctx.beginPath();
+            ctx.strokeStyle = "#e0e0e0";
+            ctx.lineWidth = 1;
+            ctx.setLineDash([4, 4]);
+            ctx.moveTo(0, centerY);
+            ctx.lineTo(totalWidth, centerY);
+            ctx.stroke();
+            ctx.setLineDash([]);
 
             // Calculate min/max for each pixel
-            const step = data.length / width;
+            const step = data.length / totalWidth;
+            const playedX = (currentTime / duration) * totalWidth;
 
-            // Draw unplayed part (gray)
+            // Unplayed part (gray)
             ctx.beginPath();
-            ctx.strokeStyle = "#cccccc";
+            ctx.strokeStyle = "#b0b0b0";
             ctx.lineWidth = 1;
 
-            const playedX = (currentTime / duration) * width;
-
-            for (let x = Math.floor(playedX); x < width; x++) {
+            for (let x = Math.floor(playedX); x < totalWidth; x++) {
                 const startIdx = Math.floor(x * step);
                 const endIdx = Math.floor((x + 1) * step);
-
                 let min = 0, max = 0;
                 for (let i = startIdx; i < endIdx && i < data.length; i++) {
                     if (data[i] < min) min = data[i];
                     if (data[i] > max) max = data[i];
                 }
-
-                ctx.moveTo(x + 0.5, centerY + min * amplitude);
-                ctx.lineTo(x + 0.5, centerY + max * amplitude);
+                ctx.moveTo(x + 0.5, centerY - max * amplitude);
+                ctx.lineTo(x + 0.5, centerY - min * amplitude);
             }
             ctx.stroke();
 
-            // Draw played part (blue)
+            // Played part (blue)
             if (playedX > 0) {
                 ctx.beginPath();
                 ctx.strokeStyle = "#3b82f6";
                 ctx.lineWidth = 1;
-
-                for (let x = 0; x < playedX && x < width; x++) {
+                for (let x = 0; x < playedX && x < totalWidth; x++) {
                     const startIdx = Math.floor(x * step);
                     const endIdx = Math.floor((x + 1) * step);
-
                     let min = 0, max = 0;
                     for (let i = startIdx; i < endIdx && i < data.length; i++) {
                         if (data[i] < min) min = data[i];
                         if (data[i] > max) max = data[i];
                     }
-
-                    ctx.moveTo(x + 0.5, centerY + min * amplitude);
-                    ctx.lineTo(x + 0.5, centerY + max * amplitude);
+                    ctx.moveTo(x + 0.5, centerY - max * amplitude);
+                    ctx.lineTo(x + 0.5, centerY - min * amplitude);
                 }
                 ctx.stroke();
             }
 
-            // Draw channel separator
+            // Channel separator
             if (ch < numChannels - 1) {
                 ctx.beginPath();
-                ctx.strokeStyle = "#e5e5e5";
+                ctx.strokeStyle = "#d0d0d0";
                 ctx.lineWidth = 1;
-                ctx.moveTo(0, (ch + 1) * channelHeight);
-                ctx.lineTo(width, (ch + 1) * channelHeight);
+                ctx.moveTo(0, (ch + 1) * CHANNEL_HEIGHT);
+                ctx.lineTo(totalWidth, (ch + 1) * CHANNEL_HEIGHT);
                 ctx.stroke();
             }
 
-            // Draw channel label
-            ctx.fillStyle = "#999999";
+            // Channel label
+            ctx.fillStyle = "#666666";
             ctx.font = "11px sans-serif";
             ctx.fillText(`CH ${ch}`, 8, yOffset + 16);
         }
 
+        // Draw time axis
+        drawTimeAxis(ctx, totalWidth, totalHeight);
+
         // Draw playhead
-        const playheadX = (currentTime / duration) * width;
+        const playheadX = (currentTime / duration) * totalWidth;
         ctx.beginPath();
         ctx.strokeStyle = "#ef4444";
         ctx.lineWidth = 2;
         ctx.moveTo(playheadX, 0);
-        ctx.lineTo(playheadX, height);
+        ctx.lineTo(playheadX, totalHeight);
         ctx.stroke();
     }
 
+    function drawTimeAxis(ctx: CanvasRenderingContext2D, width: number, height: number) {
+        const numTicks = Math.max(10, Math.floor(width / 100));
+
+        ctx.fillStyle = "#666666";
+        ctx.font = "10px sans-serif";
+
+        for (let i = 0; i <= numTicks; i++) {
+            const x = (i / numTicks) * width;
+            const time = (i / numTicks) * duration;
+
+            // Tick mark at top
+            ctx.beginPath();
+            ctx.strokeStyle = "#cccccc";
+            ctx.lineWidth = 1;
+            ctx.moveTo(x, 0);
+            ctx.lineTo(x, 8);
+            ctx.stroke();
+
+            // Tick mark at bottom
+            ctx.beginPath();
+            ctx.moveTo(x, height - 20);
+            ctx.lineTo(x, height);
+            ctx.stroke();
+
+            // Time label at bottom
+            if (i === 0) {
+                ctx.textAlign = "left";
+                ctx.fillText(formatTimeShort(time), x + 2, height - 6);
+            } else if (i === numTicks) {
+                ctx.textAlign = "right";
+                ctx.fillText(formatTimeShort(time), x - 2, height - 6);
+            } else {
+                ctx.textAlign = "center";
+                ctx.fillText(formatTimeShort(time), x, height - 6);
+            }
+        }
+    }
+
+    function formatTimeShort(s: number): string {
+        if (!s || isNaN(s)) return "0:00";
+        const min = Math.floor(s / 60);
+        const sec = Math.floor(s % 60);
+        const ms = Math.floor((s % 1) * 10);
+        if (zoom > 5) {
+            return `${min}:${sec.toString().padStart(2, "0")}.${ms}`;
+        }
+        return `${min}:${sec.toString().padStart(2, "0")}`;
+    }
+
     function handleCanvasClick(e: MouseEvent) {
-        if (!canvas || duration === 0) return;
-        const rect = canvas.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const ratio = Math.max(0, Math.min(1, x / rect.width));
+        if (!canvas || duration === 0 || samples.length === 0) return;
+
+        const containerRect = canvasContainer.getBoundingClientRect();
+        const clickXInContainer = e.clientX - containerRect.left;
+        const absoluteX = clickXInContainer + canvasContainer.scrollLeft;
+        const containerWidth = canvasContainer.offsetWidth;
+        const totalWidth = containerWidth * zoom;
+        const ratio = Math.max(0, Math.min(1, absoluteX / totalWidth));
 
         if (isPlaying) pause();
         pauseOffset = ratio * duration;
         currentTime = pauseOffset;
         drawWaveform();
         play();
+    }
+
+    function handleWheel(e: WheelEvent) {
+        e.preventDefault();
+
+        const delta = e.deltaY > 0 ? 0.9 : 1.1;
+        const newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoom * delta));
+
+        if (newZoom !== zoom) {
+            const rect = canvasContainer.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const scrollBefore = canvasContainer.scrollLeft;
+            const positionRatio = (scrollBefore + mouseX) / (rect.width * zoom);
+
+            zoom = newZoom;
+
+            setTimeout(() => {
+                drawWaveform();
+                const newScroll = positionRatio * rect.width * zoom - mouseX;
+                canvasContainer.scrollLeft = Math.max(0, newScroll);
+            }, 0);
+        }
+    }
+
+    function zoomIn() {
+        zoom = Math.min(MAX_ZOOM, zoom * 1.5);
+        drawWaveform();
+    }
+
+    function zoomOut() {
+        zoom = Math.max(MIN_ZOOM, zoom / 1.5);
+        drawWaveform();
+    }
+
+    function resetZoom() {
+        zoom = 1;
+        canvasContainer.scrollLeft = 0;
+        drawWaveform();
     }
 
     function togglePlay() {
@@ -248,6 +380,17 @@
             animationFrame = requestAnimationFrame(updatePlayback);
         }
         drawWaveform();
+
+        if (zoom > 1) {
+            const containerWidth = canvasContainer.offsetWidth;
+            const totalWidth = containerWidth * zoom;
+            const playheadX = (currentTime / duration) * totalWidth;
+            const scrollLeft = canvasContainer.scrollLeft;
+
+            if (playheadX < scrollLeft || playheadX > scrollLeft + containerWidth - 50) {
+                canvasContainer.scrollLeft = Math.max(0, playheadX - 100);
+            }
+        }
     }
 
     function formatTime(s: number): string {
@@ -267,92 +410,112 @@
     function getFileName(path: string): string {
         return path.split(/[\\/]/).pop() || path;
     }
+
+    $: canvasHeight = samples.length > 0 ? samples.length * CHANNEL_HEIGHT : 120;
 </script>
 
-<main class="flex flex-col h-full w-full bg-white p-4 gap-4">
+<main class="flex flex-col h-full w-full bg-white p-4 gap-3">
     {#if metadata}
-        <!-- Area 1: File Path -->
-        <div class="flex items-center gap-2 px-3 py-2 bg-gray-50 rounded border border-gray-200">
-            <span class="text-xs text-gray-500 uppercase font-medium">Path:</span>
-            <code class="text-sm text-gray-700 truncate flex-1">{filePath}</code>
+        <!-- Line 1: File Path -->
+        <div class="text-sm text-gray-600 truncate">
+            {filePath}
         </div>
 
-        <!-- Area 2: Metadata (two columns) -->
-        <div class="grid grid-cols-2 gap-x-8 gap-y-2 px-3 py-3 bg-gray-50 rounded border border-gray-200 text-sm">
-            <div class="flex justify-between">
-                <span class="text-gray-500">File:</span>
-                <span class="text-gray-800 font-medium">{getFileName(filePath)}</span>
-            </div>
-            <div class="flex justify-between">
-                <span class="text-gray-500">Size:</span>
-                <span class="text-gray-800">{formatSize(metadata.fileSize)}</span>
-            </div>
-            <div class="flex justify-between">
-                <span class="text-gray-500">Format:</span>
-                <span class="text-gray-800">{metadata.container || "-"}</span>
-            </div>
-            <div class="flex justify-between">
-                <span class="text-gray-500">Codec:</span>
-                <span class="text-gray-800">{metadata.codec || "-"}</span>
-            </div>
-            <div class="flex justify-between">
-                <span class="text-gray-500">Duration:</span>
-                <span class="text-gray-800">{formatTime(duration)}</span>
-            </div>
-            <div class="flex justify-between">
-                <span class="text-gray-500">Sample Rate:</span>
-                <span class="text-gray-800">{metadata.sampleRate?.toLocaleString() || "-"} Hz</span>
-            </div>
-            <div class="flex justify-between">
-                <span class="text-gray-500">Channels:</span>
-                <span class="text-gray-800">{metadata.numChannels || "-"}</span>
-            </div>
-            <div class="flex justify-between">
-                <span class="text-gray-500">Bitrate:</span>
-                <span class="text-gray-800">{metadata.bitRate ? Math.round(metadata.bitRate / 1000) + " kbps" : "-"}</span>
-            </div>
-            <div class="flex justify-between">
-                <span class="text-gray-500">Decode Time:</span>
-                <span class="text-gray-800">{decodeTimeMs} ms</span>
-            </div>
+        <!-- Line 2: Timing Info -->
+        <div class="flex gap-4 text-xs text-gray-500">
+            <span>Total: <span class="text-gray-700 font-medium">{totalTimeMs} ms</span></span>
+            <span>Decode: <span class="text-gray-700 font-medium">{decodeTimeMs} ms</span></span>
+            <span>Playback: <span class="text-gray-700 font-medium">{formatTime(currentTime)} / {formatTime(duration)}</span></span>
         </div>
 
-        <!-- Area 3: Waveform Canvas -->
-        <div
-            bind:this={canvasContainer}
-            class="flex-1 relative bg-white rounded border border-gray-200 overflow-hidden min-h-[120px]"
-        >
-            <canvas
-                bind:this={canvas}
-                on:click={handleCanvasClick}
-                class="absolute inset-0 w-full h-full cursor-pointer"
-            ></canvas>
-        </div>
+        <!-- Metadata Table -->
+        <table class="text-sm border-collapse w-full max-w-lg">
+            <tbody>
+                <tr class="border-b border-gray-100">
+                    <td class="py-1 pr-4 text-gray-500">File</td>
+                    <td class="py-1 text-gray-800 font-medium">{getFileName(filePath)}</td>
+                    <td class="py-1 pr-4 text-gray-500 pl-6">Size</td>
+                    <td class="py-1 text-gray-800">{formatSize(metadata.fileSize)}</td>
+                </tr>
+                <tr class="border-b border-gray-100">
+                    <td class="py-1 pr-4 text-gray-500">Format</td>
+                    <td class="py-1 text-gray-800">{metadata.container || "-"}</td>
+                    <td class="py-1 pr-4 text-gray-500 pl-6">Codec</td>
+                    <td class="py-1 text-gray-800">{metadata.codec || "-"}</td>
+                </tr>
+                <tr class="border-b border-gray-100">
+                    <td class="py-1 pr-4 text-gray-500">Duration</td>
+                    <td class="py-1 text-gray-800">{formatTime(duration)}</td>
+                    <td class="py-1 pr-4 text-gray-500 pl-6">Sample Rate</td>
+                    <td class="py-1 text-gray-800">{metadata.sampleRate?.toLocaleString() || "-"} Hz</td>
+                </tr>
+                <tr>
+                    <td class="py-1 pr-4 text-gray-500">Channels</td>
+                    <td class="py-1 text-gray-800">{metadata.numChannels || "-"}</td>
+                    <td class="py-1 pr-4 text-gray-500 pl-6">Bitrate</td>
+                    <td class="py-1 text-gray-800">{metadata.bitRate ? Math.round(metadata.bitRate / 1000) + " kbps" : "-"}</td>
+                </tr>
+            </tbody>
+        </table>
 
-        <!-- Controls -->
-        <div class="flex items-center gap-4 px-3 py-2 bg-gray-50 rounded border border-gray-200">
-            <button
-                on:click={togglePlay}
-                class="w-10 h-10 flex items-center justify-center rounded-full bg-blue-500 hover:bg-blue-600 text-white"
+        <!-- Waveform Section -->
+        <div class="flex-1 flex flex-col gap-2 min-h-0">
+            <!-- Zoom Controls -->
+            <div class="flex items-center gap-2">
+                <span class="text-xs text-gray-500">Zoom:</span>
+                <button
+                    on:click={zoomOut}
+                    disabled={zoom <= MIN_ZOOM}
+                    class="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed rounded border border-gray-300"
+                >−</button>
+                <span class="text-xs text-gray-600 w-12 text-center">{zoom.toFixed(1)}x</span>
+                <button
+                    on:click={zoomIn}
+                    disabled={zoom >= MAX_ZOOM}
+                    class="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed rounded border border-gray-300"
+                >+</button>
+                <button
+                    on:click={resetZoom}
+                    disabled={zoom === 1}
+                    class="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed rounded border border-gray-300"
+                >Reset</button>
+                <span class="text-xs text-gray-400 ml-2">(Scroll to zoom, Space to play/pause)</span>
+            </div>
+
+            <!-- Waveform Container -->
+            <div
+                bind:this={canvasContainer}
+                on:wheel={handleWheel}
+                class="flex-1 overflow-x-auto overflow-y-hidden bg-white rounded border border-gray-200"
+                style="height: {canvasHeight}px; min-height: {canvasHeight}px;"
             >
-                {#if isPlaying}
-                    <svg viewBox="0 0 24 24" class="w-5 h-5">
-                        <path fill="currentColor" d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
-                    </svg>
+                {#if isLoadingSamples}
+                    <div class="flex items-center justify-center h-full bg-gray-50">
+                        <div class="flex items-center gap-3">
+                            <div class="w-5 h-5 border-2 border-gray-300 border-t-blue-500 rounded-full animate-spin"></div>
+                            <span class="text-gray-500 text-sm">Decoding audio...</span>
+                        </div>
+                    </div>
+                {:else if samples.length > 0}
+                    <canvas
+                        bind:this={canvas}
+                        on:click={handleCanvasClick}
+                        class="cursor-pointer"
+                    ></canvas>
                 {:else}
-                    <svg viewBox="0 0 24 24" class="w-5 h-5">
-                        <path fill="currentColor" d="M8 5v14l11-7z"/>
-                    </svg>
+                    <div class="flex items-center justify-center h-full text-gray-400 text-sm">
+                        No waveform data
+                    </div>
                 {/if}
-            </button>
-            <span class="text-sm text-gray-600 font-mono">
-                {formatTime(currentTime)} / {formatTime(duration)}
-            </span>
+            </div>
         </div>
     {:else}
-        <!-- Loading -->
+        <!-- Initial Loading -->
         <div class="flex-1 flex items-center justify-center">
-            <div class="text-gray-500">Loading audio...</div>
+            <div class="flex items-center gap-3">
+                <div class="w-6 h-6 border-2 border-gray-300 border-t-blue-500 rounded-full animate-spin"></div>
+                <span class="text-gray-500">Loading audio...</span>
+            </div>
         </div>
     {/if}
 </main>

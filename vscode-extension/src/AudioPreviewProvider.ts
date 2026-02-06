@@ -59,63 +59,54 @@ export class AudioPreviewProvider implements vscode.CustomReadonlyEditorProvider
         try {
             const filePath = document.uri.fsPath;
 
-            // Check if file exists and is accessible before attempting to decode
             if (!fs.existsSync(filePath)) {
-                const errorMsg = `Audio file not found or not accessible: ${path.basename(filePath)}`;
-                console.error(`[Avioflow] ${errorMsg}\nFull path: ${filePath}`);
+                const errorMsg = `Audio file not found: ${path.basename(filePath)}`;
+                console.error(`[Avioflow] ${errorMsg}`);
                 vscode.window.showErrorMessage(`Avioflow: ${errorMsg}`);
-                webviewPanel.webview.postMessage({
-                    type: 'error',
-                    message: errorMsg
-                });
+                webviewPanel.webview.postMessage({ type: 'error', message: errorMsg });
                 return;
             }
 
-            // Check if it's a file (not a directory)
             const stats = fs.statSync(filePath);
             if (!stats.isFile()) {
                 const errorMsg = `Path is not a file: ${path.basename(filePath)}`;
                 console.error(`[Avioflow] ${errorMsg}`);
-                vscode.window.showErrorMessage(`Avioflow: ${errorMsg}`);
-                webviewPanel.webview.postMessage({
-                    type: 'error',
-                    message: errorMsg
-                });
+                webviewPanel.webview.postMessage({ type: 'error', message: errorMsg });
                 return;
             }
 
             const service = AudioDecoderService.getInstance();
 
-            // Record the start time when user clicks/opens the file
-            const totalStart = Date.now();
+            // Phase 1: Quick metadata loading - show UI immediately
+            console.log('[Avioflow] Phase 1: Loading metadata...');
+            const { metadata, decoder } = await service.getMetadata(filePath);
 
-            // Send a loading message to UI to start the timer there if needed
-            webviewPanel.webview.postMessage({ type: 'loading' });
-
-            // Request waveform decoding (returns raw samples)
-            const { metadata, samples, loadTimeMs } = await service.decodeAudioFile(filePath);
-
-            // Total duration from click to data ready in extension host
-            const totalDuration = Date.now() - totalStart;
-
+            // Send metadata immediately - UI can show info while samples load
             webviewPanel.webview.postMessage({
-                type: 'init',
-                filePath: document.uri.fsPath,
-                metadata: {
-                    ...metadata,
-                    fileSize: stats.size,
-                    totalTimeMs: totalDuration,  // Total time from extension perspective
-                    wasmDecodeTimeMs: loadTimeMs // Pure decode time from WASM
-                },
-                samples
+                type: 'metadata',
+                filePath: filePath,
+                metadata: metadata
             });
+
+            // Phase 2: Async sample decoding - runs in background
+            console.log('[Avioflow] Phase 2: Decoding samples...');
+            const { samples, decodeTimeMs } = await service.getSamples(decoder);
+
+            // Send samples when ready - UI can now draw waveform
+            webviewPanel.webview.postMessage({
+                type: 'samples',
+                samples: samples,
+                decodeTimeMs: decodeTimeMs
+            });
+
+            console.log(`[Avioflow] Complete. Decode time: ${decodeTimeMs}ms`);
 
         } catch (e: any) {
             console.error('[Avioflow] loadAndSendData error:', e);
             vscode.window.showErrorMessage(`Avioflow Error: ${e.message}`);
+            webviewPanel.webview.postMessage({ type: 'error', message: e.message });
         }
     }
-
 
     private getHtmlForWebview(webview: vscode.Webview): string {
         const scriptUri = webview.asWebviewUri(vscode.Uri.file(
