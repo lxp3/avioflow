@@ -2,7 +2,7 @@
     "name": "avioflow",
     "displayName": "Avioflow",
     "description": "High-performance audio engine and toolkit for VS Code",
-    "version": "0.1.13",
+    "version": "0.2.0",
     "publisher": "lxp3",
     "repository": {
         "type": "git",
@@ -15,7 +15,10 @@
         "Other"
     ],
     "main": "./out/src/extension.js",
-    "activationEvents": [],
+    "activationEvents": [
+        "onCustomEditor:avioflow.audioPreview",
+        "onView:avioflow.homeView"
+    ],
     "contributes": {
         "viewsContainers": {
             "activitybar": [
@@ -61,15 +64,16 @@
         "@types/vscode": "^1.75.0",
         "@typescript-eslint/eslint-plugin": "^5.59.1",
         "@typescript-eslint/parser": "^5.59.1",
+        "autoprefixer": "^10.4.0",
         "eslint": "^8.39.0",
+        "postcss": "^8.4.0",
         "svelte": "^4.0.0",
         "svelte-check": "^3.6.0",
         "svelte-preprocess": "^5.1.0",
+        "tailwindcss": "^3.4.0",
         "tslib": "^2.6.0",
         "typescript": "^5.0.0",
         "vite": "^5.0.0"
     },
-    "dependencies": {
-        "avioflow": "^0.1.13"
-    }
+    "dependencies": {}
 }

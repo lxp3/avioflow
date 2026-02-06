@@ -12,6 +12,7 @@ vite.config.*
 .npmrc
 node_modules/**
 !out/**
+!out/wasm/**
 !LICENSE
 !README.md
 !package.json

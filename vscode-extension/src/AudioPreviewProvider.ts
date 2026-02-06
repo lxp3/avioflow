@@ -1,17 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
-import { AvioflowWorkerService } from './AvioflowWorkerService';
-
-/**
- * Interface for the message received from the worker
- */
-interface WorkerResponse {
-    type: 'done' | 'error' | 'ready';
-    metadata?: any;
-    samples?: any[];
-    message?: string;
-    stack?: string;
-}
+import * as fs from 'fs';
+import { AudioDecoderService } from './AudioDecoderService';
 
 export class AudioPreviewProvider implements vscode.CustomReadonlyEditorProvider {
 
@@ -67,18 +57,44 @@ export class AudioPreviewProvider implements vscode.CustomReadonlyEditorProvider
 
     private async loadAndSendData(document: vscode.CustomDocument, webviewPanel: vscode.WebviewPanel) {
         try {
-            const service = AvioflowWorkerService.getInstance();
+            const filePath = document.uri.fsPath;
+
+            // Check if file exists and is accessible before attempting to decode
+            if (!fs.existsSync(filePath)) {
+                const errorMsg = `Audio file not found or not accessible: ${path.basename(filePath)}`;
+                console.error(`[Avioflow] ${errorMsg}\nFull path: ${filePath}`);
+                vscode.window.showErrorMessage(`Avioflow: ${errorMsg}`);
+                webviewPanel.webview.postMessage({
+                    type: 'error',
+                    message: errorMsg
+                });
+                return;
+            }
+
+            // Check if it's a file (not a directory)
+            const stats = fs.statSync(filePath);
+            if (!stats.isFile()) {
+                const errorMsg = `Path is not a file: ${path.basename(filePath)}`;
+                console.error(`[Avioflow] ${errorMsg}`);
+                vscode.window.showErrorMessage(`Avioflow: ${errorMsg}`);
+                webviewPanel.webview.postMessage({
+                    type: 'error',
+                    message: errorMsg
+                });
+                return;
+            }
+
+            const service = AudioDecoderService.getInstance();
 
             // Record the start time when user clicks/opens the file
             const totalStart = Date.now();
-            
+
             // Send a loading message to UI to start the timer there if needed
             webviewPanel.webview.postMessage({ type: 'loading' });
 
             // Request waveform with a reasonable default samplesPerPixel (e.g., 1000)
-            // Also request full samples for playback
-            const { metadata, samples, min, max, loadTimeMs } = await service.load(document.uri.fsPath, 1000);
-            
+            const { metadata, samples, min, max, loadTimeMs } = await service.decodeAudioFile(filePath, 1000);
+
             // Total duration from click to data ready in extension host
             const totalDuration = Date.now() - totalStart;
 
@@ -88,7 +104,7 @@ export class AudioPreviewProvider implements vscode.CustomReadonlyEditorProvider
                 metadata: {
                     ...metadata,
                     totalTimeMs: totalDuration,  // Total time from extension perspective
-                    nativeDecodeTimeMs: loadTimeMs // Pure decode time from worker
+                    wasmDecodeTimeMs: loadTimeMs // Pure decode time from WASM
                 },
                 samples,
                 min,

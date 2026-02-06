@@ -1,9 +1,9 @@
 import * as vscode from 'vscode';
-import { AvioflowWorkerService } from './AvioflowWorkerService';
+import { AudioDecoderService } from './AudioDecoderService';
 
 export function activate(context: vscode.ExtensionContext) {
-    // Initialize the persistent worker service
-    AvioflowWorkerService.initialize(context.extensionPath);
+    // Initialize the WASM-based audio decoder service
+    AudioDecoderService.initialize(context.extensionPath);
 
     try {
         const { AudioPreviewProvider } = require('./AudioPreviewProvider');
@@ -28,5 +28,5 @@ export function activate(context: vscode.ExtensionContext) {
 
 export function deactivate() {
     console.log('[Avioflow] Extension deactivated');
-    AvioflowWorkerService.getInstance().dispose();
+    AudioDecoderService.getInstance().dispose();
 }

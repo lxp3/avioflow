@@ -9,6 +9,9 @@ export default defineConfig({
             preprocess: sveltePreprocess()
         })
     ],
+    css: {
+        postcss: './postcss.config.js'
+    },
     build: {
         outDir: '../out/webview',
         emptyOutDir: true,
