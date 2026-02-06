@@ -1,16 +1,20 @@
 import * as path from 'path';
 import * as fs from 'fs';
-import * as vscode from 'vscode';
 
-export interface DecodeResult {
-    metadata: any;
-    samples?: any[];
-    loadTimeMs?: number;
+export interface AudioMetadata {
+    duration: number;
+    sampleRate: number;
+    numChannels: number;
+    codec: string;
+    numSamples: number;
+    sampleFormat: string;
+    bitRate: number;
+    container: string;
+    fileSize: number;
 }
 
 /**
- * WASM-based audio decoder service
- * Replaces the IPC-based AvioflowWorkerService with direct WASM decoding
+ * WASM-based audio decoder service with async loading support
  */
 export class AudioDecoderService {
     private static instance: AudioDecoderService;
@@ -37,15 +41,11 @@ export class AudioDecoderService {
         return AudioDecoderService.instance;
     }
 
-    /**
-     * Lazy-load the WASM module on first use
-     */
     private async loadWasm(): Promise<any> {
         if (this.wasmModule) {
             return this.wasmModule;
         }
 
-        // Prevent multiple concurrent initialization attempts
         if (this.isInitializing && this.initPromise) {
             return this.initPromise;
         }
@@ -76,8 +76,6 @@ export class AudioDecoderService {
 
         console.log('[AudioDecoderService] Loading WASM module from', wasmPath);
 
-        // Dynamically import the WASM module
-        // The avioflow.js file exports a default function that initializes the WASM module
         const createAvioflow = await import(wasmPath).then(m => m.default);
 
         if (typeof createAvioflow !== 'function') {
@@ -91,48 +89,83 @@ export class AudioDecoderService {
     }
 
     /**
-     * Decode an audio file using WASM
+     * Phase 1: Quick metadata loading (fast, ~10ms)
      */
-    public async decodeAudioFile(filePath: string): Promise<DecodeResult> {
+    public async getMetadata(filePath: string): Promise<{ metadata: AudioMetadata; decoder: any; fileBuffer: Buffer }> {
         if (!fs.existsSync(filePath)) {
             throw new Error(`Audio file not found: ${filePath}`);
         }
 
+        const stats = fs.statSync(filePath);
         const startTime = Date.now();
 
-        try {
-            // Load WASM module if not already loaded
-            const avioflow = await this.loadWasm();
+        const avioflow = await this.loadWasm();
+        const fileBuffer = fs.readFileSync(filePath);
+        const uint8Array = new Uint8Array(fileBuffer);
 
-            // Read the audio file
-            const fileBuffer = fs.readFileSync(filePath);
-            const uint8Array = new Uint8Array(fileBuffer);
+        console.log(`[AudioDecoderService] Opening ${path.basename(filePath)} (${fileBuffer.length} bytes)`);
 
-            console.log(`[AudioDecoderService] Decoding ${path.basename(filePath)} (${fileBuffer.length} bytes)`);
+        // Create decoder instance and open buffer
+        const decoder = new avioflow.AudioDecoder();
+        decoder.openBuffer(uint8Array);
 
-            // Decode using WASM
-            const decodeStart = Date.now();
-            // Pass empty object as options to match C++ signature: loadBuffer(buffer, options)
-            const result = avioflow.loadBuffer(uint8Array, {});
-            const decodeTimeMs = Date.now() - decodeStart;
+        // Get metadata only (fast)
+        const metaStart = Date.now();
+        const rawMeta = decoder.getMetadata();
+        const metaTime = Date.now() - metaStart;
 
-            if (!result || !result.metadata) {
-                throw new Error('Failed to decode audio file');
-            }
+        const metadata: AudioMetadata = {
+            duration: rawMeta.duration,
+            sampleRate: rawMeta.sampleRate,
+            numChannels: rawMeta.numChannels,
+            codec: rawMeta.codec,
+            numSamples: rawMeta.numSamples,
+            sampleFormat: rawMeta.sampleFormat,
+            bitRate: rawMeta.bitRate,
+            container: rawMeta.container,
+            fileSize: stats.size
+        };
 
-            const totalTimeMs = Date.now() - startTime;
+        console.log(`[AudioDecoderService] Metadata loaded in ${metaTime}ms (total: ${Date.now() - startTime}ms)`);
 
-            console.log(`[AudioDecoderService] Decode complete: ${decodeTimeMs}ms (total: ${totalTimeMs}ms)`);
+        return { metadata, decoder, fileBuffer };
+    }
 
-            return {
-                metadata: result.metadata,
-                samples: result.samples,
-                loadTimeMs: decodeTimeMs
-            };
-        } catch (error: any) {
-            console.error('[AudioDecoderService] Decode error:', error);
-            throw error;
+    /**
+     * Phase 2: Decode all samples (slow, async)
+     */
+    public async getSamples(decoder: any): Promise<{ samples: any[]; decodeTimeMs: number }> {
+        const startTime = Date.now();
+
+        console.log('[AudioDecoderService] Starting sample decoding...');
+
+        // This is the slow operation
+        const samples = decoder.getAllSamples();
+        const decodeTimeMs = Date.now() - startTime;
+
+        console.log(`[AudioDecoderService] Samples decoded in ${decodeTimeMs}ms`);
+
+        // Convert to array
+        const samplesArray: any[] = [];
+        for (let i = 0; i < samples.length; i++) {
+            samplesArray.push(samples[i]);
         }
+
+        return { samples: samplesArray, decodeTimeMs };
+    }
+
+    /**
+     * Legacy: Decode everything at once (for backwards compatibility)
+     */
+    public async decodeAudioFile(filePath: string): Promise<{ metadata: AudioMetadata; samples: any[]; loadTimeMs: number }> {
+        const { metadata, decoder } = await this.getMetadata(filePath);
+        const { samples, decodeTimeMs } = await this.getSamples(decoder);
+
+        return {
+            metadata,
+            samples,
+            loadTimeMs: decodeTimeMs
+        };
     }
 
     public dispose() {
