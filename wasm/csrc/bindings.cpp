@@ -109,9 +109,10 @@ public:
                 data[i] = uint8View[i].as<uint8_t>();
             }
         } else {
-            throw std::runtime_error("Expected Uint8Array or ArrayBuffer");
+            val::global("console").call<void>("error", std::string("Expected Uint8Array or ArrayBuffer"));
+            return;
         }
-        
+
         decoder_.open(data.data(), data.size());
     }
 
@@ -128,9 +129,10 @@ public:
                 data[i] = buffer[i].as<uint8_t>();
             }
         } else {
-            throw std::runtime_error("Expected Uint8Array");
+            val::global("console").call<void>("error", std::string("Expected Uint8Array"));
+            return;
         }
-        
+
         decoder_.push(data.data(), data.size());
     }
 
@@ -139,11 +141,11 @@ public:
      * @return Float32Array[] or null
      */
     val decodeNext() {
-        auto frame = decoder_.decode_next();
+        auto frame = decoder_.read();
         if (!frame) {
             return val::null();
         }
-        
+
         val result = val::array();
         for (int c = 0; c < frame.num_channels; ++c) {
             val channelData = val::global("Float32Array").new_(frame.num_samples);
@@ -159,7 +161,7 @@ public:
      * @brief Decode all samples at once
      */
     val getAllSamples() {
-        auto samples = decoder_.get_all_samples();
+        auto samples = decoder_.get_samples();
         return SamplesToJs(samples);
     }
 
@@ -206,10 +208,10 @@ val load(const std::string &path, val options) {
     
     AudioDecoder decoder(opts);
     decoder.open(path);
-    
+
     auto meta = decoder.get_metadata();
-    auto samples = decoder.get_all_samples();
-    
+    auto samples = decoder.get_samples();
+
     val result = val::object();
     result.set("metadata", MetadataToJs(meta));
     result.set("samples", SamplesToJs(samples));
@@ -246,15 +248,16 @@ val loadBuffer(val buffer, val options) {
             data[i] = uint8View[i].as<uint8_t>();
         }
     } else {
-        throw std::runtime_error("Expected Uint8Array or ArrayBuffer");
+        val::global("console").call<void>("error", std::string("Expected Uint8Array or ArrayBuffer"));
+        return val::null();
     }
-    
+
     AudioDecoder decoder(opts);
     decoder.open(data.data(), data.size());
-    
+
     auto meta = decoder.get_metadata();
-    auto samples = decoder.get_all_samples();
-    
+    auto samples = decoder.get_samples();
+
     val result = val::object();
     result.set("metadata", MetadataToJs(meta));
     result.set("samples", SamplesToJs(samples));
