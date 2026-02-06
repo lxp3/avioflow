@@ -1,17 +1,12 @@
-export default {
-  content: ['./src/**/*.{html,js,svelte,ts}'],
+/** @type {import('tailwindcss').Config} */
+const path = require('path');
+
+module.exports = {
+  content: [
+    path.join(__dirname, 'src/**/*.{html,js,svelte,ts}')
+  ],
   theme: {
-    extend: {
-      colors: {
-        vscode: {
-          bg: 'var(--vscode-editor-background)',
-          fg: 'var(--vscode-editor-foreground)',
-          border: 'var(--vscode-panel-border)',
-          hover: 'var(--vscode-list-hoverBackground)',
-          active: 'var(--vscode-list-activeSelectionBackground)',
-        }
-      }
-    }
+    extend: {}
   },
   plugins: []
 }

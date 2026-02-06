@@ -4,11 +4,10 @@
     {
       "label": "npm: compile",
       "type": "shell",
-      "command": "bash",
-      "args": [
-        "-c",
-        "cd ${workspaceFolder}/vscode-extension && pnpm run compile"
-      ],
+      "command": "pnpm run compile",
+      "options": {
+        "cwd": "${workspaceFolder}/vscode-extension"
+      },
       "problemMatcher": [
         "$tsc"
       ],

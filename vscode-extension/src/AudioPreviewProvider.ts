@@ -92,8 +92,8 @@ export class AudioPreviewProvider implements vscode.CustomReadonlyEditorProvider
             // Send a loading message to UI to start the timer there if needed
             webviewPanel.webview.postMessage({ type: 'loading' });
 
-            // Request waveform with a reasonable default samplesPerPixel (e.g., 1000)
-            const { metadata, samples, min, max, loadTimeMs } = await service.decodeAudioFile(filePath, 1000);
+            // Request waveform decoding (returns raw samples)
+            const { metadata, samples, loadTimeMs } = await service.decodeAudioFile(filePath);
 
             // Total duration from click to data ready in extension host
             const totalDuration = Date.now() - totalStart;
@@ -103,12 +103,11 @@ export class AudioPreviewProvider implements vscode.CustomReadonlyEditorProvider
                 filePath: document.uri.fsPath,
                 metadata: {
                     ...metadata,
+                    fileSize: stats.size,
                     totalTimeMs: totalDuration,  // Total time from extension perspective
                     wasmDecodeTimeMs: loadTimeMs // Pure decode time from WASM
                 },
-                samples,
-                min,
-                max
+                samples
             });
 
         } catch (e: any) {
