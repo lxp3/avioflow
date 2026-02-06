@@ -191,11 +191,14 @@ PYBIND11_MODULE(_avioflow, m) {
             "str: Container format (e.g., 'mp3', 'mp4', 'ogg').")
         .def("__repr__", [](const Metadata& self) {
             std::stringstream ss;
-            ss << "<avioflow.Metadata "
-               << "codec='" << self.codec << "' "
-               << "sample_rate=" << self.sample_rate << " "
-               << "channels=" << self.num_channels << " "
-               << "duration=" << std::fixed << std::setprecision(2) << self.duration << "s>";
+            ss << "duration: " << std::fixed << std::setprecision(3) << self.duration << "\n"
+               << "num_samples: " << self.num_samples << "\n"
+               << "sample_rate: " << self.sample_rate << "\n"
+               << "num_channels: " << self.num_channels << "\n"
+               << "sample_format: " << self.sample_format << "\n"
+               << "codec: " << self.codec << "\n"
+               << "bit_rate: " << self.bit_rate << "\n"
+               << "container: " << self.container;
             return ss.str();
         });
 
