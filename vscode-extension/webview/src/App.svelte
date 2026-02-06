@@ -4,256 +4,191 @@
 
     let metadata: any = null;
     let samples: Float32Array[] = [];
-    let minData: Float32Array[] = [];
-    let maxData: Float32Array[] = [];
-    let isPlaying = false;
-    let currentTime = 0;
-    let duration = 0;
-    let volume = 0.5;
-    let canvasWidth = 0;
-    let canvasHeight = 0;
     let filePath = "";
-    let uiStartTime = 0;
-    let finalTotalTime = 0;
+    let decodeTimeMs = 0;
 
     let audioContext: AudioContext;
     let audioBuffer: AudioBuffer | null = null;
     let sourceNode: AudioBufferSourceNode | null = null;
+    let isPlaying = false;
+    let currentTime = 0;
+    let duration = 0;
     let startTime = 0;
     let pauseOffset = 0;
     let animationFrame: number;
 
     let canvas: HTMLCanvasElement;
-    let waveformSummary: { min: Float32Array; max: Float32Array }[] = [];
+    let canvasContainer: HTMLDivElement;
 
     onMount(() => {
-        const handleInteraction = () => {
-            if (audioContext && audioContext.state === "suspended") {
-                audioContext.resume();
-            }
-        };
-        window.addEventListener("click", handleInteraction);
-        window.addEventListener("keydown", handleInteraction);
-
-        window.addEventListener("message", (event) => {
-            const message = event.data;
-            switch (message.type) {
-                case "loading":
-                    uiStartTime = Date.now();
-                    break;
-                case "init":
-                    filePath = message.filePath || "";
-                    metadata = message.metadata;
-
-                    if (uiStartTime > 0) {
-                        finalTotalTime = Date.now() - uiStartTime;
-                    }
-
-                    if (message.samples) {
-                        samples = message.samples.map((ch: any) =>
-                            ch instanceof Float32Array ? ch : new Float32Array(ch),
-                        );
-                    }
-                    if (message.min && message.max) {
-                        minData = message.min.map((ch: any) =>
-                            ch instanceof Float32Array ? ch : new Float32Array(ch),
-                        );
-                        maxData = message.max.map((ch: any) =>
-                            ch instanceof Float32Array ? ch : new Float32Array(ch),
-                        );
-                    }
-                    duration = metadata.duration;
-                    initAudio();
-                    break;
-            }
-        });
-
-        const handleKeyDown = (e: KeyboardEvent) => {
-            if (e.key === " " || e.code === "Space") {
-                e.preventDefault();
-                togglePlay();
-            }
-        };
-
-        window.addEventListener("keydown", handleKeyDown);
+        window.addEventListener("message", handleMessage);
 
         // @ts-ignore
         const vscode = acquireVsCodeApi();
         vscode.postMessage({ type: "ready" });
 
         return () => {
-            window.removeEventListener("keydown", handleKeyDown);
+            window.removeEventListener("message", handleMessage);
             if (animationFrame) cancelAnimationFrame(animationFrame);
             if (sourceNode) sourceNode.stop();
             if (audioContext) audioContext.close();
         };
     });
 
-    async function initAudio() {
+    function handleMessage(event: MessageEvent) {
+        const message = event.data;
+        if (message.type === "init") {
+            filePath = message.filePath || "";
+            metadata = message.metadata;
+            decodeTimeMs = metadata.wasmDecodeTimeMs || 0;
+            duration = metadata.duration || 0;
+
+            if (message.samples && message.samples.length > 0) {
+                samples = message.samples.map((ch: any) =>
+                    ch instanceof Float32Array ? ch : new Float32Array(ch)
+                );
+            }
+
+            initAudio();
+        }
+    }
+
+    function initAudio() {
         if (!audioContext) {
-            audioContext = new (window.AudioContext ||
-                (window as any).webkitAudioContext)();
+            audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
         }
 
-        if (samples && samples.length > 0) {
+        if (samples.length > 0) {
             const numChannels = samples.length;
             const length = samples[0].length;
-            audioBuffer = audioContext.createBuffer(
-                numChannels,
-                length,
-                metadata.sampleRate,
-            );
+            audioBuffer = audioContext.createBuffer(numChannels, length, metadata.sampleRate);
 
             for (let i = 0; i < numChannels; i++) {
-                const channelData = samples[i] instanceof Float32Array
-                    ? samples[i]
-                    : new Float32Array(samples[i]);
-                audioBuffer.copyToChannel(channelData, i);
+                audioBuffer.copyToChannel(samples[i], i);
             }
         }
 
-        calculateSummary();
-        drawWaveform();
-    }
-
-    function calculateSummary() {
-        if (minData.length > 0 && maxData.length > 0) {
-            waveformSummary = minData.map((min, i) => ({
-                min: min,
-                max: maxData[i]
-            }));
-            return;
-        }
-
-        if (samples.length === 0 || canvasWidth === 0) return;
-
-        const width = Math.ceil(canvasWidth);
-        waveformSummary = samples.map((data) => {
-            const minArr = new Float32Array(width);
-            const maxArr = new Float32Array(width);
-            const step = data.length / width;
-
-            for (let i = 0; i < width; i++) {
-                let min = 1.0;
-                let max = -1.0;
-                const startIdx = Math.floor(i * step);
-                const endIdx = Math.floor((i + 1) * step);
-
-                for (let j = startIdx; j < endIdx && j < data.length; j++) {
-                    const val = data[j];
-                    if (val < min) min = val;
-                    if (val > max) max = val;
-                }
-                minArr[i] = min;
-                maxArr[i] = max;
-            }
-            return { min: minArr, max: maxArr };
-        });
-    }
-
-    function drawTimeline(ctx: CanvasRenderingContext2D, width: number, height: number) {
-        const numTicks = 10;
-        const tickSpacing = width / numTicks;
-
-        ctx.save();
-        ctx.beginPath();
-        ctx.strokeStyle = "rgba(0,0,0,0.1)";
-        ctx.lineWidth = 1;
-        ctx.font = "10px Inter, -apple-system, sans-serif";
-        ctx.fillStyle = "#86868b";
-        ctx.textAlign = "center";
-
-        for (let i = 0; i <= numTicks; i++) {
-            const x = i * tickSpacing + 0.5;
-            const time = (i / numTicks) * duration;
-
-            ctx.moveTo(x, 0);
-            ctx.lineTo(x, height);
-
-            if (i > 0 && i < numTicks) {
-                ctx.fillText(formatTime(time), x, 12);
-            }
-        }
-        ctx.stroke();
-        ctx.restore();
+        // Wait for layout to complete
+        setTimeout(() => {
+            drawWaveform();
+        }, 50);
     }
 
     function drawWaveform() {
-        if (!canvas || (waveformSummary.length === 0 && minData.length === 0)) return;
+        if (!canvas || samples.length === 0) return;
 
-        const dpr = window.devicePixelRatio || 1;
-        const displayWidth = canvas.offsetWidth;
-        const displayHeight = canvas.offsetHeight;
+        const rect = canvasContainer.getBoundingClientRect();
+        const width = rect.width;
+        const height = rect.height;
 
-        if (canvas.width !== displayWidth * dpr || canvas.height !== displayHeight * dpr) {
-            canvas.width = displayWidth * dpr;
-            canvas.height = displayHeight * dpr;
+        if (width === 0 || height === 0) {
+            setTimeout(drawWaveform, 50);
+            return;
         }
 
-        const ctx = canvas.getContext("2d")!;
-        ctx.save();
-        ctx.scale(dpr, dpr);
+        const dpr = window.devicePixelRatio || 1;
+        canvas.width = width * dpr;
+        canvas.height = height * dpr;
+        canvas.style.width = width + "px";
+        canvas.style.height = height + "px";
 
-        const width = displayWidth;
-        const height = displayHeight;
+        const ctx = canvas.getContext("2d")!;
+        ctx.scale(dpr, dpr);
         ctx.clearRect(0, 0, width, height);
 
-        drawTimeline(ctx, width, height);
-
-        const numChannels = waveformSummary.length;
+        const numChannels = samples.length;
         const channelHeight = height / numChannels;
-        const halfChannelHeight = channelHeight / 2;
-        const drawHeight = halfChannelHeight * 0.92;
 
-        waveformSummary.forEach((summary, chIndex) => {
-            const yBase = chIndex * channelHeight + halfChannelHeight;
-            const playedWidth = Math.floor((currentTime / duration) * width);
-            const numPoints = summary.min.length;
-            const stepX = width / numPoints;
+        for (let ch = 0; ch < numChannels; ch++) {
+            const data = samples[ch];
+            const yOffset = ch * channelHeight;
+            const centerY = yOffset + channelHeight / 2;
+            const amplitude = channelHeight / 2 * 0.9;
 
+            // Calculate min/max for each pixel
+            const step = data.length / width;
+
+            // Draw unplayed part (gray)
             ctx.beginPath();
-            ctx.strokeStyle = "#d1d1d6";
-            ctx.lineWidth = Math.max(1, stepX);
+            ctx.strokeStyle = "#cccccc";
+            ctx.lineWidth = 1;
 
-            const startPoint = Math.floor(playedWidth / stepX);
+            const playedX = (currentTime / duration) * width;
 
-            for (let i = startPoint; i < numPoints; i++) {
-                const x = i * stepX + 0.5;
-                ctx.moveTo(x, yBase + summary.min[i] * drawHeight);
-                ctx.lineTo(x, yBase + summary.max[i] * drawHeight);
+            for (let x = Math.floor(playedX); x < width; x++) {
+                const startIdx = Math.floor(x * step);
+                const endIdx = Math.floor((x + 1) * step);
+
+                let min = 0, max = 0;
+                for (let i = startIdx; i < endIdx && i < data.length; i++) {
+                    if (data[i] < min) min = data[i];
+                    if (data[i] > max) max = data[i];
+                }
+
+                ctx.moveTo(x + 0.5, centerY + min * amplitude);
+                ctx.lineTo(x + 0.5, centerY + max * amplitude);
             }
             ctx.stroke();
 
-            if (startPoint > 0) {
+            // Draw played part (blue)
+            if (playedX > 0) {
                 ctx.beginPath();
-                ctx.strokeStyle = "#007aff";
-                ctx.lineWidth = Math.max(1, stepX);
-                for (let i = 0; i < startPoint; i++) {
-                    const x = i * stepX + 0.5;
-                    ctx.moveTo(x, yBase + summary.min[i] * drawHeight);
-                    ctx.lineTo(x, yBase + summary.max[i] * drawHeight);
+                ctx.strokeStyle = "#3b82f6";
+                ctx.lineWidth = 1;
+
+                for (let x = 0; x < playedX && x < width; x++) {
+                    const startIdx = Math.floor(x * step);
+                    const endIdx = Math.floor((x + 1) * step);
+
+                    let min = 0, max = 0;
+                    for (let i = startIdx; i < endIdx && i < data.length; i++) {
+                        if (data[i] < min) min = data[i];
+                        if (data[i] > max) max = data[i];
+                    }
+
+                    ctx.moveTo(x + 0.5, centerY + min * amplitude);
+                    ctx.lineTo(x + 0.5, centerY + max * amplitude);
                 }
                 ctx.stroke();
             }
 
-            if (chIndex < numChannels - 1) {
+            // Draw channel separator
+            if (ch < numChannels - 1) {
                 ctx.beginPath();
-                ctx.strokeStyle = "rgba(0,0,0,0.05)";
-                ctx.moveTo(0, (chIndex + 1) * channelHeight);
-                ctx.lineTo(width, (chIndex + 1) * channelHeight);
+                ctx.strokeStyle = "#e5e5e5";
+                ctx.lineWidth = 1;
+                ctx.moveTo(0, (ch + 1) * channelHeight);
+                ctx.lineTo(width, (ch + 1) * channelHeight);
                 ctx.stroke();
             }
-        });
 
-        const playheadX = (currentTime / duration) * width + 0.5;
+            // Draw channel label
+            ctx.fillStyle = "#999999";
+            ctx.font = "11px sans-serif";
+            ctx.fillText(`CH ${ch}`, 8, yOffset + 16);
+        }
+
+        // Draw playhead
+        const playheadX = (currentTime / duration) * width;
         ctx.beginPath();
-        ctx.strokeStyle = "#ff3b30";
-        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = "#ef4444";
+        ctx.lineWidth = 2;
         ctx.moveTo(playheadX, 0);
         ctx.lineTo(playheadX, height);
         ctx.stroke();
+    }
 
-        ctx.restore();
+    function handleCanvasClick(e: MouseEvent) {
+        if (!canvas || duration === 0) return;
+        const rect = canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const ratio = Math.max(0, Math.min(1, x / rect.width));
+
+        if (isPlaying) pause();
+        pauseOffset = ratio * duration;
+        currentTime = pauseOffset;
+        drawWaveform();
+        play();
     }
 
     function togglePlay() {
@@ -268,32 +203,22 @@
         if (!audioBuffer) return;
 
         if (audioContext.state === "suspended") {
-            audioContext.resume().then(() => {
-                startSourceNode();
-            });
-        } else {
-            startSourceNode();
+            audioContext.resume();
         }
-    }
 
-    function startSourceNode() {
         if (sourceNode) {
             sourceNode.stop();
         }
 
         sourceNode = audioContext.createBufferSource();
         sourceNode.buffer = audioBuffer;
-
-        const gainNode = audioContext.createGain();
-        gainNode.gain.value = volume;
-        sourceNode.connect(gainNode).connect(audioContext.destination);
-
+        sourceNode.connect(audioContext.destination);
         sourceNode.start(0, pauseOffset);
         startTime = audioContext.currentTime - pauseOffset;
         isPlaying = true;
 
         sourceNode.onended = () => {
-            if (isPlaying && audioContext.currentTime - startTime >= duration) {
+            if (isPlaying && currentTime >= duration) {
                 isPlaying = false;
                 pauseOffset = 0;
                 currentTime = 0;
@@ -301,7 +226,7 @@
             }
         };
 
-        updateTime();
+        updatePlayback();
     }
 
     function pause() {
@@ -313,242 +238,121 @@
         if (animationFrame) cancelAnimationFrame(animationFrame);
     }
 
-    function updateTime() {
+    function updatePlayback() {
         if (!isPlaying) return;
         currentTime = audioContext.currentTime - startTime;
         if (currentTime >= duration) {
             currentTime = duration;
             isPlaying = false;
         } else {
-            animationFrame = requestAnimationFrame(updateTime);
+            animationFrame = requestAnimationFrame(updatePlayback);
         }
         drawWaveform();
     }
 
-    function handleSeek(e: MouseEvent) {
-        const rect = canvas.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const ratio = Math.max(0, Math.min(1, x / rect.width));
-
-        if (isPlaying) pause();
-
-        pauseOffset = ratio * duration;
-        currentTime = pauseOffset;
-        drawWaveform();
-
-        play();
+    function formatTime(s: number): string {
+        if (!s || isNaN(s)) return "0:00";
+        const min = Math.floor(s / 60);
+        const sec = Math.floor(s % 60);
+        return `${min}:${sec.toString().padStart(2, "0")}`;
     }
 
-    function formatTime(s: number) {
-        if (!s || s === 0) return "0.000s";
-        const hrs = Math.floor(s / 3600);
-        const min = Math.floor((s % 3600) / 60);
-        const sec = s % 60;
-
-        let result = "";
-        if (hrs > 0) result += `${hrs}h `;
-        if (min > 0 || hrs > 0) result += `${min}m `;
-        result += `${sec.toFixed(3)}s`;
-        return result;
+    function formatSize(bytes: number): string {
+        if (!bytes || isNaN(bytes)) return "-";
+        if (bytes < 1024) return bytes + " B";
+        if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+        return (bytes / (1024 * 1024)).toFixed(2) + " MB";
     }
 
-    function formatSize(bytes: number) {
-        if (bytes === 0) return "0 B";
-        const k = 1024;
-        const sizes = ["B", "KB", "MB", "GB"];
-        const i = Math.floor(Math.log(bytes) / Math.log(k));
-        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
-    }
-
-    function copyToClipboard(text: string) {
-        navigator.clipboard.writeText(text);
-    }
-
-    $: if (canvas && (canvasWidth || canvasHeight)) {
-        calculateSummary();
-        canvas.width = canvas.offsetWidth;
-        canvas.height = canvas.offsetHeight;
-        drawWaveform();
+    function getFileName(path: string): string {
+        return path.split(/[\\/]/).pop() || path;
     }
 </script>
 
-<main class="flex flex-col h-screen bg-vscode-bg text-vscode-fg overflow-hidden p-6 gap-5">
+<main class="flex flex-col h-full w-full bg-white p-4 gap-4">
     {#if metadata}
-        <!-- Header Section -->
-        <div class="flex flex-col gap-2">
-            <!-- File Path Row -->
-            <div class="flex items-center gap-2">
-                <span class="text-xs font-semibold text-gray-500 uppercase">File Path:</span>
-                <code class="text-sm font-mono bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded flex-1 truncate">
-                    {filePath}
-                </code>
-                <button
-                    class="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-colors"
-                    on:click={() => copyToClipboard(filePath)}
-                    title="Copy Path"
-                >
-                    <svg viewBox="0 0 24 24" width="14" height="14" class="text-vscode-fg">
-                        <path fill="currentColor" d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z" />
-                    </svg>
-                </button>
-            </div>
+        <!-- Area 1: File Path -->
+        <div class="flex items-center gap-2 px-3 py-2 bg-gray-50 rounded border border-gray-200">
+            <span class="text-xs text-gray-500 uppercase font-medium">Path:</span>
+            <code class="text-sm text-gray-700 truncate flex-1">{filePath}</code>
+        </div>
 
-            <!-- Stats Row -->
-            <div class="flex gap-4 text-xs">
-                <span class="text-gray-600 dark:text-gray-400">
-                    total time: <span class="font-semibold text-vscode-fg">{finalTotalTime}ms</span>
-                </span>
-                <span class="text-gray-600 dark:text-gray-400">
-                    decode time: <span class="font-semibold text-vscode-fg">{metadata.wasmDecodeTimeMs || 0}ms</span>
-                </span>
+        <!-- Area 2: Metadata (two columns) -->
+        <div class="grid grid-cols-2 gap-x-8 gap-y-2 px-3 py-3 bg-gray-50 rounded border border-gray-200 text-sm">
+            <div class="flex justify-between">
+                <span class="text-gray-500">File:</span>
+                <span class="text-gray-800 font-medium">{getFileName(filePath)}</span>
             </div>
-
-            <!-- Filename Row -->
-            <div class="flex items-center gap-2">
-                <svg class="w-6 h-6 text-vscode-fg" viewBox="0 0 24 24">
-                    <path fill="currentColor" d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z" />
-                </svg>
-                <span class="text-lg font-semibold">{filePath.split(/[\\/]/).pop()}</span>
+            <div class="flex justify-between">
+                <span class="text-gray-500">Size:</span>
+                <span class="text-gray-800">{formatSize(metadata.fileSize)}</span>
+            </div>
+            <div class="flex justify-between">
+                <span class="text-gray-500">Format:</span>
+                <span class="text-gray-800">{metadata.container || "-"}</span>
+            </div>
+            <div class="flex justify-between">
+                <span class="text-gray-500">Codec:</span>
+                <span class="text-gray-800">{metadata.codec || "-"}</span>
+            </div>
+            <div class="flex justify-between">
+                <span class="text-gray-500">Duration:</span>
+                <span class="text-gray-800">{formatTime(duration)}</span>
+            </div>
+            <div class="flex justify-between">
+                <span class="text-gray-500">Sample Rate:</span>
+                <span class="text-gray-800">{metadata.sampleRate?.toLocaleString() || "-"} Hz</span>
+            </div>
+            <div class="flex justify-between">
+                <span class="text-gray-500">Channels:</span>
+                <span class="text-gray-800">{metadata.numChannels || "-"}</span>
+            </div>
+            <div class="flex justify-between">
+                <span class="text-gray-500">Bitrate:</span>
+                <span class="text-gray-800">{metadata.bitRate ? Math.round(metadata.bitRate / 1000) + " kbps" : "-"}</span>
+            </div>
+            <div class="flex justify-between">
+                <span class="text-gray-500">Decode Time:</span>
+                <span class="text-gray-800">{decodeTimeMs} ms</span>
             </div>
         </div>
 
-        <!-- Metadata Card -->
-        <div class="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
-            <div class="grid grid-cols-4 gap-4">
-                <div class="flex flex-col gap-1">
-                    <span class="meta-label">size</span>
-                    <span class="meta-value">{formatSize(metadata.fileSize)}</span>
-                </div>
-                <div class="flex flex-col gap-1">
-                    <span class="meta-label">format</span>
-                    <span class="meta-value">{metadata.container}</span>
-                </div>
-                <div class="flex flex-col gap-1">
-                    <span class="meta-label">codec</span>
-                    <span class="meta-value">{metadata.codec.toLowerCase()}</span>
-                </div>
-                <div class="flex flex-col gap-1">
-                    <span class="meta-label">duration</span>
-                    <span class="meta-value">{formatTime(duration)}</span>
-                </div>
-
-                <div class="flex flex-col gap-1">
-                    <span class="meta-label">sample rate</span>
-                    <span class="meta-value">{metadata.sampleRate.toLocaleString()} Hz</span>
-                </div>
-                <div class="flex flex-col gap-1">
-                    <span class="meta-label">channels</span>
-                    <span class="meta-value">{metadata.numChannels}</span>
-                </div>
-                <div class="flex flex-col gap-1">
-                    <span class="meta-label">bitrate</span>
-                    <span class="meta-value">
-                        {metadata.bitRate ? (metadata.bitRate / 1000).toFixed(0) + " kbps" : "Variable"}
-                    </span>
-                </div>
-            </div>
+        <!-- Area 3: Waveform Canvas -->
+        <div
+            bind:this={canvasContainer}
+            class="flex-1 relative bg-white rounded border border-gray-200 overflow-hidden min-h-[120px]"
+        >
+            <canvas
+                bind:this={canvas}
+                on:click={handleCanvasClick}
+                class="absolute inset-0 w-full h-full cursor-pointer"
+            ></canvas>
         </div>
 
-        <!-- Waveform Section -->
-        <div class="flex-1 flex flex-col bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
-            <div
-                class="flex-1 relative"
-                bind:clientWidth={canvasWidth}
-                bind:clientHeight={canvasHeight}
+        <!-- Controls -->
+        <div class="flex items-center gap-4 px-3 py-2 bg-gray-50 rounded border border-gray-200">
+            <button
+                on:click={togglePlay}
+                class="w-10 h-10 flex items-center justify-center rounded-full bg-blue-500 hover:bg-blue-600 text-white"
             >
-                <canvas bind:this={canvas} on:click={handleSeek} class="w-full h-full cursor-pointer"></canvas>
-                <div class="absolute inset-0 pointer-events-none flex flex-col">
-                    {#each Array(metadata.numChannels) as _, i}
-                        <div class="flex-1 flex items-center justify-start pl-2 text-xs text-gray-500 font-medium">
-                            CH {i}
-                        </div>
-                    {/each}
-                </div>
-            </div>
-        </div>
-
-        <!-- Controls Card -->
-        <div class="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
-            <div class="flex items-center gap-4">
-                <button
-                    class="flex items-center justify-center w-10 h-10 rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition-colors"
-                    on:click={togglePlay}
-                    aria-label={isPlaying ? "Pause" : "Play"}
-                >
-                    {#if isPlaying}
-                        <svg viewBox="0 0 24 24" width="24" height="24">
-                            <path fill="currentColor" d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
-                        </svg>
-                    {:else}
-                        <svg viewBox="0 0 24 24" width="24" height="24">
-                            <path fill="currentColor" d="M8 5v14l11-7z" />
-                        </svg>
-                    {/if}
-                </button>
-
-                <div class="flex items-center gap-2 text-sm font-mono">
-                    <span class="text-vscode-fg">{formatTime(currentTime)}</span>
-                    <span class="text-gray-400">/</span>
-                    <span class="text-gray-600 dark:text-gray-400">{formatTime(duration)}</span>
-                </div>
-
-                <div class="flex items-center gap-2 ml-auto">
-                    <svg class="w-4 h-4 text-vscode-fg" viewBox="0 0 24 24">
-                        <path fill="currentColor" d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" />
+                {#if isPlaying}
+                    <svg viewBox="0 0 24 24" class="w-5 h-5">
+                        <path fill="currentColor" d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
                     </svg>
-                    <input
-                        type="range"
-                        min="0"
-                        max="1"
-                        step="0.01"
-                        bind:value={volume}
-                        class="w-24 h-1 bg-gray-300 dark:bg-gray-600 rounded-lg appearance-none cursor-pointer"
-                    />
-                </div>
-            </div>
+                {:else}
+                    <svg viewBox="0 0 24 24" class="w-5 h-5">
+                        <path fill="currentColor" d="M8 5v14l11-7z"/>
+                    </svg>
+                {/if}
+            </button>
+            <span class="text-sm text-gray-600 font-mono">
+                {formatTime(currentTime)} / {formatTime(duration)}
+            </span>
         </div>
     {:else}
-        <!-- Loading State -->
-        <div class="flex flex-col items-center justify-center h-full gap-4">
-            <div class="w-12 h-12 border-4 border-gray-300 dark:border-gray-600 border-t-blue-600 rounded-full animate-spin"></div>
-            <span class="text-gray-600 dark:text-gray-400">Decoding audio...</span>
+        <!-- Loading -->
+        <div class="flex-1 flex items-center justify-center">
+            <div class="text-gray-500">Loading audio...</div>
         </div>
     {/if}
 </main>
-
-<style>
-    :global(body) {
-        margin: 0;
-        padding: 0;
-        overflow: hidden;
-    }
-
-    :global(html) {
-        height: 100%;
-    }
-
-    input[type="range"] {
-        -webkit-appearance: none;
-        appearance: none;
-        background: transparent;
-    }
-
-    input[type="range"]::-webkit-slider-thumb {
-        -webkit-appearance: none;
-        appearance: none;
-        width: 12px;
-        height: 12px;
-        border-radius: 50%;
-        background: #007aff;
-        cursor: pointer;
-    }
-
-    input[type="range"]::-moz-range-thumb {
-        width: 12px;
-        height: 12px;
-        border-radius: 50%;
-        background: #007aff;
-        cursor: pointer;
-        border: none;
-    }
-</style>

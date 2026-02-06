@@ -5,8 +5,6 @@ import * as vscode from 'vscode';
 export interface DecodeResult {
     metadata: any;
     samples?: any[];
-    min?: any[];
-    max?: any[];
     loadTimeMs?: number;
 }
 
@@ -95,7 +93,7 @@ export class AudioDecoderService {
     /**
      * Decode an audio file using WASM
      */
-    public async decodeAudioFile(filePath: string, samplesPerPixel?: number): Promise<DecodeResult> {
+    public async decodeAudioFile(filePath: string): Promise<DecodeResult> {
         if (!fs.existsSync(filePath)) {
             throw new Error(`Audio file not found: ${filePath}`);
         }
@@ -114,24 +112,12 @@ export class AudioDecoderService {
 
             // Decode using WASM
             const decodeStart = Date.now();
-            const result = avioflow.loadBuffer(uint8Array);
+            // Pass empty object as options to match C++ signature: loadBuffer(buffer, options)
+            const result = avioflow.loadBuffer(uint8Array, {});
             const decodeTimeMs = Date.now() - decodeStart;
 
             if (!result || !result.metadata) {
                 throw new Error('Failed to decode audio file');
-            }
-
-            // Calculate waveform summary if samplesPerPixel is specified
-            let min: any[] | undefined;
-            let max: any[] | undefined;
-            let samples: any[] | undefined;
-
-            if (result.samples && samplesPerPixel && samplesPerPixel > 1) {
-                const summary = this.calculateWaveformSummary(result.samples, samplesPerPixel);
-                min = summary.min;
-                max = summary.max;
-            } else if (result.samples) {
-                samples = result.samples;
             }
 
             const totalTimeMs = Date.now() - startTime;
@@ -140,79 +126,13 @@ export class AudioDecoderService {
 
             return {
                 metadata: result.metadata,
-                samples,
-                min,
-                max,
+                samples: result.samples,
                 loadTimeMs: decodeTimeMs
             };
         } catch (error: any) {
             console.error('[AudioDecoderService] Decode error:', error);
             throw error;
         }
-    }
-
-    /**
-     * Calculate waveform summary (min/max values per pixel)
-     * This reduces the number of samples for efficient visualization
-     */
-    private calculateWaveformSummary(samples: any[], samplesPerPixel: number): { min: any[], max: any[] } {
-        const min: any[] = [];
-        const max: any[] = [];
-
-        if (!samples || samples.length === 0) {
-            return { min, max };
-        }
-
-        // WASM returns samples as [channel1_array, channel2_array]
-        // Each channel is a Float32Array or Array
-        const numChannels = samples.length;
-        const numSamples = samples[0].length;
-
-        // Calculate min/max for each pixel
-        const numPixels = Math.ceil(numSamples / samplesPerPixel);
-
-        for (let pixelIdx = 0; pixelIdx < numPixels; pixelIdx++) {
-            const startSample = pixelIdx * samplesPerPixel;
-            const endSample = Math.min(startSample + samplesPerPixel, numSamples);
-
-            if (numChannels > 1) {
-                // Stereo or multi-channel
-                const minVals: number[] = [];
-                const maxVals: number[] = [];
-
-                for (let ch = 0; ch < numChannels; ch++) {
-                    let chMin = Infinity;
-                    let chMax = -Infinity;
-
-                    for (let i = startSample; i < endSample; i++) {
-                        const val = samples[ch][i];
-                        if (val < chMin) chMin = val;
-                        if (val > chMax) chMax = val;
-                    }
-
-                    minVals.push(chMin);
-                    maxVals.push(chMax);
-                }
-
-                min.push(minVals);
-                max.push(maxVals);
-            } else {
-                // Mono
-                let chMin = Infinity;
-                let chMax = -Infinity;
-
-                for (let i = startSample; i < endSample; i++) {
-                    const val = samples[0][i];
-                    if (val < chMin) chMin = val;
-                    if (val > chMax) chMax = val;
-                }
-
-                min.push(chMin);
-                max.push(chMax);
-            }
-        }
-
-        return { min, max };
     }
 
     public dispose() {
