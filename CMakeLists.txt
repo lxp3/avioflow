@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 option(BUILD_SHARED_LIBS "Whether to build shared libraries" OFF)
 option(BUILD_TESTS "Build tests and examples" ON)
-option(ENABLE_WASAPI "Enable WASAPI loopback capture support" ON)
+option(ENABLE_WASAPI "Enable WASAPI loopback capture support" OFF)
 option(ENABLE_PYTHON "Enable Python bindings" OFF)
 option(ENABLE_NODE_JS "Enable Node.js bindings" OFF)
 option(ENABLE_BINARY "Whether to build binaries" OFF)
@@ -50,18 +50,26 @@ if(MSVC)
 else()
     # Linux/GCC/Clang optimizations
     add_compile_options(
-        -O3 
+        -O3
         -fPIC                   # Required for linking static lib into shared object (Python bindings)
         -fvisibility=hidden     # Hide internal symbols by default
-        -ffunction-sections 
+        -ffunction-sections
         -fdata-sections
         "-fdebug-prefix-map=${CMAKE_SOURCE_DIR}=." # Strip absolute paths in debug info
     )
-    add_link_options(
-        -Wl,--gc-sections       # Remove unused sections
-        -Wl,--exclude-libs,ALL  # Prevent library symbols from being exported
-    )
-    
+
+    # Emscripten (WASM) uses wasm-ld which doesn't support --exclude-libs
+    if(NOT EMSCRIPTEN)
+        add_link_options(
+            -Wl,--gc-sections       # Remove unused sections
+            -Wl,--exclude-libs,ALL  # Prevent library symbols from being exported
+        )
+    else()
+        add_link_options(
+            -Wl,--gc-sections       # Remove unused sections
+        )
+    endif()
+
     # Strip symbols in Release builds for Linux
     if(CMAKE_BUILD_TYPE STREQUAL "Release")
         add_link_options(-s)    # Strip all symbols

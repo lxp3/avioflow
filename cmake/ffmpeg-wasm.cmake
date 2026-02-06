@@ -1,51 +1,37 @@
 # ============================================================================
 # FFmpeg WebAssembly Configuration
 # ============================================================================
-#
-# This file configures FFmpeg for WebAssembly builds.
-# FFmpeg must be pre-compiled with Emscripten using wasm/scripts/build-ffmpeg-wasm.sh
-#
-# Output location: wasm/ffmpeg-wasm/
-# ============================================================================
 
-if(NOT EMSCRIPTEN)
-    message(FATAL_ERROR "ffmpeg-wasm.cmake should only be used with Emscripten builds")
-endif()
-
-set(FFMPEG_WASM_DIR "${CMAKE_SOURCE_DIR}/wasm/ffmpeg-wasm")
-
-# Check if FFmpeg WASM has been built
-if(NOT EXISTS "${FFMPEG_WASM_DIR}/lib/libavcodec.a")
-    message(FATAL_ERROR 
-        "FFmpeg WASM not found!\n"
-        "Please build FFmpeg for WebAssembly first:\n"
-        "  cd wasm/scripts && ./build-ffmpeg-wasm.sh\n"
-        "Expected location: ${FFMPEG_WASM_DIR}"
-    )
-endif()
-
-set(FFMPEG_ROOT "${FFMPEG_WASM_DIR}")
-set(FFMPEG_INCLUDE_DIRS "${FFMPEG_ROOT}/include")
-set(FFMPEG_LIB_DIR "${FFMPEG_ROOT}/lib")
 set(LIB_TYPE STATIC)
 
-# FFmpeg libraries for WASM (minimal set for audio decoding)
-set(FFMPEG_LIBS avcodec avformat avutil swresample)
+if(TARGET ffmpeg::avcodec)
+    # This block runs AFTER FetchContent has extracted the files
 
-# Create imported targets
-foreach(LIB IN LISTS FFMPEG_LIBS)
-    if(NOT TARGET ffmpeg::${LIB})
-        add_library(ffmpeg::${LIB} STATIC IMPORTED)
-        set_target_properties(ffmpeg::${LIB} PROPERTIES
-            IMPORTED_LOCATION "${FFMPEG_LIB_DIR}/lib${LIB}.a"
-            INTERFACE_INCLUDE_DIRECTORIES "${FFMPEG_INCLUDE_DIRS}"
+    # The tarball structure has changed; files are directly in the source dir
+    set(FFMPEG_ROOT "${FFMPEG_EXTRACT_DIR}")
+
+    message(STATUS "Configuring FFMPEG WASM from: ${FFMPEG_ROOT}")
+
+    set(FFMPEG_LIBS
+        avcodec
+        avformat
+        avutil
+        swresample
+        avdevice
+        swscale
+        avfilter
+    )
+
+    foreach(_lib ${FFMPEG_LIBS})
+        set(_lib_path "${FFMPEG_ROOT}/lib/lib${_lib}.a")
+        set_target_properties(ffmpeg::${_lib} PROPERTIES
+            IMPORTED_LOCATION "${_lib_path}"
+            INTERFACE_INCLUDE_DIRECTORIES "${FFMPEG_ROOT}/include"
         )
-    endif()
-endforeach()
+    endforeach()
 
-message(STATUS "")
-message(STATUS "=== FFmpeg WASM Configuration ===")
-message(STATUS "FFmpeg Root: ${FFMPEG_ROOT}")
-message(STATUS "Libraries: ${FFMPEG_LIBS}")
-message(STATUS "=================================")
-message(STATUS "")
+else()
+    # This block runs BEFORE FetchContent to define the URL
+    set(FFMPEG_URL "file://${CMAKE_SOURCE_DIR}/public/downloads/ffmpeg-7.1-wasm.tar.gz")
+    # You can add FFMPEG_ARCHIVE_HASH here if you want to verify integrity
+endif()
