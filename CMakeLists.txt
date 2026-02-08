@@ -44,8 +44,8 @@ if(MSVC)
         /OPT:ICF # Identical COMDAT Folding
     )
     set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS OFF)
-    # Use static CRT (/MT or /MTd)
-    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+    # Use dynamic CRT (/MD or /MDd) to match FFmpeg built with /MD
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
     add_definitions(-D_CRT_SECURE_NO_WARNINGS)
 else()
     # Linux/GCC/Clang optimizations
@@ -156,13 +156,18 @@ if(WIN32)
 endif()
 
 # FFmpeg DLLs copy (for convenient local running)
-if(WIN32 AND BUILD_SHARED_LIBS)
-    add_custom_command(TARGET avioflow POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_directory
-            "${FFMPEG_BIN_DIR}"
-            "$<TARGET_FILE_DIR:avioflow>"
-        COMMENT "Copying FFmpeg DLLs to output directory"
-    )
+if(WIN32)
+    if(EXISTS "${FFMPEG_BIN_DIR}")
+        file(GLOB FFMPEG_DLL_FILES "${FFMPEG_BIN_DIR}/*.dll")
+        if(FFMPEG_DLL_FILES)
+            add_custom_command(TARGET avioflow POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_directory
+                    "${FFMPEG_BIN_DIR}"
+                    "$<TARGET_FILE_DIR:avioflow>"
+                COMMENT "Copying FFmpeg DLLs to output directory"
+            )
+        endif()
+    endif()
 endif()
 
 # Binaries

@@ -1,4 +1,5 @@
-set(FFMPEG_URL "${CMAKE_SOURCE_DIR}/public/downloads/ffmpeg-7.1-shared-x86_64-msvc.tar.gz")
+set(FFMPEG_URL "https://github.com/lxp3/ffmpeg-build/releases/download/v0.2.13/ffmpeg-7.1-shared-x86_64-msvc.tar.gz")
+set(FFMPEG_HASH "613538b2a312245ff099e2ab982dcdada8ca61099e71be82e21c4c6ff65dc740")
 set(LIB_TYPE SHARED)
 
 # FFmpeg Windows Shared Configuration

@@ -1,4 +1,5 @@
-set(FFMPEG_URL "${CMAKE_SOURCE_DIR}/public/downloads/ffmpeg-7.1-static-x86_64-linux-gnu.tar.gz")
+set(FFMPEG_URL "https://github.com/lxp3/ffmpeg-build/releases/download/v0.2.13/ffmpeg-7.1-static-x86_64-linux-gnu.tar.gz")
+set(FFMPEG_HASH "54ae269fa4a45f10ea2b5417fe8941bfacff1cd7e593821285148fa8cd7111f5")
 set(LIB_TYPE STATIC)
 
 # FFmpeg Linux Static System Libraries

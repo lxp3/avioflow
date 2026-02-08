@@ -1,4 +1,5 @@
-set(FFMPEG_URL "${CMAKE_SOURCE_DIR}/public/downloads/ffmpeg-7.1-static-x86_64-msvc.tar.gz")
+set(FFMPEG_URL "D:/Repos/demo-v1/ffmpeg-build/outputs/ffmpeg-7.1-static-x86_64-msvc.tar.gz")
+set(FFMPEG_HASH "28dfa1af3025a0c3d562f646790bd520553180038f9e5d85969b6a4bf3561afc")
 set(LIB_TYPE STATIC)
 
 # FFmpeg Windows Static System Libraries

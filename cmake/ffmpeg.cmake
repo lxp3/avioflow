@@ -1,6 +1,6 @@
 include(FetchContent)
 
-# 1. Determine Platform Config and Include it
+# 1. Determine Platform Config
 if(EMSCRIPTEN)
     # WebAssembly build - use pre-compiled FFmpeg WASM
     set(FFMPEG_PLATFORM_CONFIG "cmake/ffmpeg-wasm.cmake")
@@ -18,12 +18,13 @@ else()
     endif()
 endif()
 
+# 2. Load platform config first to get FFMPEG_URL and FFMPEG_HASH
 include(${FFMPEG_PLATFORM_CONFIG})
 
 message(STATUS "FFmpeg URL: ${FFMPEG_URL}")
 
-# 2. Fetch Content
-set(FETCH_ARGS URL ${FFMPEG_URL} DOWNLOAD_NO_PROGRESS FALSE)
+# 3. Fetch Content
+set(FETCH_ARGS URL ${FFMPEG_URL} URL_HASH SHA256=${FFMPEG_HASH} DOWNLOAD_NO_PROGRESS FALSE)
 if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.24")
     list(APPEND FETCH_ARGS DOWNLOAD_EXTRACT_TIMESTAMP TRUE)
     if(POLICY CMP0135)
@@ -37,8 +38,9 @@ FetchContent_MakeAvailable(ffmpeg_bin)
 FetchContent_GetProperties(ffmpeg_bin SOURCE_DIR FFMPEG_EXTRACT_DIR)
 message(STATUS "FFMPEG_EXTRACT_DIR: ${FFMPEG_EXTRACT_DIR}")
 
-# 3. Find Root Directory
-if(EXISTS "${FFMPEG_EXTRACT_DIR}/include")
+# 4. Find Root Directory
+# Check if include directory exists directly or inside a subfolder
+if(EXISTS "${FFMPEG_EXTRACT_DIR}/include/libavcodec/avcodec.h")
     set(FFMPEG_ROOT "${FFMPEG_EXTRACT_DIR}")
 else()
     file(GLOB FFMPEG_CANDIDATES "${FFMPEG_EXTRACT_DIR}/ffmpeg-*")
@@ -52,29 +54,21 @@ endif()
 set(FFMPEG_ROOT "${FFMPEG_ROOT}" CACHE PATH "FFmpeg root" FORCE)
 message(STATUS "FFmpeg Root set to: ${FFMPEG_ROOT}")
 
-# 4. Setup Targets Base properties
+# 5. Setup Targets Base properties
 set(FFMPEG_INCLUDE_DIRS "${FFMPEG_ROOT}/include")
 set(FFMPEG_LIB_DIR "${FFMPEG_ROOT}/lib")
 set(FFMPEG_BIN_DIR "${FFMPEG_ROOT}/bin")
 set(FFMPEG_LIBS avcodec avformat avutil swresample avdevice swscale avfilter)
 
-# Filter FFMPEG_LIBS to only include libraries that actually exist in the include directory
-set(EXISTING_FFMPEG_LIBS "")
-foreach(LIB IN LISTS FFMPEG_LIBS)
-    if(EXISTS "${FFMPEG_INCLUDE_DIRS}/lib${LIB}")
-        list(APPEND EXISTING_FFMPEG_LIBS ${LIB})
-    else()
-        message(WARNING "FFmpeg library lib${LIB} not found in ${FFMPEG_INCLUDE_DIRS}, skipping target.")
-    endif()
-endforeach()
-set(FFMPEG_LIBS ${EXISTING_FFMPEG_LIBS})
-
 foreach(LIB IN LISTS FFMPEG_LIBS)
     if(NOT TARGET ffmpeg::${LIB})
-        add_library(ffmpeg::${LIB} ${LIB_TYPE} IMPORTED)
-        set_target_properties(ffmpeg::${LIB} PROPERTIES INTERFACE_INCLUDE_DIRECTORIES "${FFMPEG_INCLUDE_DIRS}")
+        # Use UNKNOWN type so it can be either STATIC or SHARED based on platform config
+        add_library(ffmpeg::${LIB} UNKNOWN IMPORTED)
+        set_target_properties(ffmpeg::${LIB} PROPERTIES
+            INTERFACE_INCLUDE_DIRECTORIES "${FFMPEG_INCLUDE_DIRS}"
+        )
     endif()
 endforeach()
 
-# 5. Apply Platform/Type Specific configuration for target locations
+# 6. Apply Platform/Type Specific configuration for target locations (library files and system dependencies)
 include(${FFMPEG_PLATFORM_CONFIG})
