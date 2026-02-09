@@ -1,6 +1,6 @@
 # Avioflow Audio Previewer for VS Code
 
-<img src="./resources/preview.gif">
+<img src="https://raw.githubusercontent.com/lxp3/avioflow/main/vscode-extension/resources/preview.gif">
 
 High-performance audio previewer for VS Code using the `avioflow` native engine. This extension provides a custom editor for various audio formats, allowing users to visualize waveforms and inspect metadata directly within VS Code.
 
@@ -22,21 +22,21 @@ This extension uses a high-performance **WebAssembly (WASM)** core built from C+
 
 ### VSIX Structure
 ```text
-avioflow-0.2.1.vsix
+avioflow-0.2.2.vsix
 ├─ extension/
-│  ├─ package.json
-│  ├─ README.md
-│  └─ out/
-│     ├─ src/ (Extension logic)
-│     ├─ webview/ (Svelte UI)
-│     └─ wasm/
-│        ├─ avioflow.js
-│        └─ avioflow.wasm
+�? ├─ package.json
+�? ├─ README.md
+�? └─ out/
+�?    ├─ src/ (Extension logic)
+�?    ├─ webview/ (Svelte UI)
+�?    └─ wasm/
+�?       ├─ avioflow.js
+�?       └─ avioflow.wasm
 ```
 
 ## Installation
 ```bash
-code --install-extension avioflow-0.2.1.vsix
+code --install-extension avioflow-0.2.2.vsix
 ```
 
 ## Getting Started
