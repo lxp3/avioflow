@@ -8,8 +8,22 @@ set(LIB_TYPE SHARED)
 foreach(LIB IN LISTS FFMPEG_LIBS)
     if(TARGET ffmpeg::${LIB})
         # Find import library (.lib or .dll.a)
-        # For MSVC shared builds, .lib files are often in the 'bin' directory alongside DLLs
-        file(GLOB IMPLIB_PATHS "${FFMPEG_LIB_DIR}/${LIB}.lib" "${FFMPEG_BIN_DIR}/${LIB}.lib" "${FFMPEG_BIN_DIR}/${LIB}-*.lib")
+        # MinGW builds use .dll.a, MSVC builds use .lib
+        if(MSVC)
+            # Prefer MSVC import libs from bin; avoid MinGW .dll.a
+            file(GLOB IMPLIB_PATHS
+                "${FFMPEG_BIN_DIR}/${LIB}.lib"
+                "${FFMPEG_BIN_DIR}/${LIB}-*.lib"
+                "${FFMPEG_LIB_DIR}/${LIB}.lib"
+            )
+        else()
+            file(GLOB IMPLIB_PATHS
+                "${FFMPEG_LIB_DIR}/${LIB}.lib"
+                "${FFMPEG_LIB_DIR}/lib${LIB}.dll.a"
+                "${FFMPEG_BIN_DIR}/${LIB}.lib"
+                "${FFMPEG_BIN_DIR}/${LIB}-*.lib"
+            )
+        endif()
         # Find DLL
         file(GLOB DLL_PATHS "${FFMPEG_BIN_DIR}/${LIB}-*.dll" "${FFMPEG_BIN_DIR}/${LIB}.dll")
         
