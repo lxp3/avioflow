@@ -1,5 +1,6 @@
 import * as path from 'path';
 import * as fs from 'fs';
+import { pathToFileURL } from 'url';
 
 export interface AudioMetadata {
     duration: number;
@@ -76,7 +77,7 @@ export class AudioDecoderService {
 
         console.log('[AudioDecoderService] Loading WASM module from', wasmPath);
 
-        const createAvioflow = await import(wasmPath).then(m => m.default);
+        const createAvioflow = await import(pathToFileURL(wasmPath).href).then(m => m.default);
 
         if (typeof createAvioflow !== 'function') {
             throw new Error('WASM module does not export a default initialization function');

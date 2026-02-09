@@ -79,93 +79,61 @@ jobs:
           echo "  VS Code Extension: $BUILD_VSIX"
 
   # ============================================================
-  # Linux Build (C++ + Node.js + Python Wheels)
+  # Linux C++ Build (Maximum Compatibility - manylinux2014)
   # ============================================================
-  build-linux:
+  build-linux-cpp:
     needs: check-tag
-    if: needs.check-tag.outputs.build-cpp == 'true' || needs.check-tag.outputs.build-npm == 'true'
+    if: needs.check-tag.outputs.build-cpp == 'true'
     runs-on: ubuntu-latest
-    container: quay.io/pypa/manylinux2014_x86_64
     steps:
       - uses: actions/checkout@v4
 
-      - name: Cache System Dependencies
-        id: cache-deps
-        uses: actions/cache@v4
-        with:
-          path: /var/cache/yum
-          key: linux-deps-${{ hashFiles('.github/workflows/release.yml') }}
-
-      - name: Install System Dependencies
-        if: steps.cache-deps.outputs.cache-hit != 'true'
+      - name: Build C++ Shared Binaries in manylinux2014
         run: |
-          yum install -y epel-release
-          yum install -y alsa-lib-devel libX11-devel zlib-devel bzip2-devel xz-devel libva-devel libdrm-devel
+          docker run --rm -v $(pwd):/io -w /io quay.io/pypa/manylinux2014_x86_64 bash -c "
+            yum install -y epel-release && \
+            yum install -y alsa-lib-devel libX11-devel zlib-devel bzip2-devel xz-devel libva-devel libdrm-devel && \
+            cmake -B build_shared -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=ON -DENABLE_WASAPI=OFF -DENABLE_PYTHON=OFF -DENABLE_NODE_JS=OFF -DENABLE_BINARY=ON && \
+            cmake --build build_shared --config Release -j \$(nproc) && \
+            PKG_DIR=\"avioflow-shared-linux-x64\" && \
+            cmake --install build_shared --prefix \$PKG_DIR && \
+            tar -czvf \$PKG_DIR.tar.gz \$PKG_DIR
+          "
 
-      - name: Install Node.js 20
-        run: |
-          curl -fsSL https://rpm.nodesource.com/setup_20.x | bash -
-          yum install -y nodejs
-          npm install -g pnpm
-
-      # --- Build C++ Shared Binaries (Only if build-cpp is true) ---
-      - name: Build C++ Shared Binaries
-        if: needs.check-tag.outputs.build-cpp == 'true'
-        run: |
-          cmake -B build_shared \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DBUILD_SHARED_LIBS=ON \
-            -DENABLE_WASAPI=OFF \
-            -DENABLE_PYTHON=OFF \
-            -DENABLE_NODE_JS=OFF \
-            -DENABLE_BINARY=ON
-          cmake --build build_shared --config Release -j $(nproc)
-
-      - name: Package C++ Binaries
-        if: needs.check-tag.outputs.build-cpp == 'true'
-        run: |
-          PKG_DIR="avioflow-shared-linux-x64"
-          cmake --install build_shared --prefix $PKG_DIR
-          tar -czvf $PKG_DIR.tar.gz $PKG_DIR
-
-      # --- Build Node.js Addon (Static, Node-API 8 for Node.js >= 16) ---
-      - name: Build Node.js Addon (Node-API 8)
-        if: needs.check-tag.outputs.build-npm == 'true'
-        run: |
-          # Use the specialized build script
-          bash build-nodejs.sh
-
-          # Copy to platform-specific package directory
-          cp build-nodejs/bin/avioflow.node nodejs/npm-packages/@lxp3/linux-x64/avioflow.node
-
-          echo "=== Platform Package Info ==="
-          echo "Package: @lxp3/linux-x64"
-          echo "Node-API version: 8"
-          echo "Compatible with: Node.js 16+"
-          ls -la nodejs/npm-packages/@lxp3/linux-x64/
-
-      # Verify the built module works
-      - name: Verify Node.js Addon
-        if: needs.check-tag.outputs.build-npm == 'true'
-        working-directory: nodejs
-        run: |
-          echo "Verifying native module loads correctly..."
-          node -e "const m = require('./npm-packages/@lxp3/linux-x64/avioflow.node'); console.log('Exports:', Object.keys(m));"
-
-          # Set path for test script
-          export AVIOFLOW_BINDINGS_PATH="$(pwd)/npm-packages/@lxp3/linux-x64/avioflow.node"
-          node tests/test-offline-load.js
-          echo "Verification passed!"
-
-      # --- Upload Artifacts ---
       - uses: actions/upload-artifact@v4
-        if: needs.check-tag.outputs.build-cpp == 'true'
         with:
           name: linux-cpp-binaries
           path: avioflow-shared-linux-x64.tar.gz
 
+  # ============================================================
+  # Linux Node.js Build (Modern - manylinux_2_28)
+  # ============================================================
+  build-linux-npm:
+    needs: check-tag
+    if: needs.check-tag.outputs.build-npm == 'true'
+    runs-on: ubuntu-latest
+    container: quay.io/pypa/manylinux_2_28_x86_64
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Node.js 20
+        run: |
+          curl -fsSL https://rpm.nodesource.com/setup_20.x | bash -
+          dnf install -y nodejs
+          npm install -g pnpm
+
+      - name: Build Node.js Addon
+        run: |
+          bash build-nodejs.sh
+          cp build-nodejs/bin/avioflow.node nodejs/npm-packages/@lxp3/linux-x64/avioflow.node
+
+      - name: Verify Node.js Addon
+        working-directory: nodejs
+        run: |
+          export AVIOFLOW_BINDINGS_PATH="$(pwd)/npm-packages/@lxp3/linux-x64/avioflow.node"
+          node tests/test-offline-load.js
+
       - uses: actions/upload-artifact@v4
-        if: needs.check-tag.outputs.build-npm == 'true'
         with:
           name: npm-linux-x64
           path: nodejs/npm-packages/@lxp3/linux-x64/
@@ -234,6 +202,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: 'pnpm'
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -394,7 +363,8 @@ jobs:
       - name: Setup Node.js & pnpm
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
+          cache: 'pnpm'
       - uses: pnpm/action-setup@v4
         with:
           version: 9
@@ -413,13 +383,14 @@ jobs:
   # Publish to GitHub, PyPI, NPM, and VS Code Marketplace
   # ============================================================
   publish:
-    needs: [check-tag, build-linux, build-python-linux, build-windows, build-python-windows, build-wasm, build-vsix]
+    needs: [check-tag, build-linux-cpp, build-linux-npm, build-python-linux, build-windows, build-python-windows, build-wasm, build-vsix]
     runs-on: ubuntu-latest
     if: |
       always() &&
       startsWith(github.ref, 'refs/tags/') &&
       (needs.check-tag.result == 'success') &&
-      (needs.build-linux.result == 'success' || needs.build-linux.result == 'skipped') &&
+      (needs.build-linux-cpp.result == 'success' || needs.build-linux-cpp.result == 'skipped') &&
+      (needs.build-linux-npm.result == 'success' || needs.build-linux-npm.result == 'skipped') &&
       (needs.build-windows.result == 'success' || needs.build-windows.result == 'skipped') &&
       (needs.build-python-linux.result == 'success' || needs.build-python-linux.result == 'skipped') &&
       (needs.build-python-windows.result == 'success' || needs.build-python-windows.result == 'skipped') &&

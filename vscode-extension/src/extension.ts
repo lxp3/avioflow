@@ -8,6 +8,7 @@ export function activate(context: vscode.ExtensionContext) {
     try {
         const { AudioPreviewProvider } = require('./AudioPreviewProvider');
         const { HomeViewProvider } = require('./HomeViewProvider');
+        const { WelcomeEditorProvider } = require('./WelcomeEditorProvider');
 
         context.subscriptions.push(
             AudioPreviewProvider.register(context)
@@ -19,6 +20,15 @@ export function activate(context: vscode.ExtensionContext) {
                 new HomeViewProvider(context.extensionUri)
             )
         );
+
+        // Register Welcome panel command
+        context.subscriptions.push(
+            WelcomeEditorProvider.register(context)
+        );
+
+        // Auto-open welcome panel on first activation
+        vscode.commands.executeCommand('avioflow.openWelcome');
+
     } catch (error: any) {
         console.error('[Avioflow] Extension activation failed:', error.message);
         console.error('[Avioflow] Stack:', error.stack);

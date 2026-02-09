@@ -39,8 +39,8 @@ try {
     Copy-Item (Join-Path $RootDir "wasm\dist\avioflow.wasm") (Join-Path $DestWasmDir "avioflow.wasm") -Force
 
     Write-Host "Packaging extension to VSIX..."
-    # 使用 pnpm exec 调用本地安装的 vsce
-    & pnpm exec vsce package
+    # 使用 --no-dependencies 跳过 npm 依赖检查，解决 pnpm 环境下的兼容性问题
+    & pnpm exec vsce package --no-dependencies
 
     Write-Host "`n✓ Extension built successfully!" -ForegroundColor Green
     Get-ChildItem "*.vsix" | Select-Object Name, @{Name="Size(MB)";Expression={"{0:N2}" -f ($_.Length / 1MB)}}
