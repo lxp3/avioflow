@@ -1,28 +1,19 @@
 import { defineConfig } from 'vite';
-import { svelte } from '@sveltejs/vite-plugin-svelte';
-import sveltePreprocess from 'svelte-preprocess';
-import tailwindcss from 'tailwindcss';
+import { svelte, vitePreprocess } from '@sveltejs/vite-plugin-svelte';
+import tailwindcss from '@tailwindcss/vite';
 import autoprefixer from 'autoprefixer';
 import path from 'path';
 
 export default defineConfig({
     plugins: [
+        tailwindcss(),
         svelte({
-            preprocess: sveltePreprocess()
+            preprocess: vitePreprocess()
         })
     ],
     css: {
         postcss: {
             plugins: [
-                tailwindcss({
-                    content: [
-                        path.resolve(__dirname, 'src/**/*.{html,js,svelte,ts}')
-                    ],
-                    theme: {
-                        extend: {}
-                    },
-                    plugins: []
-                }),
                 autoprefixer()
             ]
         }

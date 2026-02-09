@@ -1,6 +1,7 @@
 <script lang="ts">
     import { onMount } from "svelte";
     import "./globals.css";
+    import FileUpload from "./components/FileUpload.svelte";
 
     // State
     let metadata: any = null;
@@ -22,6 +23,10 @@
     let pauseOffset = 0;
     let animationFrame: number;
 
+    // VS Code API
+    // @ts-ignore
+    const vscode = typeof acquireVsCodeApi !== 'undefined' ? acquireVsCodeApi() : null;
+
     // Canvas & Zoom
     let canvas: HTMLCanvasElement;
     let canvasContainer: HTMLDivElement;
@@ -34,9 +39,9 @@
         window.addEventListener("message", handleMessage);
         window.addEventListener("keydown", handleKeyDown);
 
-        // @ts-ignore
-        const vscode = acquireVsCodeApi();
-        vscode.postMessage({ type: "ready" });
+        if (vscode) {
+            vscode.postMessage({ type: "ready" });
+        }
         loadStartTime = Date.now();
 
         return () => {
@@ -411,6 +416,13 @@
         return path.split(/[\\/]/).pop() || path;
     }
 
+    function handleFileUpload() {
+        if (vscode) {
+            loadStartTime = Date.now();
+            vscode.postMessage({ type: "selectFile" });
+        }
+    }
+
     $: canvasHeight = samples.length > 0 ? samples.length * CHANNEL_HEIGHT : 120;
 </script>
 
@@ -510,12 +522,42 @@
             </div>
         </div>
     {:else}
-        <!-- Initial Loading -->
-        <div class="flex-1 flex items-center justify-center">
-            <div class="flex items-center gap-3">
-                <div class="w-6 h-6 border-2 border-gray-300 border-t-blue-500 rounded-full animate-spin"></div>
-                <span class="text-gray-500">Loading audio...</span>
+        <!-- Home Page with Introduction -->
+        <div class="home-container">
+            <div class="intro-section">
+                <h1 class="intro-title">Avioflow</h1>
+                <p class="intro-desc">高性能音频引擎，支持 WAV、MP3、FLAC 等格式的解码与波形可视化</p>
             </div>
+            <FileUpload on:select={handleFileUpload} />
         </div>
     {/if}
 </main>
+
+<style>
+    .home-container {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 24px;
+    }
+
+    .intro-section {
+        text-align: center;
+    }
+
+    .intro-title {
+        font-size: 24px;
+        font-weight: 700;
+        color: #1f2937;
+        margin: 0 0 8px 0;
+    }
+
+    .intro-desc {
+        font-size: 14px;
+        color: #6b7280;
+        margin: 0;
+        max-width: 300px;
+    }
+</style>

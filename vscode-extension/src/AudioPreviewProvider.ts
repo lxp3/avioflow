@@ -113,7 +113,7 @@ export class AudioPreviewProvider implements vscode.CustomReadonlyEditorProvider
             path.join(this.context.extensionPath, 'out', 'webview', 'main.js')
         ));
         const styleUri = webview.asWebviewUri(vscode.Uri.file(
-            path.join(this.context.extensionPath, 'out', 'webview', 'style.css')
+            path.join(this.context.extensionPath, 'out', 'webview', 'avioflow.css')
         ));
 
         return `
