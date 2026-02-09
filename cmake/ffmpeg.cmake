@@ -5,13 +5,13 @@ if(EMSCRIPTEN)
     # WebAssembly build - use pre-compiled FFmpeg WASM
     set(FFMPEG_PLATFORM_CONFIG "cmake/ffmpeg-wasm.cmake")
 elseif(WIN32)
-    if(BUILD_SHARED_LIBS STREQUAL "ON")
+    if(BUILD_SHARED_LIBS)
         set(FFMPEG_PLATFORM_CONFIG "cmake/ffmpeg-win-shared.cmake")
     else()
         set(FFMPEG_PLATFORM_CONFIG "cmake/ffmpeg-win-static.cmake")
     endif()
 else()
-    if(BUILD_SHARED_LIBS STREQUAL "ON")
+    if(BUILD_SHARED_LIBS)
         set(FFMPEG_PLATFORM_CONFIG "cmake/ffmpeg-linux-shared.cmake")
     else()
         set(FFMPEG_PLATFORM_CONFIG "cmake/ffmpeg-linux-static.cmake")
@@ -60,10 +60,15 @@ set(FFMPEG_LIB_DIR "${FFMPEG_ROOT}/lib")
 set(FFMPEG_BIN_DIR "${FFMPEG_ROOT}/bin")
 set(FFMPEG_LIBS avcodec avformat avutil swresample avdevice swscale avfilter)
 
+set(_ffmpeg_imported_type UNKNOWN)
+if(DEFINED LIB_TYPE)
+    set(_ffmpeg_imported_type ${LIB_TYPE})
+endif()
+
 foreach(LIB IN LISTS FFMPEG_LIBS)
     if(NOT TARGET ffmpeg::${LIB})
-        # Use UNKNOWN type so it can be either STATIC or SHARED based on platform config
-        add_library(ffmpeg::${LIB} UNKNOWN IMPORTED)
+        # Use the platform-configured type so CMake uses the right link properties
+        add_library(ffmpeg::${LIB} ${_ffmpeg_imported_type} IMPORTED)
         set_target_properties(ffmpeg::${LIB} PROPERTIES
             INTERFACE_INCLUDE_DIRECTORIES "${FFMPEG_INCLUDE_DIRS}"
         )
