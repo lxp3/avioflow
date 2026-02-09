@@ -12,7 +12,7 @@ cd "$ROOT_DIR"
 if [ ! -d "nodejs/node_modules" ]; then
     echo "Installing Node.js dependencies..."
     if command -v pnpm &> /dev/null; then
-        (cd nodejs && pnpm install)
+        (cd nodejs && pnpm install --no-frozen-lockfile)
     else
         (cd nodejs && npm install)
     fi
