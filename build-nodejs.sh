@@ -11,7 +11,11 @@ cd "$ROOT_DIR"
 # 1. Install dependencies if missing
 if [ ! -d "nodejs/node_modules" ]; then
     echo "Installing Node.js dependencies..."
-    (cd nodejs && npm install)
+    if command -v pnpm &> /dev/null; then
+        (cd nodejs && pnpm install)
+    else
+        (cd nodejs && npm install)
+    fi
 fi
 
 # 2. Compile using cmake-js from Root

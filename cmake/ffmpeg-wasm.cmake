@@ -32,6 +32,6 @@ if(TARGET ffmpeg::avcodec)
 
 else()
     # This block runs BEFORE FetchContent to define the URL
-    set(FFMPEG_URL "https://github.com/lxp3/ffmpeg-build/releases/download/v0.2.3/ffmpeg-7.1-wasm.tar.gz")
-    set(FFMPEG_HASH "6c0fc3bae06a59e93291ecada7ca28b23ea633bced09954e0fdda6c2d81ca277")
+    set(FFMPEG_URL "https://github.com/lxp3/ffmpeg-build/releases/download/v0.2.16-wasm/ffmpeg-7.1-wasm.tar.gz")
+    set(FFMPEG_HASH "17cba315356bdc34f2cede13bae1865118a9c1091fcd4cb62f70481eab50ea21")
 endif()

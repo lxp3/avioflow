@@ -20,12 +20,29 @@ importers:
       prebuildify:
         specifier: ^6.0.0
         version: 6.0.1
+    optionalDependencies:
+      '@lxp3/linux-x64':
+        specifier: 0.2.0
+        version: 0.2.0
+      '@lxp3/win32-x64':
+        specifier: 0.2.0
+        version: 0.2.0
 
 packages:
 
   '@electron/get@2.0.3':
     resolution: {integrity: sha512-Qkzpg2s9GnVV2I2BjRksUi43U5e6+zaQMcjoJy0C+C5oxaKl+fmckGDQFtRpZpZV0NQekuZZ+tGz7EA9TVnQtQ==}
     engines: {node: '>=12'}
+
+  '@lxp3/linux-x64@0.2.0':
+    resolution: {integrity: sha512-cT+jCT2nW47HkKNkM1zSbdQF2r3jvWWg8XucPMJGqUvYmUxAkWK6ZA3/QKMsoI8fUZhzOclRsMwvn3Clx0rxOA==, tarball: https://registry.npmjs.org/@lxp3/linux-x64/-/linux-x64-0.2.0.tgz}
+    cpu: [x64]
+    os: [linux]
+
+  '@lxp3/win32-x64@0.2.0':
+    resolution: {integrity: sha512-l+4HWh4PEQ97bfTAh6UXxViieGuEhuGQKeRN3EkUugv0CoB9VGWbciWYDxqJIBZdTuXmMyOawkmvWhS6m7/fZg==, tarball: https://registry.npmjs.org/@lxp3/win32-x64/-/win32-x64-0.2.0.tgz}
+    cpu: [x64]
+    os: [win32]
 
   '@sindresorhus/is@4.6.0':
     resolution: {integrity: sha512-t09vSN3MdfsyCHoFcTRCH/iUtG7OJ0CsjzB8cjAmKc/va/kIgeDI/TxsigdncE/4be734m0cvIYwNaV4i2XqAw==}
@@ -626,6 +643,12 @@ snapshots:
       global-agent: 3.0.0
     transitivePeerDependencies:
       - supports-color
+
+  '@lxp3/linux-x64@0.2.0':
+    optional: true
+
+  '@lxp3/win32-x64@0.2.0':
+    optional: true
 
   '@sindresorhus/is@4.6.0': {}
 

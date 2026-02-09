@@ -1,5 +1,5 @@
-set(FFMPEG_URL "D:/Repos/demo-v1/ffmpeg-build/outputs/ffmpeg-7.1-static-x86_64-msvc.tar.gz")
-set(FFMPEG_HASH "28dfa1af3025a0c3d562f646790bd520553180038f9e5d85969b6a4bf3561afc")
+set(FFMPEG_URL "https://github.com/lxp3/ffmpeg-build/releases/download/v0.2.16/ffmpeg-7.1-static-x86_64-msvc.tar.gz")
+set(FFMPEG_HASH "3eb2d3a4626797923efd887647e48a624f9ea0d6d078c0ec69e0edcf63531bdb")
 set(LIB_TYPE STATIC)
 
 # FFmpeg Windows Static System Libraries

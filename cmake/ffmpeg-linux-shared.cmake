@@ -1,5 +1,5 @@
-set(FFMPEG_URL "https://github.com/lxp3/ffmpeg-build/releases/download/v0.2.13/ffmpeg-7.1-shared-x86_64-linux-gnu.tar.gz")
-set(FFMPEG_HASH "5aa663523a09b6f439e3c58f91c248d7b9133de3a3ec8fbae25139f94e17affe")
+set(FFMPEG_URL "https://github.com/lxp3/ffmpeg-build/releases/download/v0.2.16/ffmpeg-7.1-shared-x86_64-linux-gnu.tar.gz")
+set(FFMPEG_HASH "6bf1b009e175f1078f899fc2b21cf8b206cef16a0c57b79c9e569a4f3b8bf12d")
 set(LIB_TYPE SHARED)
 
 # FFmpeg Linux Shared Configuration
