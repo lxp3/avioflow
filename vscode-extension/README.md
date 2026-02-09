@@ -1,54 +1,43 @@
 # Avioflow Audio Previewer for VS Code
 
+<img src="./resources/preview.gif">
+
 High-performance audio previewer for VS Code using the `avioflow` native engine. This extension provides a custom editor for various audio formats, allowing users to visualize waveforms and inspect metadata directly within VS Code.
+
+## UI & Controls
+
+- **Waveform View**: Visualizes multiple audio channels (CH 0, CH 1, etc.).
+- **Metadata Panel**: Displays File Name, Size, Format, Codec, Duration, Sample Rate, and Bitrate.
+- **Decoding Info**: Shows total load time and actual decoding time.
+
+### Shortcuts
+- **Space**: Play / Pause audio.
+- **Mouse Wheel / Trackpad Scroll**: Zoom in/out of the waveform.
+- **Click & Drag**: Navigate through the zoomed waveform.
+- **Reset Button**: Restore original zoom level.
 
 ## Architecture
 
-To ensure stability and performance, this extension uses a decoupled architecture where the heavy audio decoding is offloaded to a persistent external Node.js process. This bypasses Electron ABI compatibility issues and prevents the extension host from crashing.
+This extension uses a high-performance **WebAssembly (WASM)** core built from C++ and FFmpeg. This ensures fast decoding while maintaining cross-platform compatibility without native Node.js binary headaches.
 
-code --install-extension avioflow-0.1.0.vsix
-
-```mermaid
-avioflow-0.1.0.vsix
-├─ [Content_Types].xml
-├─ extension.vsixmanifest
-└─ extension/
-   ├─ LICENSE.txt [0.01 KB]
-   ├─ package.json [2.07 KB]
-   ├─ readme.md [2.17 KB]
-   └─ out/
-      ├─ node_modules/
-      │  └─ avioflow/
-      │     ├─ README.md [9.29 KB]
-      │     ├─ package.json [1.37 KB]
-      │     ├─ avioflow/ (2 files) [8.5 KB]
-      │     ├─ node_modules/ (9 files) [11.61 KB]
-      │     └─ prebuilds/ (2 files) [23.95 MB]
-      ├─ src/
-      │  ├─ AudioPreviewProvider.js [4.42 KB]
-      │  ├─ AudioPreviewProvider.js.map [2.36 KB]
-      │  ├─ AvioflowWorkerService.js [6.01 KB]
-      │  ├─ AvioflowWorkerService.js.map [4.02 KB]
-      │  ├─ HomeViewProvider.js [4.3 KB]
-      │  ├─ HomeViewProvider.js.map [1.04 KB]
-      │  ├─ avioflowWorker.js [1.83 KB]
-      │  ├─ avioflowWorker.js.map [1.28 KB]
-      │  ├─ extension.js [2.55 KB]
-      │  └─ extension.js.map [0.99 KB]
-      └─ webview/
-         ├─ main.js [16.13 KB]
-         ├─ style.css [5.06 KB]
-         ├─ vite.config.mjs [1.02 KB]
-         ├─ vite.config.mjs.map [0.89 KB]
-         └─ src/
-            ├─ main.js [0.39 KB]
-            └─ main.js.map [0.23 KB]
+### VSIX Structure
+```text
+avioflow-0.2.1.vsix
+├─ extension/
+│  ├─ package.json
+│  ├─ README.md
+│  └─ out/
+│     ├─ src/ (Extension logic)
+│     ├─ webview/ (Svelte UI)
+│     └─ wasm/
+│        ├─ avioflow.js
+│        └─ avioflow.wasm
 ```
 
-### Key Components
-- **`AvioflowWorkerService`**: A singleton in the main extension process that manages the lifecycle of the persistent background worker.
-- **`avioflowWorker`**: A standalone Node.js process that performs native audio decoding using the `avioflow` library.
-- **`AudioPreviewProvider`**: Implements the `CustomReadonlyEditorProvider` to bridge between VS Code and the background worker.
+## Installation
+```bash
+code --install-extension avioflow-0.2.1.vsix
+```
 
 ## Getting Started
 
@@ -72,6 +61,5 @@ pnpm compile
 
 ## Features
 - **High Performance**: Leverages native C++ and FFmpeg for fast decoding.
-- **Isolated Process**: Decoding runs in a separate process, keeping VS Code responsive.
-- **Persistent Worker**: Minimal overhead for opening subsequent files.
+- **WASM Core**: Runs at near-native speed with zero installation overhead.
 - **Modern UI**: Clean waveform visualization built with Svelte.

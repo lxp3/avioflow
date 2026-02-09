@@ -27,6 +27,7 @@ jobs:
       build-cpp: ${{ steps.check.outputs.build-cpp }}
       build-python: ${{ steps.check.outputs.build-python }}
       build-npm: ${{ steps.check.outputs.build-npm }}
+      build-wasm: ${{ steps.check.outputs.build-vsix }} # WASM is needed for VSIX
       build-vsix: ${{ steps.check.outputs.build-vsix }}
       tag-name: ${{ steps.check.outputs.tag-name }}
     steps:
@@ -84,7 +85,7 @@ jobs:
     needs: check-tag
     if: needs.check-tag.outputs.build-cpp == 'true' || needs.check-tag.outputs.build-npm == 'true'
     runs-on: ubuntu-latest
-    container: quay.io/pypa/manylinux_2_28_x86_64
+    container: quay.io/pypa/manylinux2014_x86_64
     steps:
       - uses: actions/checkout@v4
 
@@ -105,6 +106,7 @@ jobs:
         run: |
           curl -fsSL https://rpm.nodesource.com/setup_20.x | bash -
           yum install -y nodejs
+          npm install -g pnpm
 
       # --- Build C++ Shared Binaries (Only if build-cpp is true) ---
       - name: Build C++ Shared Binaries
@@ -130,21 +132,10 @@ jobs:
       - name: Build Node.js Addon (Node-API 8)
         if: needs.check-tag.outputs.build-npm == 'true'
         run: |
-          # Install dependencies in nodejs directory
-          cd nodejs && npm install && cd ..
-
-          # Prepare root for cmake-js (needs package.json)
-          ln -s nodejs/package.json .
-
-          # Build with cmake-js from Root
-          echo "Building Node-API 8 addon for Node.js..."
-          ./nodejs/node_modules/.bin/cmake-js compile --CDCMAKE_BUILD_TYPE=Release --CDNAPI_VERSION=8 --out build-nodejs
-
-          # Cleanup
-          rm package.json
+          # Use the specialized build script
+          bash build-nodejs.sh
 
           # Copy to platform-specific package directory
-          # Note: Output path on Linux is typically bin/avioflow.node based on CMakeLists.txt
           cp build-nodejs/bin/avioflow.node nodejs/npm-packages/@lxp3/linux-x64/avioflow.node
 
           echo "=== Platform Package Info ==="
@@ -204,7 +195,7 @@ jobs:
           CIBW_ARCHS_LINUX: x86_64
           CIBW_BUILD: "cp38-* cp39-* cp310-* cp311-* cp312-* cp313-* cp314-*"
           CIBW_SKIP: "pp* *-musllinux*"
-          CIBW_MANYLINUX_X86_64_IMAGE: manylinux_2_28
+          CIBW_MANYLINUX_X86_64_IMAGE: manylinux2014
           CIBW_BEFORE_BUILD_LINUX: >
             yum install -y epel-release &&
             yum install -y alsa-lib-devel libX11-devel zlib-devel bzip2-devel xz-devel libva-devel libdrm-devel
@@ -244,6 +235,11 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
       # --- Build C++ Shared Binaries (Only if build-cpp is true) ---
       - name: Build C++ Shared Binaries
         if: needs.check-tag.outputs.build-cpp == 'true'
@@ -271,32 +267,13 @@ jobs:
         if: needs.check-tag.outputs.build-npm == 'true'
         shell: pwsh
         run: |
-          # Install dependencies
-          Push-Location nodejs
-          npm install
-          Pop-Location
-
-          # Prepare root (cmake-js needs package.json)
-          Copy-Item nodejs/package.json .
-
-          # Build with cmake-js from Root
-          Write-Host "Building Node-API 8 addon for Node.js..."
-          ./nodejs/node_modules/.bin/cmake-js compile --CDCMAKE_BUILD_TYPE=Release --CDNAPI_VERSION=8 --out build-nodejs
-
-          # Clean up
-          Remove-Item package.json
+          # Use the specialized build script
+          ./build-nodejs.ps1
 
           # Copy to platform-specific package directory
-          # On Windows, cmake-js/cmake often puts output in build-nodejs/bin/Release/avioflow.node
-          if (Test-Path "build-nodejs/bin/Release/avioflow.node") {
-            Copy-Item "build-nodejs/bin/Release/avioflow.node" "nodejs/npm-packages/@lxp3/win32-x64/avioflow.node"
-          } elseif (Test-Path "build-nodejs/bin/avioflow.node") {
-            Copy-Item "build-nodejs/bin/avioflow.node" "nodejs/npm-packages/@lxp3/win32-x64/avioflow.node"
-          } else {
-            Write-Error "Could not find avioflow.node build artifact"
-            Get-ChildItem -Recurse build-nodejs
-            exit 1
-          }
+          $outputFile = "build-nodejs/bin/avioflow.node"
+          if (-not (Test-Path $outputFile)) { $outputFile = "build-nodejs/bin/Release/avioflow.node" }
+          Copy-Item $outputFile "nodejs/npm-packages/@lxp3/win32-x64/avioflow.node"
 
           Write-Host "=== Platform Package Info ==="
           Write-Host "Package: @lxp3/win32-x64"
@@ -368,86 +345,75 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # ============================================================
-  # Build VS Code Extension (.vsix) - Platform Specific
+  # Build WASM Engine (Platform Independent)
   # ============================================================
-  build-vsix:
+  build-wasm:
     needs: check-tag
-    if: needs.check-tag.outputs.build-vsix == 'true'
-    strategy:
-      matrix:
-        include:
-          - os: windows-latest
-            target: win32-x64
-          - os: ubuntu-latest
-            target: linux-x64
-    runs-on: ${{ matrix.os }}
+    if: needs.check-tag.outputs.build-wasm == 'true'
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: Build WASM
+        shell: pwsh
+        run: ./build-wasm.ps1
+
+      - name: Prepare WASM Artifact
+        shell: pwsh
+        run: |
+          $TAG = "${{ needs.check-tag.outputs.tag-name }}"
+          $VERSION = $TAG.TrimStart('v').Replace('-vsix', '')
+          Copy-Item "wasm/dist/avioflow.wasm" "avioflow-$VERSION.wasm"
+          Copy-Item "wasm/dist/avioflow.js" "avioflow-$VERSION.js"
+
+      - name: Upload WASM Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: wasm-engine
+          path: |
+            avioflow-*.wasm
+            avioflow-*.js
+            wasm/dist/
+
+  # ============================================================
+  # Build VS Code Extension (.vsix)
+  # ============================================================
+  build-vsix:
+    needs: [check-tag, build-wasm]
+    if: needs.check-tag.outputs.build-vsix == 'true'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download WASM Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: wasm-engine
+          path: .
+
+      - name: Setup Node.js & pnpm
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v4
         with:
           version: 9
 
-      - name: Install dependencies
-        working-directory: vscode-extension
-        run: pnpm install
+      - name: Build and Package Extension
+        shell: pwsh
+        run: ./build-vsix.ps1
 
-      - name: Compile extension
-        working-directory: vscode-extension
-        run: pnpm run compile
-
-      - name: Copy native modules
-        shell: bash
-        working-directory: vscode-extension
-        run: |
-          mkdir -p out/node_modules
-          cp -r node_modules/avioflow out/node_modules/
-
-      - name: Disable vscode:prepublish
-        working-directory: vscode-extension
-        run: |
-          node -e "const fs = require('fs'); const pkg = require('./package.json'); delete pkg.scripts['vscode:prepublish']; fs.writeFileSync('./package.json', JSON.stringify(pkg, null, 4));"
-
-      - name: Package platform-specific .vsix
-        shell: bash
-        working-directory: vscode-extension
-        run: |
-          # Extract version from tag
-          TAG="${{ needs.check-tag.outputs.tag-name }}"
-          VERSION=$(echo "$TAG" | sed 's/^v//' | sed 's/-vsix$//')
-          echo "Building version: $VERSION for target: ${{ matrix.target }}"
-          
-          # Package with platform target
-          # --skip-vscode-prepublish: We already ran compile manually
-          npx -y @vscode/vsce package --no-dependencies --allow-missing-repository --target ${{ matrix.target }} -o "avioflow-$VERSION-${{ matrix.target }}.vsix"
-          
-          echo "Build complete!"
-          ls -la *.vsix
-
-
-      - uses: actions/upload-artifact@v4
+      - name: Upload VSIX Artifact
+        uses: actions/upload-artifact@v4
         with:
-          name: vsix-${{ matrix.target }}
+          name: vscode-extension
           path: vscode-extension/*.vsix
-
-      - name: Cancel workflow on failure
-        if: failure()
-        run: gh run cancel ${{ github.run_id }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
 
   # ============================================================
   # Publish to GitHub, PyPI, NPM, and VS Code Marketplace
   # ============================================================
   publish:
-    needs: [check-tag, build-linux, build-python-linux, build-windows, build-python-windows, build-vsix]
+    needs: [check-tag, build-linux, build-python-linux, build-windows, build-python-windows, build-wasm, build-vsix]
     runs-on: ubuntu-latest
     if: |
       always() &&
@@ -457,6 +423,7 @@ jobs:
       (needs.build-windows.result == 'success' || needs.build-windows.result == 'skipped') &&
       (needs.build-python-linux.result == 'success' || needs.build-python-linux.result == 'skipped') &&
       (needs.build-python-windows.result == 'success' || needs.build-python-windows.result == 'skipped') &&
+      (needs.build-wasm.result == 'success' || needs.build-wasm.result == 'skipped') &&
       (needs.build-vsix.result == 'success' || needs.build-vsix.result == 'skipped')
     steps:
       - uses: actions/checkout@v4
@@ -470,7 +437,7 @@ jobs:
 
       # Download all artifacts
       - uses: actions/download-artifact@v4
-        continue-on-error: true # Not all tags produce all artifacts
+        continue-on-error: true
         with:
           path: artifacts
 
@@ -478,48 +445,32 @@ jobs:
       - name: Prepare release files
         run: |
           mkdir -p dist pypi_dist vsix_dist
-          
-          # C++ binaries (GitHub Release only)
+
+          # C++ binaries
           if [ "${{ needs.check-tag.outputs.build-cpp }}" == "true" ]; then
-            echo "Preparing C++ binaries..."
             cp artifacts/linux-cpp-binaries/* dist/ || true
             cp artifacts/windows-cpp-binaries/* dist/ || true
           fi
-          
-          # Python wheels (GitHub Release & PyPI)
+
+          # Python wheels
           if [ "${{ needs.check-tag.outputs.build-python }}" == "true" ]; then
-            echo "Preparing Python wheels..."
             cp artifacts/linux-python-wheels/*.whl dist/ || true
             cp artifacts/windows-python-wheels/*.whl dist/ || true
             cp artifacts/linux-python-wheels/*.whl pypi_dist/ || true
             cp artifacts/windows-python-wheels/*.whl pypi_dist/ || true
           fi
-          
-          # Node.js platform packages (copy native modules to package directories)
-          if [ "${{ needs.check-tag.outputs.build-npm }}" == "true" ]; then
-            echo "Preparing npm platform packages..."
-            # Copy the built .node files to the package directories
-            cp artifacts/npm-linux-x64/avioflow.node nodejs/npm-packages/@lxp3/linux-x64/ || true
-            cp artifacts/npm-win32-x64/avioflow.node nodejs/npm-packages/@lxp3/win32-x64/ || true
 
-            echo "Platform packages prepared:"
-            ls -la nodejs/npm-packages/@lxp3/linux-x64/ || true
-            ls -la nodejs/npm-packages/@lxp3/win32-x64/ || true
+          # WASM Engine
+          if [ "${{ needs.check-tag.outputs.build-wasm }}" == "true" ]; then
+             cp artifacts/wasm-engine/avioflow-*.wasm dist/ || true
+             cp artifacts/wasm-engine/avioflow-*.js dist/ || true
           fi
-          
-          # VS Code extension (multi-platform)
+
+          # VS Code extension
           if [ "${{ needs.check-tag.outputs.build-vsix }}" == "true" ]; then
-            echo "Preparing VS Code extensions..."
-            cp artifacts/vsix-win32-x64/*.vsix vsix_dist/ || true
-            cp artifacts/vsix-linux-x64/*.vsix vsix_dist/ || true
-            cp artifacts/vsix-win32-x64/*.vsix dist/ || true
-            cp artifacts/vsix-linux-x64/*.vsix dist/ || true
+            cp artifacts/vscode-extension/*.vsix vsix_dist/ || true
+            cp artifacts/vscode-extension/*.vsix dist/ || true
           fi
-          
-          echo "Release contents:"
-          ls -la dist/ || true
-          ls -la pypi_dist/ || true
-          ls -la vsix_dist/ || true
 
       # Upload to GitHub Release
       - name: Upload to GitHub Release
@@ -550,7 +501,7 @@ jobs:
           if npm view "$PACKAGE_NAME@$PACKAGE_VERSION" version > /dev/null 2>&1; then
             echo "Version $PACKAGE_VERSION of $PACKAGE_NAME already exists. Skipping."
           else
-            npm publish --access public
+            pnpm publish --no-git-checks --access public
           fi
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
@@ -564,7 +515,7 @@ jobs:
           if npm view "$PACKAGE_NAME@$PACKAGE_VERSION" version > /dev/null 2>&1; then
             echo "Version $PACKAGE_VERSION of $PACKAGE_NAME already exists. Skipping."
           else
-            npm publish --access public
+            pnpm publish --no-git-checks --access public
           fi
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
@@ -578,7 +529,7 @@ jobs:
           if npm view "$PACKAGE_NAME@$PACKAGE_VERSION" version > /dev/null 2>&1; then
             echo "Version $PACKAGE_VERSION of $PACKAGE_NAME already exists. Skipping."
           else
-            npm publish --access public --provenance
+            pnpm publish --no-git-checks --access public --provenance
           fi
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

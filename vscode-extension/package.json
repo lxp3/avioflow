@@ -2,7 +2,7 @@
     "name": "avioflow",
     "displayName": "Avioflow",
     "description": "High-performance audio engine and toolkit for VS Code",
-    "version": "0.2.0",
+    "version": "0.2.1",
     "publisher": "lxp3",
     "repository": {
         "type": "git",
@@ -53,7 +53,7 @@
     },
     "scripts": {
         "vscode:prepublish": "pnpm run compile",
-        "compile": "pnpm run build:webview && tsc -p ./ && node -e \"const fs=require('fs'); const dest='out/wasm'; if(!fs.existsSync(dest)) fs.mkdirSync(dest, {recursive:true}); fs.copyFileSync('../wasm/dist/avioflow.js', dest+'/avioflow.js'); fs.copyFileSync('../wasm/dist/avioflow.wasm', dest+'/avioflow.wasm');\"",
+        "compile": "pnpm run build:webview && tsc -p ./",
         "watch": "tsc -watch -p ./",
         "build:webview": "vite build webview"
     },
@@ -62,6 +62,7 @@
         "@tsconfig/svelte": "^5.0.0",
         "@types/node": "~20.19.30",
         "@types/vscode": "^1.75.0",
+        "@vscode/vsce": "^3.0.0",
         "@typescript-eslint/eslint-plugin": "^5.59.1",
         "@typescript-eslint/parser": "^5.59.1",
         "autoprefixer": "^10.4.24",

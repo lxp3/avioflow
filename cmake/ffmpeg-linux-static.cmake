@@ -1,5 +1,5 @@
-set(FFMPEG_URL "https://github.com/lxp3/ffmpeg-build/releases/download/v0.2.13/ffmpeg-7.1-static-x86_64-linux-gnu.tar.gz")
-set(FFMPEG_HASH "54ae269fa4a45f10ea2b5417fe8941bfacff1cd7e593821285148fa8cd7111f5")
+set(FFMPEG_URL "https://github.com/lxp3/ffmpeg-build/releases/download/v0.2.16/ffmpeg-7.1-static-x86_64-linux-gnu.tar.gz")
+set(FFMPEG_HASH "509a301aecd3c57a737d43b3b5685d686cf30c2e18ac43efe61b25015f6f182c")
 set(LIB_TYPE STATIC)
 
 # FFmpeg Linux Static System Libraries
