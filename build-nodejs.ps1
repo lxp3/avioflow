@@ -12,7 +12,7 @@ if (-not (Test-Path (Join-Path $NodejsDir "node_modules"))) {
     Push-Location $NodejsDir
     try {
         if (Get-Command pnpm -ErrorAction SilentlyContinue) {
-            pnpm install
+            pnpm install --no-frozen-lockfile
         } else {
             Write-Host "pnpm not found, falling back to npm..."
             npm install
