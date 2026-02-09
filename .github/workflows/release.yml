@@ -208,6 +208,7 @@ jobs:
         with:
           node-version: '20'
           cache: 'pnpm'
+          cache-dependency-path: nodejs/pnpm-lock.yaml
 
       # --- Build C++ Shared Binaries (Only if build-cpp is true) ---
       - name: Build C++ Shared Binaries
@@ -370,6 +371,7 @@ jobs:
         with:
           node-version: '22'
           cache: 'pnpm'
+          cache-dependency-path: vscode-extension/pnpm-lock.yaml
 
       - name: Build and Package Extension
         shell: pwsh
