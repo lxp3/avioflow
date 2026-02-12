@@ -118,7 +118,7 @@ class AudioDecoder:
     **File Mode** - Load complete audio files:
         >>> decoder = AudioDecoder(output_sample_rate=44100)
         >>> meta = decoder.load("audio.mp3")
-        >>> samples = decoder.get_all_samples()  # numpy array (channels, samples)
+        >>> samples = decoder.get_samples()  # numpy array (channels, samples)
 
     **Stream Mode** - Decode real-time byte streams:
         >>> decoder = AudioDecoder(input_format="s16le", input_sample_rate=48000, input_channels=2)

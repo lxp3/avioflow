@@ -1,17 +1,24 @@
 # AvioFlow
 
-High-performance audio decoding library powered by FFmpeg with C++, Python, and Node.js bindings.
+AvioFlow is a high-performance and easy-to-use streaming audio decoding library.
 
 ## Features
 
-- **Multi-format Support**: MP3, WAV, AAC, FLAC, Opus, and all FFmpeg-supported formats
+- **Audio format**: mp3, opus, flac, ogg, wav, m4a, acc. Anything.
 - **Flexible Input**: Files, URLs, memory buffers, and real-time streams
 - **Hardware Capture**: WASAPI loopback (system audio) and DirectShow (microphones)
-- **Resampling**: Built-in sample rate and channel conversion
-- **Zero-copy API**: Direct buffer access via `FrameData` for maximum performance
-- **Cross-platform**: Windows, Linux, macOS
+- **Cross-platform**: Windows, linux, macOS
 
----
+## Supported language
+
+| C++        |              |                      |     |     |
+| ---------- | ------------ | -------------------- | --- | --- |
+| python     | pybind11     | pip install avioflow |     |     |
+| JavaScript | node-add-api | npm install avioflow |     |     |
+|            | wasm         |                      |     |     |
+|            | vsix         |                      |     |     |
+
+
 
 ## Installation
 
@@ -54,14 +61,14 @@ AudioDecoder decoder(options);
 
 #### Methods
 
-| Method | Description |
-|--------|-------------|
-| `open(source)` | Open file path, URL, or device |
-| `push(data, size)` | Push raw bytes for streaming decode |
-| `read()` | Decode next frame, returns `FrameData`. (Formerly `decode_next`) |
-| `get_samples()` | Decode all currently available samples. (Formerly `get_all_samples`) |
-| `get_metadata()` | Get audio metadata |
-| `is_finished()` | Check if EOF reached |
+| Method             | Description                                                      |
+| ------------------ | ---------------------------------------------------------------- |
+| `open(source)`     | Open file path, URL, or device                                   |
+| `push(data, size)` | Push raw bytes for streaming decode                              |
+| `read()`           | Decode next frame, returns `FrameData`. (Formerly `decode_next`) |
+| `get_samples()`    | Decode all currently available samples. (Formerly `get_samples`) |
+| `get_metadata()`   | Get audio metadata                                               |
+| `is_finished()`    | Check if EOF reached                                             |
 
 #### `FrameData`
 
@@ -142,13 +149,13 @@ decoder = avioflow.AudioDecoder(
 
 #### Methods
 
-| Method | Returns | Description |
-|--------|---------|-------------|
-| `load(source)` | `Metadata` | Load file, URL, or `pathlib.Path` |
-| `decoder(bytes)` | `ndarray` | Push bytes and decode (streaming) |
-| `read()` | `ndarray` | Decode next frame |
-| `get_samples()` | `ndarray` | Decode all available samples |
-| `is_finished()` | `bool` | Check if EOF |
+| Method           | Returns    | Description                       |
+| ---------------- | ---------- | --------------------------------- |
+| `load(source)`   | `Metadata` | Load file, URL, or `pathlib.Path` |
+| `decoder(bytes)` | `ndarray`  | Push bytes and decode (streaming) |
+| `read()`         | `ndarray`  | Decode next frame                 |
+| `get_samples()`  | `ndarray`  | Decode all available samples      |
+| `is_finished()`  | `bool`     | Check if EOF                      |
 
 #### `Metadata`
 
@@ -203,11 +210,11 @@ avioflow.set_log_level("debug")  # quiet, error, warning, info, debug, trace
 
 ### Compatibility
 
-| Runtime | Version | Support |
-|---------|---------|---------|
-| **Node.js** | 16, 18, 20, 22+ | ✅ Native (N-API) |
-| **Electron** | All versions | ✅ Supported (requires rebuild) |
-| **Architectures** | x64 | ✅ Linux, Windows |
+| Runtime           | Version         | Support                        |
+| ----------------- | --------------- | ------------------------------ |
+| **Node.js**       | 16, 18, 20, 22+ | ✅ Native (N-API)               |
+| **Electron**      | All versions    | ✅ Supported (requires rebuild) |
+| **Architectures** | x64             | ✅ Linux, Windows               |
 
 ### Installation
 
@@ -222,11 +229,11 @@ import avioflow from 'avioflow';
 
 ### Module-level Functions
 
-| Function | Returns | Description |
-|----------|---------|-------------|
+| Function               | Returns               | Description                                                                |
+| ---------------------- | --------------------- | -------------------------------------------------------------------------- |
 | `load(path, options?)` | `{metadata, samples}` | **Convenience**: Opens, decodes all samples, and returns both in one call. |
-| `listAudioDevices()` | `DeviceInfo[]` | List available system audio devices. |
-| `setLogLevel(level)` | `void` | Set FFmpeg log level ("quiet", "info", "debug", etc.). |
+| `listAudioDevices()`   | `DeviceInfo[]`        | List available system audio devices.                                       |
+| `setLogLevel(level)`   | `void`                | Set FFmpeg log level ("quiet", "info", "debug", etc.).                     |
 
 ### `AudioDecoder`
 
@@ -243,13 +250,13 @@ const decoder = new avioflow.AudioDecoder({
 
 #### Methods
 
-| Method | Returns | Description |
-|--------|---------|-------------|
-| `load(source)` | `Metadata` | Load file, URL, or device name. Returns metadata. |
-| `push(buffer)` | `void` | Push raw encoded bytes for streaming. |
-| `read()` | `Float32Array[]` \| `null` | Decode next frame. Returns array of channel data. |
-| `getSamples()` | `Float32Array[]` | Decode all available samples at once. |
-| `isFinished()` | `boolean` | Check if end of stream reached. |
+| Method         | Returns                    | Description                                       |
+| -------------- | -------------------------- | ------------------------------------------------- |
+| `load(source)` | `Metadata`                 | Load file, URL, or device name. Returns metadata. |
+| `push(buffer)` | `void`                     | Push raw encoded bytes for streaming.             |
+| `read()`       | `Float32Array[]` \| `null` | Decode next frame. Returns array of channel data. |
+| `getSamples()` | `Float32Array[]`           | Decode all available samples at once.             |
+| `isFinished()` | `boolean`                  | Check if end of stream reached.                   |
 
 ### Examples
 

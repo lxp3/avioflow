@@ -31,7 +31,7 @@ PYBIND11_MODULE(_avioflow, m) {
             >>> import avioflow
             >>> decoder = avioflow.AudioDecoder(output_sample_rate=44100)
             >>> meta = decoder.load("audio.mp3")
-            >>> samples = decoder.get_all_samples()  # shape: (channels, samples)
+            >>> samples = decoder.get_samples()  # shape: (channels, samples)
     )pbdoc";
 
     // --- Module-level functions ---
@@ -212,7 +212,7 @@ PYBIND11_MODULE(_avioflow, m) {
         **File Mode** - Load complete audio files:
             >>> decoder = AudioDecoder(output_sample_rate=44100)
             >>> meta = decoder.load("audio.mp3")
-            >>> samples = decoder.get_all_samples()  # numpy array (channels, samples)
+            >>> samples = decoder.get_samples()  # numpy array (channels, samples)
         
         **Stream Mode** - Decode real-time byte streams:
             >>> decoder = AudioDecoder(input_format="s16le", input_sample_rate=48000, input_channels=2)
