@@ -172,23 +172,20 @@ namespace avioflow
   {
     int src_sample_rate = frame->sample_rate;
     AVSampleFormat src_sample_format = static_cast<AVSampleFormat>(frame->format);
-    int src_num_channels = frame->ch_layout.nb_channels;
-
-    int out_rate = options_.output_sample_rate.value_or(src_sample_rate);
-    int out_channels = options_.output_num_channels.value_or(src_num_channels);
+    int out_rate = src_sample_rate;
+    if (options_.output_sample_rate.has_value() &&
+        options_.output_sample_rate.value() >= 0) {
+      out_rate = options_.output_sample_rate.value();
+    }
 
     needs_resample_ = (src_sample_format != output_sample_format_) ||
-                      (src_sample_rate != out_rate) ||
-                      (src_num_channels != out_channels);
+                      (src_sample_rate != out_rate);
 
     if (needs_resample_)
     {
-      AVChannelLayout out_ch_layout;
-      av_channel_layout_default(&out_ch_layout, out_channels);
-
       SwrContext *swr = nullptr;
       check_av_error(
-          swr_alloc_set_opts2(&swr, &out_ch_layout, output_sample_format_,
+          swr_alloc_set_opts2(&swr, &frame->ch_layout, output_sample_format_,
                               out_rate, &frame->ch_layout,
                               src_sample_format, src_sample_rate, 0, nullptr),
           "Could not initialize resampler");
@@ -196,8 +193,6 @@ namespace avioflow
       swr_ctx_.reset(swr);
       check_av_error(swr_init(swr_ctx_.get()),
                      "Could not initialize resampler context");
-
-      av_channel_layout_uninit(&out_ch_layout);
     }
 
     resampler_initialized_ = true;
@@ -221,14 +216,18 @@ namespace avioflow
 
     if (needs_resample_)
     {
-      int out_rate = options_.output_sample_rate.value_or(frame_->sample_rate);
-      int out_channels = options_.output_num_channels.value_or(frame_->ch_layout.nb_channels);
+      int out_rate = frame_->sample_rate;
+      if (options_.output_sample_rate.has_value() &&
+          options_.output_sample_rate.value() >= 0) {
+        out_rate = options_.output_sample_rate.value();
+      }
       int out_samples = calculate_output_samples(frame_->nb_samples, frame_->sample_rate, out_rate);
 
       av_frame_unref(converted_frame_.get());
       converted_frame_->format = output_sample_format_;
       converted_frame_->sample_rate = out_rate;
-      av_channel_layout_default(&converted_frame_->ch_layout, out_channels);
+      check_av_error(av_channel_layout_copy(&converted_frame_->ch_layout, &frame_->ch_layout),
+                     "Could not copy channel layout");
       converted_frame_->nb_samples = out_samples;
 
       check_av_error(av_frame_get_buffer(converted_frame_.get(), 0),

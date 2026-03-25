@@ -169,11 +169,9 @@ PYBIND11_MODULE(_avioflow, m) {
 
     // Quick offline loading helper
     m.def("load", [](py::object source,
-                     std::optional<int> output_sample_rate,
-                     std::optional<int> output_num_channels) {
+                     std::optional<int> output_sample_rate) {
         AudioStreamOptions opts;
         opts.output_sample_rate = output_sample_rate;
-        opts.output_num_channels = output_num_channels;
         
         AudioDecoder decoder(opts);
         
@@ -204,7 +202,6 @@ PYBIND11_MODULE(_avioflow, m) {
     },
     py::arg("source"),
     py::arg("output_sample_rate") = py::none(),
-    py::arg("output_num_channels") = py::none(),
     R"pbdoc(
         Load an audio file and decode all samples in one call.
         
@@ -215,9 +212,7 @@ PYBIND11_MODULE(_avioflow, m) {
         Args:
             source (str or bytes): Path to audio file, URL, or audio file bytes.
             output_sample_rate (int, optional): Target sample rate in Hz.
-                If None, uses source sample rate.
-            output_num_channels (int, optional): Target number of channels.
-                If None, uses source channel count.
+                If None or negative, uses source sample rate.
         
         Returns:
             tuple[Metadata, numpy.ndarray]: A tuple containing:
@@ -229,8 +224,8 @@ PYBIND11_MODULE(_avioflow, m) {
             >>> meta, samples = avioflow.load("audio.mp3")
             >>> print(f"Duration: {meta.duration}s, Shape: {samples.shape}")
             
-            >>> # With resampling to 16kHz mono
-            >>> meta, samples = avioflow.load("speech.wav", output_sample_rate=16000, output_num_channels=1)
+            >>> # With resampling to 16kHz
+            >>> meta, samples = avioflow.load("speech.wav", output_sample_rate=16000)
     )pbdoc");
 
     // --- DeviceInfo ---
@@ -298,9 +293,7 @@ PYBIND11_MODULE(_avioflow, m) {
         
         Args:
             output_sample_rate (int, optional): Target output sample rate in Hz.
-                If not specified, uses source sample rate.
-            output_num_channels (int, optional): Target number of output channels.
-                If not specified, uses source channel count.
+                If not specified or negative, uses source sample rate.
             input_sample_rate (int, optional): Source sample rate for raw PCM streaming.
                 Required for stream mode with raw PCM formats.
             input_channels (int, optional): Source channel count for raw PCM streaming.
@@ -316,20 +309,17 @@ PYBIND11_MODULE(_avioflow, m) {
             All audio data is returned as float32 in range [-1.0, 1.0].
     )pbdoc")
         .def(py::init([](std::optional<int> output_sample_rate,
-                        std::optional<int> output_num_channels,
                         std::optional<int> input_sample_rate,
                         std::optional<int> input_channels,
                         std::optional<std::string> input_format) {
             AudioStreamOptions options;
             options.output_sample_rate = output_sample_rate;
-            options.output_num_channels = output_num_channels;
             options.input_sample_rate = input_sample_rate;
             options.input_channels = input_channels;
             options.input_format = input_format;
             return new AudioDecoder(options);
         }),
         py::arg("output_sample_rate") = py::none(),
-        py::arg("output_num_channels") = py::none(),
         py::arg("input_sample_rate") = py::none(),
         py::arg("input_channels") = py::none(),
         py::arg("input_format") = py::none())
