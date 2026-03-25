@@ -18,6 +18,101 @@
 namespace py = pybind11;
 using namespace avioflow;
 
+namespace {
+
+struct SourceInput {
+    enum class Kind {
+        Path,
+        Bytes
+    };
+
+    Kind kind;
+    std::string path;
+    py::object owner;
+    const uint8_t* data = nullptr;
+    size_t size = 0;
+};
+
+std::string source_type_error_message() {
+    return "source must be str, PathLike, bytes, bytearray, memoryview, or io.BytesIO";
+}
+
+std::string data_type_error_message() {
+    return "data must be bytes, bytearray, memoryview, or io.BytesIO";
+}
+
+SourceInput parse_source_input(const py::object& source) {
+    if (py::isinstance<py::str>(source)) {
+        return {
+            SourceInput::Kind::Path,
+            py::cast<std::string>(source),
+            py::none(),
+            nullptr,
+            0
+        };
+    }
+
+    if (py::hasattr(source, "__fspath__")) {
+        return {
+            SourceInput::Kind::Path,
+            py::cast<std::string>(source.attr("__fspath__")()),
+            py::none(),
+            nullptr,
+            0
+        };
+    }
+
+    py::object buffer_owner = source;
+    if (py::hasattr(source, "getbuffer")) {
+        buffer_owner = source.attr("getbuffer")();
+    }
+
+    if (PyObject_CheckBuffer(buffer_owner.ptr()) != 0) {
+        py::buffer_info info = py::buffer(buffer_owner).request();
+        if (info.ndim > 1) {
+            throw py::type_error("buffer input must be 1-dimensional and contiguous");
+        }
+        if (info.ndim == 1 && !info.strides.empty() && info.strides[0] != info.itemsize) {
+            throw py::type_error("buffer input must be contiguous");
+        }
+        return {
+            SourceInput::Kind::Bytes,
+            "",
+            buffer_owner,
+            static_cast<const uint8_t*>(info.ptr),
+            static_cast<size_t>(info.size * info.itemsize)
+        };
+    }
+
+    throw py::type_error(source_type_error_message());
+}
+
+SourceInput parse_data_input(const py::object& data) {
+    SourceInput input = parse_source_input(data);
+    if (input.kind != SourceInput::Kind::Bytes) {
+        throw py::type_error(data_type_error_message());
+    }
+    return input;
+}
+
+void open_decoder_source(AudioDecoder& decoder, const py::object& source) {
+    SourceInput input = parse_source_input(source);
+    if (input.kind == SourceInput::Kind::Path) {
+        decoder.open(input.path);
+    } else {
+        decoder.open(input.data, input.size);
+    }
+}
+
+void push_decoder_data(AudioDecoder& decoder, const py::object& data) {
+    SourceInput input = parse_data_input(data);
+    if (input.size > 0) {
+        decoder.push(input.data, input.size);
+    }
+}
+
+}  // namespace
+
 PYBIND11_MODULE(_avioflow, m) {
     m.doc() = R"pbdoc(
         avioflow: High-performance audio decoding library powered by FFmpeg.
@@ -58,15 +153,7 @@ PYBIND11_MODULE(_avioflow, m) {
     m.def("info", [](py::object source) {
         AudioStreamOptions opts;
         AudioDecoder decoder(opts);
-
-        if (py::isinstance<py::str>(source)) {
-            decoder.open(py::cast<std::string>(source));
-        } else if (py::hasattr(source, "__fspath__")) {
-            decoder.open(py::cast<std::string>(source.attr("__fspath__")()));
-        } else {
-            throw py::type_error("source must be str or PathLike object");
-        }
-
+        open_decoder_source(decoder, source);
         return decoder.get_metadata();
     },
     py::arg("source"),
@@ -74,7 +161,7 @@ PYBIND11_MODULE(_avioflow, m) {
         Get audio metadata without decoding samples.
 
         Args:
-            source (str): Path to audio file or URL.
+            source (str, PathLike, bytes-like, or BytesIO): Path/URL or encoded audio bytes.
 
         Returns:
             Metadata: Audio stream metadata (duration, sample_rate, etc.)
@@ -91,16 +178,7 @@ PYBIND11_MODULE(_avioflow, m) {
         AudioDecoder decoder(opts);
         
         // Support both file paths and bytes
-        if (py::isinstance<py::str>(source)) {
-            decoder.open(py::cast<std::string>(source));
-        } else if (py::isinstance<py::bytes>(source)) {
-            py::buffer_info info = py::buffer(source).request();
-            decoder.open(static_cast<const uint8_t*>(info.ptr), static_cast<size_t>(info.size));
-        } else if (py::hasattr(source, "__fspath__")) {
-            decoder.open(py::cast<std::string>(source.attr("__fspath__")()));
-        } else {
-            throw py::type_error("source must be str, bytes, or PathLike object");
-        }
+        open_decoder_source(decoder, source);
         
         const auto& meta = decoder.get_metadata();
         auto samples = decoder.get_samples();
@@ -257,24 +335,20 @@ PYBIND11_MODULE(_avioflow, m) {
         py::arg("input_format") = py::none())
         
         .def("load", [](AudioDecoder& self, py::object source) -> const Metadata& {
-            if (py::isinstance<py::str>(source)) {
-                self.open(py::cast<std::string>(source));
-            } else if (py::hasattr(source, "__fspath__")) {
-                self.open(py::cast<std::string>(source.attr("__fspath__")()));
-            } else {
-                throw py::type_error("source must be str or PathLike object");
-            }
+            open_decoder_source(self, source);
             return self.get_metadata();
         }, 
         py::arg("source"), 
         py::return_value_policy::reference_internal,
         R"pbdoc(
-            Load audio from file path, URL, or device.
+            Load audio from file path, URL, bytes-like input, or device.
             
             Args:
                 source: Audio source, one of:
                     - str: File path or URL
                     - pathlib.Path: File path object
+                    - bytes/bytearray/memoryview: Full encoded audio bytes
+                    - io.BytesIO: In-memory encoded audio bytes
                     - "wasapi_loopback": Windows system audio capture
                     - "audio=DeviceName": Microphone/input device
             
@@ -292,17 +366,7 @@ PYBIND11_MODULE(_avioflow, m) {
         )pbdoc")
         
         .def("open", [](AudioDecoder& self, py::object source) {
-            if (py::isinstance<py::str>(source)) {
-                self.open(py::cast<std::string>(source));
-            } else if (py::isinstance<py::bytes>(source)) {
-                // Use buffer protocol to get raw bytes directly
-                py::buffer_info info = py::buffer(source).request();
-                self.open(static_cast<const uint8_t*>(info.ptr), static_cast<size_t>(info.size));
-            } else if (py::hasattr(source, "__fspath__")) {
-                self.open(py::cast<std::string>(source.attr("__fspath__")()));
-            } else {
-                throw py::type_error("source must be str, bytes, or PathLike object");
-            }
+            open_decoder_source(self, source);
         }, 
         py::arg("source"),
         R"pbdoc(
@@ -311,7 +375,8 @@ PYBIND11_MODULE(_avioflow, m) {
             Args:
                 source: Audio source, one of:
                     - str: File path or URL
-                    - bytes: Full audio file bytes in memory
+                    - bytes/bytearray/memoryview: Full audio file bytes in memory
+                    - io.BytesIO: In-memory encoded audio bytes
                     - pathlib.Path: File path object
             
             Raises:
@@ -319,11 +384,8 @@ PYBIND11_MODULE(_avioflow, m) {
                 TypeError: If source type is not supported.
         )pbdoc")
         
-        .def("__call__", [](AudioDecoder& self, py::bytes data) -> py::array_t<float> {
-            std::string s = data;
-            if (s.size() > 0) {
-                self.push(reinterpret_cast<const uint8_t*>(s.data()), s.size());
-            }
+        .def("__call__", [](AudioDecoder& self, py::object data) -> py::array_t<float> {
+            push_decoder_data(self, data);
 
             // Use new C++ get_samples() to get all currently available samples
             std::vector<std::vector<float>> total_samples = self.get_samples();
@@ -349,8 +411,9 @@ PYBIND11_MODULE(_avioflow, m) {
             and receive decoded audio samples.
 
             Args:
-                data (bytes): Raw encoded audio bytes. Format must match
-                    the input_format specified in constructor.
+                data (bytes/bytearray/memoryview or io.BytesIO): Raw encoded
+                    audio bytes. Format must match the input_format specified
+                    in constructor.
 
             Returns:
                 numpy.ndarray: Decoded audio samples with shape (channels, samples).
@@ -406,9 +469,8 @@ PYBIND11_MODULE(_avioflow, m) {
                 >>> samples = decoder.get_samples()
         )pbdoc")
 
-        .def("push", [](AudioDecoder& self, py::bytes data) {
-            std::string s = data;
-            self.push(reinterpret_cast<const uint8_t*>(s.data()), s.size());
+        .def("push", [](AudioDecoder& self, py::object data) {
+            push_decoder_data(self, data);
         },
         py::arg("data"),
         R"pbdoc(

@@ -1,6 +1,10 @@
 from typing import Optional, Union, Tuple, List, overload
 import numpy as np
 import os
+import io
+
+ReadableBuffer = Union[bytes, bytearray, memoryview, io.BytesIO]
+SourceInput = Union[str, os.PathLike, ReadableBuffer]
 
 def set_log_level(level: str = "info") -> None:
     """
@@ -18,7 +22,7 @@ def set_log_level(level: str = "info") -> None:
     """
     ...
 
-def info(source: Union[str, os.PathLike]) -> "Metadata":
+def info(source: SourceInput) -> "Metadata":
     """
     Get audio metadata without decoding samples.
 
@@ -27,7 +31,7 @@ def info(source: Union[str, os.PathLike]) -> "Metadata":
     inspecting file properties.
 
     Args:
-        source (str or PathLike): Path to audio file or URL.
+        source (str, PathLike, bytes-like, or BytesIO): Path/URL or encoded audio bytes.
 
     Returns:
         Metadata: Audio stream metadata (duration, sample_rate, channels, etc.)
@@ -39,7 +43,7 @@ def info(source: Union[str, os.PathLike]) -> "Metadata":
     ...
 
 def load(
-    source: Union[str, bytes, os.PathLike],
+    source: SourceInput,
     output_sample_rate: Optional[int] = None,
     output_num_channels: Optional[int] = None
 ) -> Tuple["Metadata", np.ndarray]:
@@ -51,7 +55,7 @@ def load(
     control, use AudioDecoder directly.
 
     Args:
-        source (str or bytes): Path to audio file, URL, or audio file bytes.
+        source (str, PathLike, bytes-like, or BytesIO): Path/URL or encoded audio bytes.
         output_sample_rate (int, optional): Target sample rate in Hz.
             If None, uses source sample rate.
         output_num_channels (int, optional): Target number of channels.
@@ -157,7 +161,7 @@ class AudioDecoder:
         """
         ...
 
-    def load(self, source: Union[str, os.PathLike]) -> Metadata:
+    def load(self, source: SourceInput) -> Metadata:
         """
         Load audio from file path, URL, or device.
 
@@ -165,6 +169,8 @@ class AudioDecoder:
             source: Audio source, one of:
                 - str: File path or URL
                 - pathlib.Path: File path object
+                - bytes/bytearray/memoryview: Full encoded audio bytes
+                - io.BytesIO: In-memory encoded audio bytes
                 - "wasapi_loopback": Windows system audio capture
                 - "audio=DeviceName": Microphone/input device
 
@@ -182,14 +188,15 @@ class AudioDecoder:
         """
         ...
 
-    def open(self, source: Union[str, bytes, os.PathLike]) -> None:
+    def open(self, source: SourceInput) -> None:
         """
         Open audio from file path, URL, bytes, or device.
 
         Args:
             source: Audio source, one of:
                 - str: File path or URL
-                - bytes: Full audio file bytes in memory
+                - bytes/bytearray/memoryview: Full audio file bytes in memory
+                - io.BytesIO: In-memory encoded audio bytes
                 - pathlib.Path: File path object
 
         Raises:
@@ -198,7 +205,7 @@ class AudioDecoder:
         """
         ...
 
-    def __call__(self, data: bytes) -> np.ndarray:
+    def __call__(self, data: ReadableBuffer) -> np.ndarray:
         """
         Push raw bytes and decode immediately (streaming mode).
 
@@ -206,8 +213,8 @@ class AudioDecoder:
         and receive decoded audio samples.
 
         Args:
-            data (bytes): Raw encoded audio bytes. Format must match
-                the input_format specified in constructor.
+            data (bytes-like or BytesIO): Raw encoded audio bytes. Format must match
+            the input_format specified in constructor.
 
         Returns:
             numpy.ndarray: Decoded audio samples with shape (channels, samples).
@@ -250,12 +257,12 @@ class AudioDecoder:
         """
         ...
 
-    def push(self, data: bytes) -> None:
+    def push(self, data: ReadableBuffer) -> None:
         """
         Push raw audio data bytes to the decoder (stream mode only).
 
         Args:
-            data (bytes): Raw audio data bytes
+            data (bytes-like or BytesIO): Raw audio data bytes
 
         Note:
             This method initializes the decoder on first call when enough data is buffered.
