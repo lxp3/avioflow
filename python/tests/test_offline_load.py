@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Test script for offline audio loading with avioflow."""
+import io
 import os
 import sys
 import time
@@ -16,6 +17,17 @@ def get_sample_count(samples):
     if samples is None or samples.size == 0:
         return 0
     return samples.shape[1] if len(samples.shape) > 1 else samples.shape[0]
+
+
+def get_test_buffers(file_path):
+    with open(file_path, "rb") as f:
+        raw = f.read()
+    return {
+        "bytes": raw,
+        "bytearray": bytearray(raw),
+        "memoryview": memoryview(raw),
+        "bytesio": io.BytesIO(raw),
+    }
 
 
 def test_offline_filepath():
@@ -104,6 +116,78 @@ def test_load_from_bytes():
     
     print(f"  ✓ Bytes and filepath produce identical results")
     print(f"  Time: {(time.time() - start) * 1000:.1f}ms")
+
+
+def test_info_with_buffer_inputs():
+    """Test: avioflow.info() accepts bytes-like inputs."""
+    print("\n=== Test: avioflow.info() with bytes-like inputs ===")
+
+    if not os.path.exists(MP3_PATH):
+        print(f"  Skip: File not found at {MP3_PATH}")
+        return
+
+    expected = avioflow.info(MP3_PATH)
+    test_buffers = get_test_buffers(MP3_PATH)
+
+    for name, source in test_buffers.items():
+        meta = avioflow.info(source)
+        print(f"  {name}: codec={meta.codec}, sample_rate={meta.sample_rate}, channels={meta.num_channels}")
+        assert meta.codec == expected.codec, f"{name}: codec mismatch"
+        assert meta.sample_rate == expected.sample_rate, f"{name}: sample rate mismatch"
+        assert meta.num_channels == expected.num_channels, f"{name}: channel count mismatch"
+        assert abs(meta.duration - expected.duration) < 1e-3, f"{name}: duration mismatch"
+
+
+def test_decoder_load_with_buffer_inputs():
+    """Test: AudioDecoder.load() accepts bytes-like inputs."""
+    print("\n=== Test: AudioDecoder.load() with bytes-like inputs ===")
+
+    if not os.path.exists(WAV_PATH):
+        print(f"  Skip: File not found at {WAV_PATH}")
+        return
+
+    expected_meta, expected_samples = avioflow.load(WAV_PATH)
+
+    for name, source in get_test_buffers(WAV_PATH).items():
+        decoder = avioflow.AudioDecoder()
+        meta = decoder.load(source)
+        samples = decoder.get_samples()
+        print(f"  {name}: shape={samples.shape}, codec={meta.codec}")
+        assert samples.shape == expected_samples.shape, f"{name}: sample shape mismatch"
+        assert np.allclose(samples, expected_samples), f"{name}: sample content mismatch"
+        assert meta.sample_rate == expected_meta.sample_rate, f"{name}: sample rate mismatch"
+
+
+def test_load_with_buffer_inputs():
+    """Test: avioflow.load() accepts bytes-like inputs."""
+    print("\n=== Test: avioflow.load() with bytes-like inputs ===")
+
+    if not os.path.exists(WAV_PATH):
+        print(f"  Skip: File not found at {WAV_PATH}")
+        return
+
+    expected_meta, expected_samples = avioflow.load(WAV_PATH)
+
+    for name, source in get_test_buffers(WAV_PATH).items():
+        meta, samples = avioflow.load(source)
+        print(f"  {name}: shape={samples.shape}, codec={meta.codec}")
+        assert samples.shape == expected_samples.shape, f"{name}: sample shape mismatch"
+        assert np.allclose(samples, expected_samples), f"{name}: sample content mismatch"
+        assert meta.sample_rate == expected_meta.sample_rate, f"{name}: sample rate mismatch"
+
+
+def test_invalid_info_input_type():
+    """Test: avioflow.info() rejects unsupported input types."""
+    print("\n=== Test: avioflow.info() invalid input type ===")
+
+    try:
+        avioflow.info(io.StringIO("not audio bytes"))
+    except TypeError as exc:
+        message = str(exc)
+        print(f"  Error: {message}")
+        assert "bytes" in message and "BytesIO" in message, "TypeError should list supported byte inputs"
+    else:
+        raise AssertionError("Expected TypeError for io.StringIO input")
 
 
 def test_load_with_resampling():
@@ -232,8 +316,12 @@ def main():
         test_offline_filepath()
         test_offline_memory()
         test_load_from_bytes()
+        test_info_with_buffer_inputs()
+        test_decoder_load_with_buffer_inputs()
+        test_load_with_buffer_inputs()
         test_load_with_resampling()
         test_offline_url()
+        test_invalid_info_input_type()
 
         # New tests
         test_info_metadata()

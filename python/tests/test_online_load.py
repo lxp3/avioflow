@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Test script for online (streaming) audio decoding with avioflow."""
+import io
 import os
 import sys
 import time
@@ -15,6 +16,16 @@ def get_sample_count(samples):
     if samples is None or samples.size == 0:
         return 0
     return samples.shape[1] if len(samples.shape) > 1 else samples.shape[0]
+
+
+def decode_available_samples(decoder):
+    total_decoded = 0
+    while True:
+        frame = decoder.read()
+        if frame is None:
+            break
+        total_decoded += get_sample_count(frame)
+    return total_decoded
 
 
 def simulate_streaming(test_name: str, file_path: str, format: str, 
@@ -68,18 +79,14 @@ def simulate_streaming(test_name: str, file_path: str, format: str,
         push_count += 1
         
         # Try to decode available frames
-        while True:
-            frame = decoder.decode_next()
-            if frame is None:
-                break
-            total_decoded += get_sample_count(frame)
+        total_decoded += decode_available_samples(decoder)
     
     # Continue decoding until finished
     while not decoder.is_finished():
-        frame = decoder.decode_next()
-        if frame is None:
+        decoded = decode_available_samples(decoder)
+        if decoded == 0:
             break
-        total_decoded += get_sample_count(frame)
+        total_decoded += decoded
     
     elapsed = (time.time() - start_time) * 1000
     print(f"  Push count: {push_count}, Total samples: {total_decoded}")
@@ -137,17 +144,42 @@ def test_online_pcm_fallback():
         decoder.push(buffer[offset:offset + to_push])
         offset += to_push
         
-        while True:
-            frame = decoder.decode_next()
-            if frame is None:
-                break
-            total_decoded += get_sample_count(frame)
+        total_decoded += decode_available_samples(decoder)
     
     elapsed = (time.time() - start_time) * 1000
     print(f"  Total samples: {total_decoded}")
     print(f"  Time: {elapsed:.1f}ms")
     
     assert total_decoded > 0, "PCM fallback test failed: No samples decoded"
+
+
+def test_push_with_buffer_inputs():
+    """Test: push/__call__ accept bytes-like inputs."""
+    print("\n=== Running Streaming Buffer Input Test ===")
+
+    if not os.path.exists(MP3_PATH):
+        print(f"  Skip: File not found at {MP3_PATH}")
+        return
+
+    with open(MP3_PATH, "rb") as f:
+        raw = f.read()
+
+    chunks = [
+        ("bytearray", bytearray(raw[:12288])),
+        ("memoryview", memoryview(raw[12288:24576])),
+        ("bytesio", io.BytesIO(raw[24576:36864])),
+    ]
+
+    decoder = avioflow.AudioDecoder(input_format="mp3", input_sample_rate=44100, input_channels=2)
+
+    for name, chunk in chunks:
+        decoder.push(chunk)
+        print(f"  pushed {name}: {len(bytes(chunk.getbuffer())) if hasattr(chunk, 'getbuffer') else len(chunk)} bytes")
+
+    samples = decoder(raw[36864:40960])
+    total_decoded = get_sample_count(samples) + decode_available_samples(decoder)
+    print(f"  Total decoded samples after mixed inputs: {total_decoded}")
+    assert total_decoded > 0, "Mixed buffer inputs produced no decoded samples"
 
 
 def main():
@@ -158,6 +190,7 @@ def main():
         test_online_mp3()
         test_online_wav()
         test_online_pcm_fallback()
+        test_push_with_buffer_inputs()
         print("\nAll online tests passed!")
     except AssertionError as e:
         print(f"\nTest failed: {e}")

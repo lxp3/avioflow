@@ -51,7 +51,6 @@ using namespace avioflow;
 // Constructor options
 AudioStreamOptions options;
 options.output_sample_rate = 16000;    // Target sample rate
-options.output_num_channels = 1;       // Target channels
 options.input_format = "s16le";        // For streaming: source format
 options.input_sample_rate = 48000;     // For streaming: source rate
 options.input_channels = 2;            // For streaming: source channels
@@ -140,7 +139,6 @@ import avioflow
 # Constructor with keyword arguments
 decoder = avioflow.AudioDecoder(
     output_sample_rate=16000,    # Optional: target sample rate
-    output_num_channels=1,       # Optional: target channels
     input_format="s16le",        # For streaming: source format
     input_sample_rate=48000,     # For streaming: source rate
     input_channels=2             # For streaming: source channels
@@ -149,13 +147,13 @@ decoder = avioflow.AudioDecoder(
 
 #### Methods
 
-| Method           | Returns    | Description                       |
-| ---------------- | ---------- | --------------------------------- |
-| `load(source)`   | `Metadata` | Load file, URL, or `pathlib.Path` |
-| `decoder(bytes)` | `ndarray`  | Push bytes and decode (streaming) |
-| `read()`         | `ndarray`  | Decode next frame                 |
-| `get_samples()`  | `ndarray`  | Decode all available samples      |
-| `is_finished()`  | `bool`     | Check if EOF                      |
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `load(source)` | `Metadata` | Load file, URL, `pathlib.Path`, or bytes-like input |
+| `decoder(data)` | `ndarray` | Push bytes-like data and decode (streaming) |
+| `read()` | `ndarray` | Decode next frame |
+| `get_samples()` | `ndarray` | Decode all available samples |
+| `is_finished()` | `bool` | Check if EOF |
 
 #### `Metadata`
 
@@ -165,6 +163,10 @@ meta = avioflow.info("audio.mp3")
 print(f"Duration: {meta.duration}s")
 print(f"Sample Rate: {meta.sample_rate}Hz")
 print(f"Codec: {meta.codec}")
+
+# Encoded audio bytes also work
+with open("audio.mp3", "rb") as f:
+    meta = avioflow.info(f.read())
 ```
 
 ### Examples
