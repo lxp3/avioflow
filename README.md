@@ -7,7 +7,9 @@ AvioFlow is a high-performance and easy-to-use streaming audio decoding library.
 - **Audio format**: mp3, opus, flac, ogg, wav, m4a, acc. Anything.
 - **Flexible Input**: Files, URLs, memory buffers, and real-time streams
 - **Hardware Capture**: WASAPI loopback (system audio) and DirectShow (microphones)
-- **Cross-platform**: Windows, linux, macOS
+- **Resampling**: Built-in sample rate conversion
+- **Zero-copy API**: Direct buffer access via `FrameData` for maximum performance
+- **Cross-platform**: Windows, Linux, macOS
 
 ## Supported language
 
@@ -17,7 +19,6 @@ AvioFlow is a high-performance and easy-to-use streaming audio decoding library.
 | JavaScript | node-add-api | npm install avioflow |     |     |
 |            | wasm         |                      |     |     |
 |            | vsix         |                      |     |     |
-
 
 
 ## Installation

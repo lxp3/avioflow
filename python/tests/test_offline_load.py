@@ -204,15 +204,15 @@ def test_load_with_resampling():
     with open(WAV_PATH, 'rb') as f:
         audio_bytes = f.read()
     
-    # Load with resampling to 16kHz mono
-    meta, samples = avioflow.load(audio_bytes, output_sample_rate=16000, output_num_channels=1)
+    # Load with resampling to 16kHz, preserving all source channels
+    meta, samples = avioflow.load(audio_bytes, output_sample_rate=16000)
     
     print(f"  Codec: {meta.codec}, Original SR: {meta.sample_rate}Hz")
     print(f"  Resampled shape: {samples.shape}")
-    print(f"  Expected channels: 1, Actual: {samples.shape[0]}")
+    print(f"  Expected channels: {meta.num_channels}, Actual: {samples.shape[0]}")
     
     # Verify output format
-    assert samples.shape[0] == 1, f"Expected 1 channel, got {samples.shape[0]}"
+    assert samples.shape[0] == meta.num_channels, f"Expected {meta.num_channels} channels, got {samples.shape[0]}"
     assert samples.dtype == np.float32, f"Expected float32, got {samples.dtype}"
     
     # Calculate expected sample count based on duration and target sample rate
@@ -225,6 +225,28 @@ def test_load_with_resampling():
     
     print(f"  ✓ Resampling works correctly with bytes input")
     print(f"  Time: {(time.time() - start) * 1000:.1f}ms")
+
+
+def test_load_with_negative_output_sample_rate():
+    """Test: output_sample_rate=-1 disables sample-rate resampling."""
+    print("\n=== Test: avioflow.load() with output_sample_rate=-1 ===")
+
+    if not os.path.exists(WAV_PATH):
+        print(f"  Skip: File not found at {WAV_PATH}")
+        return
+
+    with open(WAV_PATH, "rb") as f:
+        audio_bytes = f.read()
+
+    meta_default, samples_default = avioflow.load(audio_bytes)
+    meta_passthrough, samples_passthrough = avioflow.load(audio_bytes, output_sample_rate=-1)
+
+    print(f"  Default shape: {samples_default.shape}")
+    print(f"  Passthrough shape: {samples_passthrough.shape}")
+
+    assert meta_passthrough.sample_rate == meta_default.sample_rate, "Metadata sample rate should remain source sample rate"
+    assert samples_passthrough.shape == samples_default.shape, "Negative sample rate should preserve output shape"
+    assert np.allclose(samples_passthrough, samples_default), "Negative sample rate should match default decoding"
 
 
 def test_offline_url():
@@ -320,6 +342,7 @@ def main():
         test_decoder_load_with_buffer_inputs()
         test_load_with_buffer_inputs()
         test_load_with_resampling()
+        test_load_with_negative_output_sample_rate()
         test_offline_url()
         test_invalid_info_input_type()
 

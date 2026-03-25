@@ -11,7 +11,6 @@ namespace avioflow {
 
 struct AudioStreamOptions {
   std::optional<int> output_sample_rate;
-  std::optional<int> output_num_channels;
   std::optional<int> input_sample_rate;
   std::optional<int> input_channels;
   std::optional<std::string> input_format;

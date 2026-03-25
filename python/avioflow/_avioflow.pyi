@@ -44,8 +44,7 @@ def info(source: SourceInput) -> "Metadata":
 
 def load(
     source: SourceInput,
-    output_sample_rate: Optional[int] = None,
-    output_num_channels: Optional[int] = None
+    output_sample_rate: Optional[int] = None
 ) -> Tuple["Metadata", np.ndarray]:
     """
     Load an audio file and decode all samples in one call.
@@ -57,9 +56,7 @@ def load(
     Args:
         source (str, PathLike, bytes-like, or BytesIO): Path/URL or encoded audio bytes.
         output_sample_rate (int, optional): Target sample rate in Hz.
-            If None, uses source sample rate.
-        output_num_channels (int, optional): Target number of channels.
-            If None, uses source channel count.
+            If None or negative, uses source sample rate.
 
     Returns:
         tuple[Metadata, numpy.ndarray]: A tuple containing:
@@ -71,8 +68,8 @@ def load(
         >>> meta, samples = avioflow.load("audio.mp3")
         >>> print(f"Duration: {meta.duration}s, Shape: {samples.shape}")
 
-        >>> # With resampling to 16kHz mono
-        >>> meta, samples = avioflow.load("speech.wav", output_sample_rate=16000, output_num_channels=1)
+        >>> # With resampling to 16kHz
+        >>> meta, samples = avioflow.load("speech.wav", output_sample_rate=16000)
     """
     ...
 
@@ -135,7 +132,6 @@ class AudioDecoder:
     def __init__(
         self,
         output_sample_rate: Optional[int] = None,
-        output_num_channels: Optional[int] = None,
         input_sample_rate: Optional[int] = None,
         input_channels: Optional[int] = None,
         input_format: Optional[str] = None
@@ -145,9 +141,7 @@ class AudioDecoder:
 
         Args:
             output_sample_rate (int, optional): Target output sample rate in Hz.
-                If not specified, uses source sample rate.
-            output_num_channels (int, optional): Target number of output channels.
-                If not specified, uses source channel count.
+                If not specified or negative, uses source sample rate.
             input_sample_rate (int, optional): Source sample rate for raw PCM streaming.
                 Required for stream mode with raw PCM formats.
             input_channels (int, optional): Source channel count for raw PCM streaming.
