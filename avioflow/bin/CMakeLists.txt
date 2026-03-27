@@ -30,3 +30,6 @@ target_link_libraries(ffmpeg-device-list-test PRIVATE avioflow)
 
 add_executable(ffmpeg-info-test ffmpeg-info-test.cpp)
 target_link_libraries(ffmpeg-info-test PRIVATE avioflow)
+
+add_executable(ffmpeg-encoder-offline-save-test encoder-offline-save-test.cpp)
+target_link_libraries(ffmpeg-encoder-offline-save-test PRIVATE avioflow)

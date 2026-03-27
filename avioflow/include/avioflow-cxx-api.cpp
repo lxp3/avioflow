@@ -2,6 +2,7 @@
 #include "../core/ffmpeg/device-handler.h"
 #include "../core/ffmpeg/ffmpeg-common.h"
 #include "../core/ffmpeg/single-stream-decoder.h"
+#include "../core/ffmpeg/single-stream-encoder.h"
 
 namespace avioflow {
 
@@ -11,6 +12,13 @@ public:
   explicit Impl(const AudioStreamOptions &options) : decoder_(options) {}
 
   SingleStreamDecoder decoder_;
+};
+
+class AudioEncoder::Impl {
+public:
+  explicit Impl(const AudioWriteOptions &options) : encoder_(options) {}
+
+  SingleStreamEncoder encoder_;
 };
 
 // Constructor
@@ -84,6 +92,57 @@ std::vector<std::string> get_supported_encoders() {
 
 std::vector<std::string> get_supported_input_formats() {
   return internal_get_supported_input_formats();
+}
+
+std::vector<std::string> get_supported_output_formats() {
+  return internal_get_supported_output_formats();
+}
+
+AudioWriteOptions::AudioWriteOptions(const std::string &format,
+                                     std::optional<int> sample_rate_,
+                                     std::optional<int> num_channels_,
+                                     std::optional<int64_t> bit_rate_)
+    : sample_rate(sample_rate_), num_channels(num_channels_), bit_rate(bit_rate_) {
+  if (format == "wav") {
+    codec_name = "pcm_s16le";
+    container_format = "wav";
+  } else if (format == "flac") {
+    codec_name = "flac";
+    container_format = "flac";
+  } else if (format == "aac") {
+    codec_name = "aac";
+    container_format = "adts";
+    if (!bit_rate) bit_rate = 192000;
+  } else if (format == "mp3") {
+    codec_name = "libmp3lame";
+    container_format = "mp3";
+    if (!bit_rate) bit_rate = 192000;
+  } else if (format == "opus") {
+    codec_name = "libopus";
+    container_format = "opus";
+    if (!bit_rate) bit_rate = 128000;
+  }
+}
+
+AudioEncoder::AudioEncoder(const AudioWriteOptions &options)
+    : impl_(std::make_unique<Impl>(options)) {}
+
+AudioEncoder::~AudioEncoder() = default;
+
+AudioEncoder::AudioEncoder(AudioEncoder &&) noexcept = default;
+
+AudioEncoder &AudioEncoder::operator=(AudioEncoder &&) noexcept = default;
+
+void AudioEncoder::save(const std::string &path,
+                        const std::vector<std::vector<float>> &samples) {
+  impl_->encoder_.save(path, samples);
+}
+
+void save_audio(const std::string &path,
+                const std::vector<std::vector<float>> &samples,
+                const AudioWriteOptions &options) {
+  AudioEncoder encoder(options);
+  encoder.save(path, samples);
 }
 
 } // namespace avioflow

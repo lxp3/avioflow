@@ -28,6 +28,7 @@ void internal_set_log_level(const char *level);
 std::vector<std::string> internal_get_supported_decoders();
 std::vector<std::string> internal_get_supported_encoders();
 std::vector<std::string> internal_get_supported_input_formats();
+std::vector<std::string> internal_get_supported_output_formats();
 
 // Simple macro/function for FFmpeg error checking
 inline void check_av_error(int err, const std::string &msg) {

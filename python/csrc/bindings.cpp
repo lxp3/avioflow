@@ -10,6 +10,7 @@
 #include <pybind11/stl.h>
 #include <pybind11/functional.h>
 #include <pybind11/numpy.h>
+#include <algorithm>
 #include <sstream>
 #include <iomanip>
 #include "avioflow-cxx-api.h"
@@ -554,17 +555,104 @@ PYBIND11_MODULE(_avioflow, m) {
                 For stream mode, metadata is only available after first push().
         )pbdoc");
 
+    // --- AudioWriteOptions ---
+
+    py::class_<AudioWriteOptions>(m, "AudioWriteOptions",
+        "Options for audio encoding and writing.")
+        .def(py::init<>())
+        .def(py::init<const std::string&, std::optional<int>, std::optional<int>, std::optional<int64_t>>(),
+            py::arg("format"),
+            py::arg("sample_rate") = py::none(),
+            py::arg("num_channels") = py::none(),
+            py::arg("bit_rate") = py::none(),
+            R"pbdoc(
+                Create audio write options with format preset.
+
+                Args:
+                    format (str): Format preset - "wav", "flac", "aac", "mp3", "opus"
+                    sample_rate (int, optional): Sample rate in Hz
+                    num_channels (int, optional): Number of channels
+                    bit_rate (int, optional): Bit rate for lossy codecs
+
+                Example:
+                    >>> opts = avioflow.AudioWriteOptions("mp3", sample_rate=44100, bit_rate=192000)
+            )pbdoc")
+        .def_readwrite("codec_name", &AudioWriteOptions::codec_name)
+        .def_readwrite("container_format", &AudioWriteOptions::container_format)
+        .def_readwrite("sample_rate", &AudioWriteOptions::sample_rate)
+        .def_readwrite("num_channels", &AudioWriteOptions::num_channels)
+        .def_readwrite("bit_rate", &AudioWriteOptions::bit_rate)
+        .def_readwrite("sample_format", &AudioWriteOptions::sample_format)
+        .def_readwrite("overwrite", &AudioWriteOptions::overwrite);
+
+    m.def("save", [](const std::string& path, py::array_t<float> samples, py::object options_obj) {
+        py::buffer_info buf = samples.request();
+        if (buf.ndim != 2) {
+            throw std::runtime_error("samples must be 2D array with shape (channels, samples)");
+        }
+
+        int num_channels = static_cast<int>(buf.shape[0]);
+        int num_samples = static_cast<int>(buf.shape[1]);
+
+        std::vector<std::vector<float>> samples_vec(num_channels);
+        auto ptr = static_cast<float*>(buf.ptr);
+        for (int c = 0; c < num_channels; ++c) {
+            samples_vec[c].assign(ptr + c * num_samples, ptr + (c + 1) * num_samples);
+        }
+
+        AudioWriteOptions options;
+        if (!options_obj.is_none()) {
+            options = py::cast<AudioWriteOptions>(options_obj);
+        } else {
+            // Auto-detect format from file extension
+            std::string ext = path.substr(path.find_last_of('.') + 1);
+            std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+            if (!ext.empty()) {
+                options = AudioWriteOptions(ext);
+            }
+        }
+
+        save_audio(path, samples_vec, options);
+    },
+    py::arg("path"),
+    py::arg("samples"),
+    py::arg("options") = py::none(),
+    R"pbdoc(
+        Save audio samples to file.
+
+        Args:
+            path (str): Output file path
+            samples (numpy.ndarray): Audio samples with shape (channels, samples)
+            options (AudioWriteOptions, optional): Encoding options. If None, auto-detects from file extension.
+
+        Example:
+            >>> # Auto-detect format from extension
+            >>> avioflow.save("output.mp3", samples)
+
+            >>> # With explicit options
+            >>> opts = avioflow.AudioWriteOptions("mp3", sample_rate=44100)
+            >>> avioflow.save("output.mp3", samples, opts)
+    )pbdoc");
+
+    m.def("get_supported_output_formats", &get_supported_output_formats,
+    R"pbdoc(
+        Get the list of supported output format (muxer) names.
+
+        Returns:
+            list[str]: Output format names such as "wav", "flac", "mp4", and "adts".
+    )pbdoc");
+
     // --- DeviceManager ---
-    
-    py::class_<DeviceManager>(m, "DeviceManager", 
+
+    py::class_<DeviceManager>(m, "DeviceManager",
         "Utility class for discovering system audio devices.")
         .def_static("list_audio_devices", &DeviceManager::list_audio_devices,
         R"pbdoc(
             List available system audio devices.
-            
+
             Returns:
                 list[DeviceInfo]: List of available audio input/output devices.
-            
+
             Example:
                 >>> devices = avioflow.DeviceManager.list_audio_devices()
                 >>> for dev in devices:

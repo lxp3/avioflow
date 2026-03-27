@@ -17,11 +17,13 @@ int main() {
   try {
     auto decoders = avioflow::get_supported_decoders();
     auto encoders = avioflow::get_supported_encoders();
-    auto formats = avioflow::get_supported_input_formats();
+    auto input_formats = avioflow::get_supported_input_formats();
+    auto output_formats = avioflow::get_supported_output_formats();
 
     print_list("Supported Audio Decoders", decoders);
     print_list("Supported Audio Encoders", encoders);
-    print_list("Supported Input Formats", formats);
+    print_list("Supported Input Formats", input_formats);
+    print_list("Supported Output Formats", output_formats);
 
   } catch (const std::exception &e) {
     std::cerr << "Error: " << e.what() << std::endl;
