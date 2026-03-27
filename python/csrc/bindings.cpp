@@ -149,6 +149,30 @@ PYBIND11_MODULE(_avioflow, m) {
                 - "trace": Maximum verbosity
     )pbdoc");
 
+    m.def("get_supported_decoders", &get_supported_decoders,
+    R"pbdoc(
+        Get the list of supported audio decoder names.
+
+        Returns:
+            list[str]: Decoder names such as "mp3", "aac", and "pcm_s16le".
+    )pbdoc");
+
+    m.def("get_supported_encoders", &get_supported_encoders,
+    R"pbdoc(
+        Get the list of supported audio encoder names.
+
+        Returns:
+            list[str]: Encoder names such as "pcm_s16le", "aac", and "libmp3lame".
+    )pbdoc");
+
+    m.def("get_supported_input_formats", &get_supported_input_formats,
+    R"pbdoc(
+        Get the list of supported input format (demuxer) names.
+
+        Returns:
+            list[str]: Input format names such as "mp3", "wav", "flac", and "s16le".
+    )pbdoc");
+
     // Get metadata only
     m.def("info", [](py::object source) {
         AudioStreamOptions opts;
