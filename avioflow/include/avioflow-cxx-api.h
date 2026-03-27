@@ -44,6 +44,12 @@ AVIOFLOW_API std::vector<std::string> get_supported_encoders();
 AVIOFLOW_API std::vector<std::string> get_supported_input_formats();
 
 /**
+ * @brief Get list of supported output format (muxer) names.
+ * @return Vector of muxer names (e.g., "wav", "flac", "mp4", "adts")
+ */
+AVIOFLOW_API std::vector<std::string> get_supported_output_formats();
+
+/**
  * @brief Raw audio frame data returned from decoder.
  *
  * Points directly to internal AVFrame buffers - zero allocation overhead.
@@ -160,6 +166,37 @@ private:
   class Impl;
   std::unique_ptr<Impl> impl_;
 };
+
+/**
+ * @brief Offline audio encoder that writes in-memory samples to a file.
+ *
+ * Input samples use planar float layout: samples[channel][sample].
+ */
+class AVIOFLOW_API AudioEncoder {
+public:
+  explicit AudioEncoder(const AudioWriteOptions &options = {});
+  ~AudioEncoder();
+
+  AudioEncoder(const AudioEncoder &) = delete;
+  AudioEncoder &operator=(const AudioEncoder &) = delete;
+
+  AudioEncoder(AudioEncoder &&) noexcept;
+  AudioEncoder &operator=(AudioEncoder &&) noexcept;
+
+  void save(const std::string &path,
+            const std::vector<std::vector<float>> &samples);
+
+private:
+  class Impl;
+  std::unique_ptr<Impl> impl_;
+};
+
+/**
+ * @brief Convenience helper to save planar float audio samples to a file.
+ */
+AVIOFLOW_API void save_audio(const std::string &path,
+                             const std::vector<std::vector<float>> &samples,
+                             const AudioWriteOptions &options = {});
 
 // Device Manager for hardware discovery
 class AVIOFLOW_API DeviceManager {

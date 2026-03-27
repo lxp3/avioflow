@@ -16,6 +16,46 @@ struct AudioStreamOptions {
   std::optional<std::string> input_format;
 };
 
+/**
+ * @brief Options for audio encoding and writing.
+ */
+struct AudioWriteOptions {
+  /// Codec name. Common: "pcm_s16le", "pcm_f32le", "flac", "aac", "libmp3lame", "libopus"
+  std::optional<std::string> codec_name;
+
+  /// Container format. Common: "wav", "flac", "mp4", "adts", "mp3", "opus", "ogg"
+  std::optional<std::string> container_format;
+
+  /// Sample rate in Hz. Common: 8000, 16000, 22050, 44100, 48000
+  std::optional<int> sample_rate;
+
+  /// Number of channels. Common: 1 (mono), 2 (stereo)
+  std::optional<int> num_channels;
+
+  /// Bit rate in bits/s for lossy codecs. Common: 128000, 192000, 256000, 320000
+  std::optional<int64_t> bit_rate;
+
+  /// Sample format. Common: "s16", "s32", "flt", "fltp"
+  std::optional<std::string> sample_format;
+
+  /// Overwrite existing file
+  bool overwrite = true;
+
+  AudioWriteOptions() = default;
+
+  /**
+   * @brief Construct with format preset.
+   * @param format "wav" (PCM S16LE), "flac", "aac", "mp3", "opus"
+   * @param sample_rate Sample rate in Hz
+   * @param num_channels Channel count
+   * @param bit_rate Bit rate for lossy codecs
+   */
+  AudioWriteOptions(const std::string &format,
+                    std::optional<int> sample_rate = std::nullopt,
+                    std::optional<int> num_channels = std::nullopt,
+                    std::optional<int64_t> bit_rate = std::nullopt);
+};
+
 struct DeviceInfo {
   std::string name;        // Unique identifier for opening the device
   std::string description; // Human-readable name

@@ -3,7 +3,6 @@
     avioflow Build Script for Windows (PowerShell)
 .DESCRIPTION
     Configures and builds the project using CMake on Windows.
-    Automatically builds Python wheels if ENABLE_PYTHON is ON.
 #>
 
 $ErrorActionPreference = "Stop"
@@ -37,45 +36,5 @@ Write-Host "`n--- Building avioflow ---" -ForegroundColor Cyan
 cmake --build $BuildDir --config Release
 
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
-# --- Python Wheel Packaging ---
-$CacheFile = "$BuildDir/CMakeCache.txt"
-$PythonEnabled = $false
-if (Test-Path $CacheFile) {
-    if (Select-String -Path $CacheFile -Pattern "ENABLE_PYTHON:BOOL=ON") {
-        $PythonEnabled = $true
-    }
-}
-
-if ($PythonEnabled) {
-    Write-Host "`n--- Building Python Wheel ---" -ForegroundColor Yellow
-
-    $PythonDir = "python"
-    $DistDir = "python/dist"
-
-    if (Get-Command "uv" -ErrorAction SilentlyContinue) {
-        Write-Host "Found uv! Using 'uv build'..."
-        Push-Location $PythonDir
-        try {
-            uv build --wheel --out-dir dist
-        } finally {
-            Pop-Location
-        }
-    } else {
-        Write-Host "uv not found, using pip..."
-        if (Get-Command "python" -ErrorAction SilentlyContinue) {
-            python -m pip wheel ./python -w ./python/dist --no-deps
-        } else {
-            Write-Warning "Python not found, skipping wheel build."
-        }
-    }
-
-    Write-Host "`n--- Wheel Build Check ---" -ForegroundColor Green
-    if (Test-Path "$DistDir/*.whl") {
-        Get-ChildItem "$DistDir/*.whl" | Select-Object Name, @{Name="Size(MB)";Expression={"{0:N2}" -f ($_.Length/1MB)}}
-    } else {
-        Write-Warning "No wheel file found in $DistDir"
-    }
-}
 
 Write-Host "`n--- Build Successful! ---" -ForegroundColor Green

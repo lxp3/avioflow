@@ -82,4 +82,16 @@ std::vector<std::string> internal_get_supported_input_formats() {
   return std::vector<std::string>(formats.begin(), formats.end());
 }
 
+std::vector<std::string> internal_get_supported_output_formats() {
+  std::set<std::string> formats;
+  const AVOutputFormat *oformat = nullptr;
+  void *i = nullptr;
+  while ((oformat = av_muxer_iterate(&i))) {
+    if (oformat->name) {
+      formats.insert(oformat->name);
+    }
+  }
+  return std::vector<std::string>(formats.begin(), formats.end());
+}
+
 } // namespace avioflow

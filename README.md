@@ -327,7 +327,7 @@ devices.forEach(dev => {
 ```bash
 ./build.sh
 ```
-This will build the C++ library, Python bindings, and package a Python wheel.
+This will configure and build the C++ library and Python bindings.
 
 ### Node.js Build
 ```bash
