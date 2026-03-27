@@ -22,6 +22,33 @@ def set_log_level(level: str = "info") -> None:
     """
     ...
 
+def get_supported_decoders() -> List[str]:
+    """
+    Get the list of supported audio decoder names.
+
+    Returns:
+        list[str]: Decoder names such as "mp3", "aac", and "pcm_s16le".
+    """
+    ...
+
+def get_supported_encoders() -> List[str]:
+    """
+    Get the list of supported audio encoder names.
+
+    Returns:
+        list[str]: Encoder names such as "pcm_s16le", "aac", and "libmp3lame".
+    """
+    ...
+
+def get_supported_input_formats() -> List[str]:
+    """
+    Get the list of supported input format (demuxer) names.
+
+    Returns:
+        list[str]: Input format names such as "mp3", "wav", "flac", and "s16le".
+    """
+    ...
+
 def info(source: SourceInput) -> "Metadata":
     """
     Get audio metadata without decoding samples.
