@@ -6,7 +6,7 @@
 set -e
 
 # Configuration
-BUILD_SHARED_LIBS="OFF"
+BUILD_SHARED_LIBS="ON"
 if [ "$BUILD_SHARED_LIBS" = "ON" ]; then
     BUILD_DIR="build_shared"
 else
