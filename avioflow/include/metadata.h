@@ -1,6 +1,20 @@
 
 #pragma once
 
+#ifdef AVIOFLOW_STATIC
+#define AVIOFLOW_API
+#else
+#ifdef _WIN32
+#ifdef AVIOFLOW_EXPORTS
+#define AVIOFLOW_API __declspec(dllexport)
+#else
+#define AVIOFLOW_API __declspec(dllimport)
+#endif
+#else
+#define AVIOFLOW_API __attribute__((visibility("default")))
+#endif
+#endif
+
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -19,7 +33,7 @@ struct AudioStreamOptions {
 /**
  * @brief Options for audio encoding and writing.
  */
-struct AudioWriteOptions {
+struct AVIOFLOW_API AudioWriteOptions {
   /// Codec name. Common: "pcm_s16le", "pcm_f32le", "flac", "aac", "libmp3lame", "libopus"
   std::optional<std::string> codec_name;
 
