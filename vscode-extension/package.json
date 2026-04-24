@@ -52,8 +52,8 @@
     ],
     "commands": [
       {
-        "command": "avioflow.openWelcome",
-        "title": "Open Avioflow",
+        "command": "avioflow.openAudioFile",
+        "title": "Open Audio File",
         "category": "Avioflow"
       }
     ]

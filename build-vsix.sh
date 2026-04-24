@@ -19,7 +19,7 @@ echo "✓ WASM files copied to vscode-extension/out/wasm/"
 # Step 3: Build extension
 echo "Building extension..."
 cd vscode-extension
-pnpm install
+pnpm install --force
 pnpm run compile
 
 # Step 4: Package extension

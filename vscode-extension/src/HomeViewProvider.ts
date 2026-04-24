@@ -26,7 +26,7 @@ export class HomeViewProvider implements vscode.WebviewViewProvider {
 
         webviewView.webview.onDidReceiveMessage(data => {
             if (data.type === 'openUpload') {
-                vscode.commands.executeCommand('avioflow.openWelcome');
+                vscode.commands.executeCommand('avioflow.openAudioFile');
             }
         });
     }

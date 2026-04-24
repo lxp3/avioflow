@@ -8,7 +8,6 @@ export function activate(context: vscode.ExtensionContext) {
     try {
         const { AudioPreviewProvider } = require('./AudioPreviewProvider');
         const { HomeViewProvider } = require('./HomeViewProvider');
-        const { WelcomeEditorProvider } = require('./WelcomeEditorProvider');
 
         context.subscriptions.push(
             AudioPreviewProvider.register(context)
@@ -21,13 +20,27 @@ export function activate(context: vscode.ExtensionContext) {
             )
         );
 
-        // Register Welcome panel command
         context.subscriptions.push(
-            WelcomeEditorProvider.register(context)
-        );
+            vscode.commands.registerCommand('avioflow.openAudioFile', async () => {
+                const fileUri = await vscode.window.showOpenDialog({
+                    canSelectFiles: true,
+                    canSelectFolders: false,
+                    canSelectMany: false,
+                    filters: {
+                        'Audio Files': ['wav', 'mp3', 'flac', 'ogg', 'aac', 'm4a']
+                    },
+                    title: 'Select Audio File'
+                });
 
-        // Auto-open welcome panel on first activation
-        vscode.commands.executeCommand('avioflow.openWelcome');
+                if (fileUri && fileUri[0]) {
+                    await vscode.commands.executeCommand(
+                        'vscode.openWith',
+                        fileUri[0],
+                        'avioflow.audioPreview'
+                    );
+                }
+            })
+        );
 
     } catch (error: any) {
         console.error('[Avioflow] Extension activation failed:', error.message);

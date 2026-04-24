@@ -11,6 +11,7 @@
     let totalTimeMs = 0;
     let isLoadingSamples = false;
     let loadStartTime = 0;
+    let loadError: { title: string; message: string; code?: string } | null = null;
 
     // Audio playback
     let audioContext: AudioContext;
@@ -64,7 +65,22 @@
         const message = event.data;
 
         switch (message.type) {
+            case "loading":
+                filePath = message.filePath || "";
+                metadata = null;
+                samples = [];
+                audioBuffer = null;
+                decodeTimeMs = 0;
+                totalTimeMs = 0;
+                currentTime = 0;
+                duration = 0;
+                pauseOffset = 0;
+                loadError = null;
+                isLoadingSamples = true;
+                break;
+
             case "metadata":
+                loadError = null;
                 filePath = message.filePath || "";
                 metadata = message.metadata;
                 duration = metadata.duration || 0;
@@ -75,6 +91,7 @@
                 isLoadingSamples = false;
                 decodeTimeMs = message.decodeTimeMs || 0;
                 totalTimeMs = Date.now() - loadStartTime;
+                loadError = null;
 
                 if (message.samples && message.samples.length > 0) {
                     samples = message.samples.map((ch: any) =>
@@ -87,7 +104,17 @@
 
             case "error":
                 isLoadingSamples = false;
-                console.error("Error:", message.message);
+                metadata = null;
+                samples = [];
+                audioBuffer = null;
+                decodeTimeMs = 0;
+                totalTimeMs = 0;
+                loadError = {
+                    title: message.title || "Failed to load audio",
+                    message: message.message || "Unknown error",
+                    code: message.code
+                };
+                console.error("Error:", loadError);
                 break;
         }
     }
@@ -419,6 +446,7 @@
     function handleFileUpload() {
         if (vscode) {
             loadStartTime = Date.now();
+            loadError = null;
             vscode.postMessage({ type: "selectFile" });
         }
     }
@@ -427,10 +455,10 @@
 </script>
 
 <main class="flex flex-col h-full w-full bg-white p-4 gap-3">
-    {#if metadata}
+    {#if metadata || isLoadingSamples}
         <!-- Line 1: File Path -->
         <div class="text-sm text-gray-600 truncate">
-            {filePath}
+            {filePath || "Loading audio..."}
         </div>
 
         <!-- Line 2: Timing Info -->
@@ -440,35 +468,37 @@
             <span>Playback: <span class="text-gray-700 font-medium">{formatTime(currentTime)} / {formatTime(duration)}</span></span>
         </div>
 
-        <!-- Metadata Table -->
-        <table class="text-sm border-collapse w-full max-w-lg">
-            <tbody>
-                <tr class="border-b border-gray-100">
-                    <td class="py-1 pr-4 text-gray-500">File</td>
-                    <td class="py-1 text-gray-800 font-medium">{getFileName(filePath)}</td>
-                    <td class="py-1 pr-4 text-gray-500 pl-6">Size</td>
-                    <td class="py-1 text-gray-800">{formatSize(metadata.fileSize)}</td>
-                </tr>
-                <tr class="border-b border-gray-100">
-                    <td class="py-1 pr-4 text-gray-500">Format</td>
-                    <td class="py-1 text-gray-800">{metadata.container || "-"}</td>
-                    <td class="py-1 pr-4 text-gray-500 pl-6">Codec</td>
-                    <td class="py-1 text-gray-800">{metadata.codec || "-"}</td>
-                </tr>
-                <tr class="border-b border-gray-100">
-                    <td class="py-1 pr-4 text-gray-500">Duration</td>
-                    <td class="py-1 text-gray-800">{formatTime(duration)}</td>
-                    <td class="py-1 pr-4 text-gray-500 pl-6">Sample Rate</td>
-                    <td class="py-1 text-gray-800">{metadata.sampleRate?.toLocaleString() || "-"} Hz</td>
-                </tr>
-                <tr>
-                    <td class="py-1 pr-4 text-gray-500">Channels</td>
-                    <td class="py-1 text-gray-800">{metadata.numChannels || "-"}</td>
-                    <td class="py-1 pr-4 text-gray-500 pl-6">Bitrate</td>
-                    <td class="py-1 text-gray-800">{metadata.bitRate ? Math.round(metadata.bitRate / 1000) + " kbps" : "-"}</td>
-                </tr>
-            </tbody>
-        </table>
+        {#if metadata}
+            <!-- Metadata Table -->
+            <table class="text-sm border-collapse w-full max-w-lg">
+                <tbody>
+                    <tr class="border-b border-gray-100">
+                        <td class="py-1 pr-4 text-gray-500">File</td>
+                        <td class="py-1 text-gray-800 font-medium">{getFileName(filePath)}</td>
+                        <td class="py-1 pr-4 text-gray-500 pl-6">Size</td>
+                        <td class="py-1 text-gray-800">{formatSize(metadata.fileSize)}</td>
+                    </tr>
+                    <tr class="border-b border-gray-100">
+                        <td class="py-1 pr-4 text-gray-500">Format</td>
+                        <td class="py-1 text-gray-800">{metadata.container || "-"}</td>
+                        <td class="py-1 pr-4 text-gray-500 pl-6">Codec</td>
+                        <td class="py-1 text-gray-800">{metadata.codec || "-"}</td>
+                    </tr>
+                    <tr class="border-b border-gray-100">
+                        <td class="py-1 pr-4 text-gray-500">Duration</td>
+                        <td class="py-1 text-gray-800">{formatTime(duration)}</td>
+                        <td class="py-1 pr-4 text-gray-500 pl-6">Sample Rate</td>
+                        <td class="py-1 text-gray-800">{metadata.sampleRate?.toLocaleString() || "-"} Hz</td>
+                    </tr>
+                    <tr>
+                        <td class="py-1 pr-4 text-gray-500">Channels</td>
+                        <td class="py-1 text-gray-800">{metadata.numChannels || "-"}</td>
+                        <td class="py-1 pr-4 text-gray-500 pl-6">Bitrate</td>
+                        <td class="py-1 text-gray-800">{metadata.bitRate ? Math.round(metadata.bitRate / 1000) + " kbps" : "-"}</td>
+                    </tr>
+                </tbody>
+            </table>
+        {/if}
 
         <!-- Waveform Section -->
         <div class="flex-1 flex flex-col gap-2 min-h-0">
@@ -508,6 +538,16 @@
                             <span class="text-gray-500 text-sm">Decoding audio...</span>
                         </div>
                     </div>
+                {:else if loadError}
+                    <div class="flex items-center justify-center h-full bg-red-50 px-6">
+                        <div class="max-w-xl text-center">
+                            <div class="text-red-700 font-semibold mb-2">{loadError.title}</div>
+                            <div class="text-red-600 text-sm break-words">{loadError.message}</div>
+                            {#if loadError.code}
+                                <div class="text-red-400 text-xs mt-2">Code: {loadError.code}</div>
+                            {/if}
+                        </div>
+                    </div>
                 {:else if samples.length > 0}
                     <canvas
                         bind:this={canvas}
@@ -520,6 +560,17 @@
                     </div>
                 {/if}
             </div>
+        </div>
+    {:else if loadError}
+        <div class="home-container">
+            <div class="intro-section">
+                <h1 class="intro-title error-title">{loadError.title}</h1>
+                <p class="intro-desc error-desc">{loadError.message}</p>
+                {#if loadError.code}
+                    <p class="error-code">Code: {loadError.code}</p>
+                {/if}
+            </div>
+            <FileUpload on:select={handleFileUpload} />
         </div>
     {:else}
         <!-- Home Page with Introduction -->
@@ -559,5 +610,20 @@
         color: #6b7280;
         margin: 0;
         max-width: 300px;
+    }
+
+    .error-title {
+        color: #b91c1c;
+    }
+
+    .error-desc {
+        color: #991b1b;
+        max-width: 520px;
+    }
+
+    .error-code {
+        margin-top: 8px;
+        font-size: 12px;
+        color: #dc2626;
     }
 </style>
