@@ -426,10 +426,13 @@
     }
 
     function formatTime(s: number): string {
-        if (!s || isNaN(s)) return "0:00";
-        const min = Math.floor(s / 60);
-        const sec = Math.floor(s % 60);
-        return `${min}:${sec.toString().padStart(2, "0")}`;
+        if (!s || isNaN(s)) return "0.000s";
+        return `${s.toFixed(3)}s`;
+    }
+
+    function formatMilliseconds(ms: number): string {
+        if (!ms || isNaN(ms)) return "0.00 ms";
+        return `${ms.toFixed(2)} ms`;
     }
 
     function formatSize(bytes: number): string {
@@ -463,8 +466,8 @@
 
         <!-- Line 2: Timing Info -->
         <div class="flex gap-4 text-xs text-gray-500">
-            <span>Total: <span class="text-gray-700 font-medium">{totalTimeMs} ms</span></span>
-            <span>Decode: <span class="text-gray-700 font-medium">{decodeTimeMs} ms</span></span>
+            <span>Total: <span class="text-gray-700 font-medium">{formatMilliseconds(totalTimeMs)}</span></span>
+            <span>Decode: <span class="text-gray-700 font-medium">{formatMilliseconds(decodeTimeMs)}</span></span>
             <span>Playback: <span class="text-gray-700 font-medium">{formatTime(currentTime)} / {formatTime(duration)}</span></span>
         </div>
 
