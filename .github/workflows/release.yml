@@ -27,7 +27,7 @@ jobs:
       build-cpp: ${{ steps.check.outputs.build-cpp }}
       build-python: ${{ steps.check.outputs.build-python }}
       build-npm: ${{ steps.check.outputs.build-npm }}
-      build-wasm: ${{ steps.check.outputs.build-vsix }} # WASM is needed for VSIX
+      build-wasm: ${{ steps.check.outputs.build-wasm }}
       build-vsix: ${{ steps.check.outputs.build-vsix }}
       tag-name: ${{ steps.check.outputs.tag-name }}
     steps:
@@ -41,6 +41,7 @@ jobs:
           BUILD_CPP="false"
           BUILD_PYTHON="false"
           BUILD_NPM="false"
+          BUILD_WASM="false"
           BUILD_VSIX="false"
           
           # Check tag suffix
@@ -70,6 +71,7 @@ jobs:
           echo "build-cpp=$BUILD_CPP" >> $GITHUB_OUTPUT
           echo "build-python=$BUILD_PYTHON" >> $GITHUB_OUTPUT
           echo "build-npm=$BUILD_NPM" >> $GITHUB_OUTPUT
+          echo "build-wasm=$BUILD_WASM" >> $GITHUB_OUTPUT
           echo "build-vsix=$BUILD_VSIX" >> $GITHUB_OUTPUT
           
           echo "Build configuration:"
