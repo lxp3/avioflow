@@ -400,7 +400,7 @@ jobs:
   # Build VS Code Extension (.vsix)
   # ============================================================
   build-vsix:
-    needs: [check-tag, build-wasm]
+    needs: check-tag
     if: needs.check-tag.outputs.build-vsix == 'true'
     runs-on: windows-latest
     steps:
@@ -409,12 +409,6 @@ jobs:
       - name: Sync version metadata
         shell: pwsh
         run: python scripts/sync_version.py
-
-      - name: Download WASM Artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: wasm-engine
-          path: .
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
