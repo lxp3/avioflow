@@ -527,6 +527,20 @@ jobs:
           password: ${{ secrets.PYPI_API_TOKEN }}
           skip-existing: true
 
+      # Publish VS Code extension to Open VSX
+      - name: Publish to Open VSX
+        if: needs.check-tag.outputs.build-vsix == 'true'
+        working-directory: vsix_dist
+        run: |
+          VSIX_FILE=$(find . -maxdepth 1 -name '*.vsix' | head -n 1)
+          if [ -z "$VSIX_FILE" ]; then
+            echo "No VSIX file found to publish"
+            exit 1
+          fi
+          npx ovsx publish "$VSIX_FILE" -p "${{ secrets.OPENVSX_TOKEN }}"
+        env:
+          OPENVSX_TOKEN: ${{ secrets.OPENVSX_TOKEN }}
+
       # Publish platform-specific packages first, then main package
       - name: Publish @lxp3/linux-x64 to NPM
         if: needs.check-tag.outputs.build-npm == 'true'
