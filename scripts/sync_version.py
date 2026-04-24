@@ -71,7 +71,7 @@ def sync_python() -> None:
     path = ROOT / "python" / "pyproject.toml"
     update_regex(
         path,
-        r'^version = "\d+\.\d+\.\d+"$',
+        r'^\s*version\s*=\s*"\d+\.\d+\.\d+"\r?$',
         f'version = "{VERSION}"',
     )
 
