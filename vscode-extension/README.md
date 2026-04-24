@@ -22,21 +22,21 @@ This extension uses a high-performance **WebAssembly (WASM)** core built from C+
 
 ### VSIX Structure
 ```text
-avioflow-0.2.2.vsix
-├─ extension/
-�? ├─ package.json
-�? ├─ README.md
-�? └─ out/
-�?    ├─ src/ (Extension logic)
-�?    ├─ webview/ (Svelte UI)
-�?    └─ wasm/
-�?       ├─ avioflow.js
-�?       └─ avioflow.wasm
+avioflow-0.2.4.vsix
+|- extension/
+|  |- package.json
+|  |- README.md
+|  `- out/
+|     |- src/ (Extension logic)
+|     |- webview/ (Svelte UI)
+|     `- wasm/
+|        |- avioflow.js
+|        `- avioflow.wasm
 ```
 
 ## Installation
 ```bash
-code --install-extension avioflow-0.2.2.vsix
+code --install-extension avioflow-0.2.4.vsix
 ```
 
 ## Getting Started

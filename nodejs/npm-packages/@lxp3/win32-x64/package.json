@@ -1,11 +1,17 @@
 {
   "name": "@lxp3/win32-x64",
-  "version": "0.2.2",
+  "version": "0.2.4",
   "description": "Windows x64 native bindings for avioflow",
-  "os": ["win32"],
-  "cpu": ["x64"],
+  "os": [
+    "win32"
+  ],
+  "cpu": [
+    "x64"
+  ],
   "main": "avioflow.node",
-  "files": ["avioflow.node"],
+  "files": [
+    "avioflow.node"
+  ],
   "license": "MIT",
   "repository": {
     "type": "git",

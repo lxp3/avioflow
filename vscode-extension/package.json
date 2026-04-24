@@ -1,87 +1,87 @@
 {
-    "name": "avioflow",
-    "displayName": "Avioflow",
-    "description": "High-performance audio engine and toolkit for VS Code",
-    "version": "0.2.2",
-    "publisher": "lxp3",
-    "repository": {
-        "type": "git",
-        "url": "https://github.com/lxp3/avioflow"
+  "name": "avioflow",
+  "displayName": "Avioflow",
+  "description": "High-performance audio engine and toolkit for VS Code",
+  "version": "0.2.4",
+  "publisher": "lxp3",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lxp3/avioflow"
+  },
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "main": "./out/src/extension.js",
+  "activationEvents": [
+    "onCustomEditor:avioflow.audioPreview",
+    "onView:avioflow.homeView"
+  ],
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "avioflow-explorer",
+          "title": "Avioflow",
+          "icon": "$(music)"
+        }
+      ]
     },
-    "engines": {
-        "vscode": "^1.75.0"
+    "views": {
+      "avioflow-explorer": [
+        {
+          "type": "webview",
+          "id": "avioflow.homeView",
+          "name": "Avioflow Home"
+        }
+      ]
     },
-    "categories": [
-        "Other"
-    ],
-    "main": "./out/src/extension.js",
-    "activationEvents": [
-        "onCustomEditor:avioflow.audioPreview",
-        "onView:avioflow.homeView"
-    ],
-    "contributes": {
-        "viewsContainers": {
-            "activitybar": [
-                {
-                    "id": "avioflow-explorer",
-                    "title": "Avioflow",
-                    "icon": "$(music)"
-                }
-            ]
-        },
-        "views": {
-            "avioflow-explorer": [
-                {
-                    "type": "webview",
-                    "id": "avioflow.homeView",
-                    "name": "Avioflow Home"
-                }
-            ]
-        },
-        "customEditors": [
-            {
-                "viewType": "avioflow.audioPreview",
-                "displayName": "Avioflow Audio Preview",
-                "selector": [
-                    {
-                        "filenamePattern": "*.{mp3,wav,flac,m4a,ogg,aac}"
-                    }
-                ],
-                "priority": "default"
-            }
+    "customEditors": [
+      {
+        "viewType": "avioflow.audioPreview",
+        "displayName": "Avioflow Audio Preview",
+        "selector": [
+          {
+            "filenamePattern": "*.{mp3,wav,flac,m4a,ogg,aac}"
+          }
         ],
-        "commands": [
-            {
-                "command": "avioflow.openWelcome",
-                "title": "Open Avioflow",
-                "category": "Avioflow"
-            }
-        ]
-    },
-    "scripts": {
-        "vscode:prepublish": "pnpm run compile",
-        "compile": "pnpm run build:webview && tsc -p ./",
-        "watch": "tsc -watch -p ./",
-        "build:webview": "vite build webview"
-    },
-    "devDependencies": {
-        "@sveltejs/vite-plugin-svelte": "^5.0.3",
-        "@tailwindcss/vite": "^4.0.0",
-        "@tsconfig/svelte": "^5.0.0",
-        "@types/node": "^20.0.0",
-        "@types/vscode": "^1.75.0",
-        "@typescript-eslint/eslint-plugin": "^8.0.0",
-        "@typescript-eslint/parser": "^8.0.0",
-        "@vscode/vsce": "^3.2.0",
-        "autoprefixer": "^10.4.20",
-        "eslint": "^9.0.0",
-        "svelte": "^5.19.0",
-        "svelte-check": "^4.1.0",
-        "tailwindcss": "^4.0.0",
-        "typescript": "^5.7.0",
-        "vite": "^7.3.1"
-    },
-    "dependencies": {
-        "lucide-svelte": "^0.563.0"
-    }
+        "priority": "default"
+      }
+    ],
+    "commands": [
+      {
+        "command": "avioflow.openWelcome",
+        "title": "Open Avioflow",
+        "category": "Avioflow"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "pnpm run compile",
+    "compile": "pnpm run build:webview && tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "build:webview": "vite build webview"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^5.0.3",
+    "@tailwindcss/vite": "^4.0.0",
+    "@tsconfig/svelte": "^5.0.0",
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.75.0",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
+    "@vscode/vsce": "^3.2.0",
+    "autoprefixer": "^10.4.20",
+    "eslint": "^9.0.0",
+    "svelte": "^5.19.0",
+    "svelte-check": "^4.1.0",
+    "tailwindcss": "^4.0.0",
+    "typescript": "^5.7.0",
+    "vite": "^7.3.1"
+  },
+  "dependencies": {
+    "lucide-svelte": "^0.563.0"
+  }
 }

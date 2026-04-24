@@ -85,25 +85,47 @@ jobs:
     needs: check-tag
     if: needs.check-tag.outputs.build-cpp == 'true'
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            docker-image: quay.io/pypa/manylinux2014_x86_64
+            pkg-dir: avioflow-shared-linux-x64
+            artifact-name: linux-cpp-binaries-x86_64
+          - arch: aarch64
+            docker-image: quay.io/pypa/manylinux2014_aarch64
+            pkg-dir: avioflow-shared-linux-arm64
+            artifact-name: linux-cpp-binaries-aarch64
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build C++ Shared Binaries in manylinux2014
+      - name: Sync version metadata
+        run: python3 scripts/sync_version.py
+
+      - name: Set up QEMU
+        if: matrix.arch == 'aarch64'
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - name: Build C++ Shared Binaries in manylinux2014 (${{ matrix.arch }})
         run: |
-          docker run --rm -v $(pwd):/io -w /io quay.io/pypa/manylinux2014_x86_64 bash -c "
+          docker run --rm -v $(pwd):/io -w /io ${{ matrix.docker-image }} bash -c "
             yum install -y epel-release && \
-            yum install -y alsa-lib-devel libX11-devel zlib-devel bzip2-devel xz-devel libva-devel libdrm-devel && \
+            yum install -y alsa-lib-devel libX11-devel zlib-devel bzip2-devel xz-devel libva-devel libdrm-devel \
+              lame-devel opus-devel speex-devel libvorbis-devel && \
             cmake -B build_shared -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=ON -DENABLE_WASAPI=OFF -DENABLE_PYTHON=OFF -DENABLE_NODE_JS=OFF -DENABLE_BINARY=ON && \
             cmake --build build_shared --config Release -j \$(nproc) && \
-            PKG_DIR=\"avioflow-shared-linux-x64\" && \
+            PKG_DIR=\"${{ matrix.pkg-dir }}\" && \
             cmake --install build_shared --prefix \$PKG_DIR && \
             tar -czvf \$PKG_DIR.tar.gz \$PKG_DIR
           "
 
       - uses: actions/upload-artifact@v4
         with:
-          name: linux-cpp-binaries
-          path: avioflow-shared-linux-x64.tar.gz
+          name: ${{ matrix.artifact-name }}
+          path: ${{ matrix.pkg-dir }}.tar.gz
 
   # ============================================================
   # Linux Node.js Build (Modern - manylinux_2_28)
@@ -115,6 +137,9 @@ jobs:
     container: quay.io/pypa/manylinux_2_28_x86_64
     steps:
       - uses: actions/checkout@v4
+
+      - name: Sync version metadata
+        run: python3 scripts/sync_version.py
 
       - name: Install System Dependencies
         run: |
@@ -159,18 +184,28 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Sync version metadata
+        run: python3 scripts/sync_version.py
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
       - name: Build wheels
         uses: pypa/cibuildwheel@v2.22.0
         with:
           package-dir: python
         env:
-          CIBW_ARCHS_LINUX: x86_64
+          CIBW_ARCHS_LINUX: "x86_64 aarch64"
           CIBW_BUILD: "cp38-* cp39-* cp310-* cp311-* cp312-* cp313-* cp314-*"
           CIBW_SKIP: "pp* *-musllinux*"
           CIBW_MANYLINUX_X86_64_IMAGE: manylinux2014
+          CIBW_MANYLINUX_AARCH64_IMAGE: manylinux2014
           CIBW_BEFORE_BUILD_LINUX: >
             yum install -y epel-release &&
             yum install -y alsa-lib-devel libX11-devel zlib-devel bzip2-devel xz-devel libva-devel libdrm-devel
+            lame-devel opus-devel speex-devel libvorbis-devel
           CIBW_ENVIRONMENT_LINUX: "CMAKE_ARGS=-DBUILD_SHARED_LIBS=ON"
           CIBW_REPAIR_WHEEL_COMMAND_LINUX: >
             export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$(find /project -name "libavformat.so*" -exec dirname {} \; | head -n 1) &&
@@ -198,6 +233,10 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Sync version metadata
+        shell: pwsh
+        run: python scripts/sync_version.py
 
       - name: Set up MSVC
         uses: ilammy/msvc-dev-cmd@v1
@@ -295,6 +334,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Sync version metadata
+        shell: pwsh
+        run: python scripts/sync_version.py
+
       - name: Build wheels
         uses: pypa/cibuildwheel@v2.22.0
         with:
@@ -328,6 +371,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Sync version metadata
+        shell: pwsh
+        run: python scripts/sync_version.py
+
       - name: Build WASM
         shell: pwsh
         run: ./build-wasm.ps1
@@ -358,6 +405,10 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Sync version metadata
+        shell: pwsh
+        run: python scripts/sync_version.py
 
       - name: Download WASM Artifacts
         uses: actions/download-artifact@v4
@@ -433,7 +484,7 @@ jobs:
 
           # C++ binaries
           if [ "${{ needs.check-tag.outputs.build-cpp }}" == "true" ]; then
-            cp artifacts/linux-cpp-binaries/* dist/ || true
+            cp artifacts/linux-cpp-binaries-*/* dist/ || true
             cp artifacts/windows-cpp-binaries/* dist/ || true
           fi
 

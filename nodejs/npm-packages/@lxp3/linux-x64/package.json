@@ -1,11 +1,17 @@
 {
   "name": "@lxp3/linux-x64",
-  "version": "0.2.2",
+  "version": "0.2.4",
   "description": "Linux x64 native bindings for avioflow",
-  "os": ["linux"],
-  "cpu": ["x64"],
+  "os": [
+    "linux"
+  ],
+  "cpu": [
+    "x64"
+  ],
   "main": "avioflow.node",
-  "files": ["avioflow.node"],
+  "files": [
+    "avioflow.node"
+  ],
   "license": "MIT",
   "repository": {
     "type": "git",

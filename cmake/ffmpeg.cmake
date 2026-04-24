@@ -11,6 +11,19 @@ elseif(WIN32)
         set(FFMPEG_PLATFORM_CONFIG "cmake/ffmpeg-win-static.cmake")
     endif()
 else()
+    if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|amd64)$")
+        set(_ffmpeg_linux_arch "x86_64")
+    elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64)$")
+        set(_ffmpeg_linux_arch "aarch64")
+    else()
+        message(FATAL_ERROR
+            "Unsupported Linux architecture for prebuilt FFmpeg: ${CMAKE_SYSTEM_PROCESSOR}. "
+            "Supported architectures: x86_64, aarch64."
+        )
+    endif()
+
+    message(STATUS "Detected Linux FFmpeg arch: ${_ffmpeg_linux_arch}")
+
     if(BUILD_SHARED_LIBS)
         set(FFMPEG_PLATFORM_CONFIG "cmake/ffmpeg-linux-shared.cmake")
     else()
