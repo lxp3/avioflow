@@ -50,6 +50,11 @@ def sync_cmake() -> None:
     path = ROOT / "CMakeLists.txt"
     content = read_text(path)
     legacy_pattern = r"project\(avioflow VERSION \d+\.\d+\.\d+ LANGUAGES CXX\)"
+    modern_pattern = (
+        r'file\(READ "\$\{CMAKE_CURRENT_SOURCE_DIR\}/version\.txt" AVIOFLOW_VERSION_RAW\)\r?\n'
+        r'string\(STRIP "\$\{AVIOFLOW_VERSION_RAW\}" AVIOFLOW_VERSION\)\r?\n'
+        r'project\(avioflow VERSION \$\{AVIOFLOW_VERSION\} LANGUAGES CXX\)'
+    )
     modern_snippet = (
         'file(READ "${CMAKE_CURRENT_SOURCE_DIR}/version.txt" AVIOFLOW_VERSION_RAW)\n'
         'string(STRIP "${AVIOFLOW_VERSION_RAW}" AVIOFLOW_VERSION)\n'
@@ -58,7 +63,7 @@ def sync_cmake() -> None:
     if re.search(legacy_pattern, content):
         new = re.sub(legacy_pattern, modern_snippet, content, flags=re.MULTILINE)
         write_text_if_changed(path, new)
-    elif modern_snippet not in content:
+    elif not re.search(modern_pattern, content):
         raise SystemExit(f"Unsupported CMake version block in {path}")
 
 
