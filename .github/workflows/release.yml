@@ -284,11 +284,11 @@ jobs:
         run: python3 scripts/sync_version.py
 
       - name: Install system dependencies
-        run: brew install openssl@3 lame opus speex libogg libvorbis libx11 libxcb libxau libxdmcp
+        run: brew install openssl@3 lame opus speex libogg libvorbis
 
       - name: Build macOS C++ ${{ matrix.package-kind }} (${{ matrix.arch }})
         run: |
-          export CMAKE_PREFIX_PATH="${{ matrix.brew-prefix }}/opt/openssl@3:${{ matrix.brew-prefix }}/opt/lame:${{ matrix.brew-prefix }}/opt/opus:${{ matrix.brew-prefix }}/opt/speex:${{ matrix.brew-prefix }}/opt/libogg:${{ matrix.brew-prefix }}/opt/libvorbis:${{ matrix.brew-prefix }}/opt/libx11:${{ matrix.brew-prefix }}/opt/libxcb:${{ matrix.brew-prefix }}/opt/libxau:${{ matrix.brew-prefix }}/opt/libxdmcp"
+          export CMAKE_PREFIX_PATH="${{ matrix.brew-prefix }}/opt/openssl@3:${{ matrix.brew-prefix }}/opt/lame:${{ matrix.brew-prefix }}/opt/opus:${{ matrix.brew-prefix }}/opt/speex:${{ matrix.brew-prefix }}/opt/libogg:${{ matrix.brew-prefix }}/opt/libvorbis"
           export CMAKE_LIBRARY_PATH="${{ matrix.brew-prefix }}/lib"
           cmake -B build_macos_${{ matrix.package-kind }} \
             -DCMAKE_BUILD_TYPE=Release \
@@ -451,8 +451,8 @@ jobs:
           CIBW_ARCHS_MACOS: ${{ matrix.arch }}
           CIBW_BUILD: "cp38-* cp39-* cp310-* cp311-* cp312-* cp313-* cp314-*"
           CIBW_SKIP: "pp*"
-          CIBW_BEFORE_BUILD_MACOS: "brew install openssl@3 lame opus speex libogg libvorbis libx11 libxcb libxau libxdmcp"
-          CIBW_ENVIRONMENT_MACOS: "CMAKE_ARGS=-DBUILD_SHARED_LIBS=OFF MACOSX_DEPLOYMENT_TARGET=12.0 CMAKE_PREFIX_PATH=${{ matrix.brew-prefix }}/opt/openssl@3:${{ matrix.brew-prefix }}/opt/lame:${{ matrix.brew-prefix }}/opt/opus:${{ matrix.brew-prefix }}/opt/speex:${{ matrix.brew-prefix }}/opt/libogg:${{ matrix.brew-prefix }}/opt/libvorbis:${{ matrix.brew-prefix }}/opt/libx11:${{ matrix.brew-prefix }}/opt/libxcb:${{ matrix.brew-prefix }}/opt/libxau:${{ matrix.brew-prefix }}/opt/libxdmcp CMAKE_LIBRARY_PATH=${{ matrix.brew-prefix }}/lib"
+          CIBW_BEFORE_BUILD_MACOS: "brew install openssl@3 lame opus speex libogg libvorbis"
+          CIBW_ENVIRONMENT_MACOS: "CMAKE_ARGS=-DBUILD_SHARED_LIBS=OFF MACOSX_DEPLOYMENT_TARGET=12.0 CMAKE_PREFIX_PATH=${{ matrix.brew-prefix }}/opt/openssl@3:${{ matrix.brew-prefix }}/opt/lame:${{ matrix.brew-prefix }}/opt/opus:${{ matrix.brew-prefix }}/opt/speex:${{ matrix.brew-prefix }}/opt/libogg:${{ matrix.brew-prefix }}/opt/libvorbis CMAKE_LIBRARY_PATH=${{ matrix.brew-prefix }}/lib"
           CIBW_TEST_REQUIRES: numpy
           CIBW_TEST_COMMAND: "python {project}/python/tests/test_offline_load.py {project}/public/wavs/TownTheme.mp3"
 
