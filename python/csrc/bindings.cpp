@@ -98,6 +98,7 @@ SourceInput parse_data_input(const py::object& data) {
 
 void open_decoder_source(AudioDecoder& decoder, const py::object& source) {
     SourceInput input = parse_source_input(source);
+    py::gil_scoped_release release;
     if (input.kind == SourceInput::Kind::Path) {
         decoder.open(input.path);
     } else {
@@ -108,8 +109,59 @@ void open_decoder_source(AudioDecoder& decoder, const py::object& source) {
 void push_decoder_data(AudioDecoder& decoder, const py::object& data) {
     SourceInput input = parse_data_input(data);
     if (input.size > 0) {
+        py::gil_scoped_release release;
         decoder.push(input.data, input.size);
     }
+}
+
+std::vector<std::vector<float>> get_decoder_samples(AudioDecoder& decoder) {
+    py::gil_scoped_release release;
+    return decoder.get_samples();
+}
+
+FrameData read_decoder_frame(AudioDecoder& decoder) {
+    py::gil_scoped_release release;
+    return decoder.read();
+}
+
+py::array_t<float> samples_to_array(const std::vector<std::vector<float>>& samples) {
+    if (samples.empty()) {
+        return py::array_t<float>(std::vector<size_t>{0, 0});
+    }
+
+    size_t num_channels = samples.size();
+    size_t num_samples = samples[0].size();
+    py::array_t<float> result({num_channels, num_samples});
+    auto buf = result.mutable_unchecked<2>();
+    for (size_t c = 0; c < num_channels; ++c) {
+        std::copy(samples[c].begin(), samples[c].end(), &buf(c, 0));
+    }
+    return result;
+}
+
+std::vector<std::string> get_supported_decoders_released() {
+    py::gil_scoped_release release;
+    return get_supported_decoders();
+}
+
+std::vector<std::string> get_supported_encoders_released() {
+    py::gil_scoped_release release;
+    return get_supported_encoders();
+}
+
+std::vector<std::string> get_supported_input_formats_released() {
+    py::gil_scoped_release release;
+    return get_supported_input_formats();
+}
+
+std::vector<std::string> get_supported_output_formats_released() {
+    py::gil_scoped_release release;
+    return get_supported_output_formats();
+}
+
+std::vector<DeviceInfo> list_audio_devices_released() {
+    py::gil_scoped_release release;
+    return DeviceManager::list_audio_devices();
 }
 
 }  // namespace
@@ -150,7 +202,7 @@ PYBIND11_MODULE(_avioflow, m) {
                 - "trace": Maximum verbosity
     )pbdoc");
 
-    m.def("get_supported_decoders", &get_supported_decoders,
+    m.def("get_supported_decoders", &get_supported_decoders_released,
     R"pbdoc(
         Get the list of supported audio decoder names.
 
@@ -158,7 +210,7 @@ PYBIND11_MODULE(_avioflow, m) {
             list[str]: Decoder names such as "mp3", "aac", and "pcm_s16le".
     )pbdoc");
 
-    m.def("get_supported_encoders", &get_supported_encoders,
+    m.def("get_supported_encoders", &get_supported_encoders_released,
     R"pbdoc(
         Get the list of supported audio encoder names.
 
@@ -166,7 +218,7 @@ PYBIND11_MODULE(_avioflow, m) {
             list[str]: Encoder names such as "pcm_s16le", "aac", and "libmp3lame".
     )pbdoc");
 
-    m.def("get_supported_input_formats", &get_supported_input_formats,
+    m.def("get_supported_input_formats", &get_supported_input_formats_released,
     R"pbdoc(
         Get the list of supported input format (demuxer) names.
 
@@ -203,27 +255,10 @@ PYBIND11_MODULE(_avioflow, m) {
         // Support both file paths and bytes
         open_decoder_source(decoder, source);
         
-        const auto& meta = decoder.get_metadata();
-        auto samples = decoder.get_samples();
+        Metadata meta = decoder.get_metadata();
+        auto samples = get_decoder_samples(decoder);
 
-        // Convert to numpy array
-        if (samples.empty()) {
-            std::vector<py::ssize_t> shape = {0, 0};
-            auto arr = py::array_t<float>(shape);
-            return py::make_tuple(meta, arr);
-        }
-        
-        int num_channels = static_cast<int>(samples.size());
-        int num_samples = static_cast<int>(samples[0].size());
-        
-        auto arr = py::array_t<float>({num_channels, num_samples});
-        auto buf = arr.mutable_unchecked<2>();
-        
-        for (int c = 0; c < num_channels; ++c) {
-            std::memcpy(&buf(c, 0), samples[c].data(), num_samples * sizeof(float));
-        }
-        
-        return py::make_tuple(meta, arr);
+        return py::make_tuple(meta, samples_to_array(samples));
     },
     py::arg("source"),
     py::arg("output_sample_rate") = py::none(),
@@ -401,22 +436,7 @@ PYBIND11_MODULE(_avioflow, m) {
         
         .def("__call__", [](AudioDecoder& self, py::object data) -> py::array_t<float> {
             push_decoder_data(self, data);
-
-            // Use new C++ get_samples() to get all currently available samples
-            std::vector<std::vector<float>> total_samples = self.get_samples();
-
-            if (total_samples.empty()) {
-                return py::array_t<float>(std::vector<size_t>{0, 0});
-            }
-
-            size_t num_channels = total_samples.size();
-            size_t num_samples = total_samples[0].size();
-            py::array_t<float> result({num_channels, num_samples});
-            auto buf = result.mutable_unchecked<2>();
-            for (size_t c = 0; c < num_channels; ++c) {
-                std::copy(total_samples[c].begin(), total_samples[c].end(), &buf(c, 0));
-            }
-            return result;
+            return samples_to_array(get_decoder_samples(self));
         },
         py::arg("data"),
         R"pbdoc(
@@ -448,21 +468,7 @@ PYBIND11_MODULE(_avioflow, m) {
         )pbdoc")
 
         .def("get_samples", [](AudioDecoder& self) -> py::array_t<float> {
-            // Directly use new C++ get_samples() implementation
-            std::vector<std::vector<float>> total_samples = self.get_samples();
-
-            if (total_samples.empty()) {
-                return py::array_t<float>(std::vector<size_t>{0, 0});
-            }
-
-            size_t num_channels = total_samples.size();
-            size_t num_samples = total_samples[0].size();
-            py::array_t<float> result({num_channels, num_samples});
-            auto buf = result.mutable_unchecked<2>();
-            for (size_t c = 0; c < num_channels; ++c) {
-                std::copy(total_samples[c].begin(), total_samples[c].end(), &buf(c, 0));
-            }
-            return result;
+            return samples_to_array(get_decoder_samples(self));
         },
         R"pbdoc(
             Decode all currently available samples.
@@ -507,7 +513,7 @@ PYBIND11_MODULE(_avioflow, m) {
         )pbdoc")
 
         .def("read", [](AudioDecoder& self) -> py::object {
-            FrameData frame = self.read();
+            FrameData frame = read_decoder_frame(self);
             if (!frame) {
                 return py::none();
             }
@@ -612,7 +618,10 @@ PYBIND11_MODULE(_avioflow, m) {
             }
         }
 
-        save_audio(path, samples_vec, options);
+        {
+            py::gil_scoped_release release;
+            save_audio(path, samples_vec, options);
+        }
     },
     py::arg("path"),
     py::arg("samples"),
@@ -634,7 +643,7 @@ PYBIND11_MODULE(_avioflow, m) {
             >>> avioflow.save("output.mp3", samples, opts)
     )pbdoc");
 
-    m.def("get_supported_output_formats", &get_supported_output_formats,
+    m.def("get_supported_output_formats", &get_supported_output_formats_released,
     R"pbdoc(
         Get the list of supported output format (muxer) names.
 
@@ -646,7 +655,7 @@ PYBIND11_MODULE(_avioflow, m) {
 
     py::class_<DeviceManager>(m, "DeviceManager",
         "Utility class for discovering system audio devices.")
-        .def_static("list_audio_devices", &DeviceManager::list_audio_devices,
+        .def_static("list_audio_devices", &list_audio_devices_released,
         R"pbdoc(
             List available system audio devices.
 
