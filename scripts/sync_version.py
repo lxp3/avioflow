@@ -17,17 +17,21 @@ if not re.fullmatch(r"\d+\.\d+\.\d+", VERSION):
 def write_text_if_changed(path: Path, content: str) -> None:
     old = read_text(path)
     if old != content:
-        path.write_text(content, encoding="utf-8")
+        write_text(path, content)
 
 
 def read_text(path: Path) -> str:
     data = path.read_bytes()
     for encoding in ("utf-8", "utf-8-sig", "cp1252", "latin-1"):
         try:
-            return data.decode(encoding)
+            return data.decode(encoding).replace("\r\n", "\n").replace("\r", "\n")
         except UnicodeDecodeError:
             continue
     raise SystemExit(f"Could not decode text file: {path}")
+
+
+def write_text(path: Path, content: str) -> None:
+    path.write_text(content, encoding="utf-8", newline="\n")
 
 
 def update_json(path: Path, updater) -> None:
@@ -43,7 +47,7 @@ def update_regex(path: Path, pattern: str, replacement: str) -> None:
     if count == 0:
         raise SystemExit(f"Pattern not found in {path}: {pattern}")
     if old != new:
-        path.write_text(new, encoding="utf-8")
+        write_text(path, new)
 
 
 def sync_cmake() -> None:
