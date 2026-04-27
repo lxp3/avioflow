@@ -25,6 +25,18 @@ set(FFMPEG_SYSTEM_LIBS
     rt
     drm     # apt install libdrm-dev
     va      # apt install libva-dev
+    ssl
+    crypto
+    atomic
+    X11
+    xcb
+    Xau
+    mp3lame
+    opus
+    speex
+    vorbisenc
+    vorbis
+    ogg
 )
 
 # Apply these to all FFmpeg targets
