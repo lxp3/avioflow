@@ -13,6 +13,7 @@ emsdk/
 # IDE and editor
 .cache/
 .vs/
+.codex
 __pycache__/
 *.pyc
 
