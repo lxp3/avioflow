@@ -4,6 +4,9 @@
     import FileUpload from "./components/FileUpload.svelte";
 
     // State
+    type ViewState = "booting" | "loading" | "ready" | "error";
+
+    let viewState: ViewState = "booting";
     let metadata: any = null;
     let samples: Float32Array[] = [];
     let filePath = "";
@@ -66,6 +69,7 @@
 
         switch (message.type) {
             case "loading":
+                viewState = "loading";
                 filePath = message.filePath || "";
                 metadata = null;
                 samples = [];
@@ -80,6 +84,7 @@
                 break;
 
             case "metadata":
+                viewState = "loading";
                 loadError = null;
                 filePath = message.filePath || "";
                 metadata = message.metadata;
@@ -88,6 +93,7 @@
                 break;
 
             case "samples":
+                viewState = "ready";
                 isLoadingSamples = false;
                 decodeTimeMs = message.decodeTimeMs || 0;
                 totalTimeMs = Date.now() - loadStartTime;
@@ -103,6 +109,7 @@
                 break;
 
             case "error":
+                viewState = "error";
                 isLoadingSamples = false;
                 metadata = null;
                 samples = [];
@@ -450,15 +457,27 @@
         if (vscode) {
             loadStartTime = Date.now();
             loadError = null;
+            viewState = "loading";
             vscode.postMessage({ type: "selectFile" });
         }
+    }
+
+    function getLoadingTitle(): string {
+        return metadata ? "正在解码波形数据..." : "正在打开音频文件...";
+    }
+
+    function getLoadingDescription(): string {
+        if (metadata) {
+            return "已读取音频元数据，正在生成波形和播放缓存。";
+        }
+        return "正在读取文件信息并初始化解码器。";
     }
 
     $: canvasHeight = samples.length > 0 ? samples.length * CHANNEL_HEIGHT : 120;
 </script>
 
 <main class="flex flex-col h-full w-full bg-white p-4 gap-3">
-    {#if metadata || isLoadingSamples}
+    {#if viewState === "ready" || viewState === "loading"}
         <!-- Line 1: File Path -->
         <div class="text-sm text-gray-600 truncate">
             {filePath || "Loading audio..."}
@@ -535,10 +554,16 @@
                 style="height: {canvasHeight}px; min-height: {canvasHeight}px;"
             >
                 {#if isLoadingSamples}
-                    <div class="flex items-center justify-center h-full bg-gray-50">
-                        <div class="flex items-center gap-3">
-                            <div class="w-5 h-5 border-2 border-gray-300 border-t-blue-500 rounded-full animate-spin"></div>
-                            <span class="text-gray-500 text-sm">Decoding audio...</span>
+                    <div class="flex items-center justify-center h-full bg-gray-50 px-6">
+                        <div class="max-w-xl text-center">
+                            <div class="flex items-center justify-center gap-3 mb-3">
+                                <div class="w-5 h-5 border-2 border-gray-300 border-t-blue-500 rounded-full animate-spin"></div>
+                                <span class="text-gray-700 text-sm font-medium">{getLoadingTitle()}</span>
+                            </div>
+                            <div class="text-gray-500 text-sm">{getLoadingDescription()}</div>
+                            {#if filePath}
+                                <div class="text-gray-400 text-xs mt-2 break-all">{filePath}</div>
+                            {/if}
                         </div>
                     </div>
                 {:else if loadError}
@@ -564,7 +589,7 @@
                 {/if}
             </div>
         </div>
-    {:else if loadError}
+    {:else if viewState === "error" && loadError}
         <div class="home-container">
             <div class="intro-section">
                 <h1 class="intro-title error-title">{loadError.title}</h1>
@@ -576,13 +601,11 @@
             <FileUpload on:select={handleFileUpload} />
         </div>
     {:else}
-        <!-- Home Page with Introduction -->
         <div class="home-container">
             <div class="intro-section">
-                <h1 class="intro-title">Avioflow</h1>
-                <p class="intro-desc">高性能音频引擎，支持 WAV、MP3、FLAC 等格式的解码与波形可视化</p>
+                <h1 class="intro-title">正在初始化音频预览...</h1>
+                <p class="intro-desc">即将读取音频文件并准备波形显示。</p>
             </div>
-            <FileUpload on:select={handleFileUpload} />
         </div>
     {/if}
 </main>
