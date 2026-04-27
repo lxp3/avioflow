@@ -10,6 +10,9 @@ endif()
 
 set(LIB_TYPE STATIC)
 
+find_library(SSL_LIBRARY ssl REQUIRED)
+find_library(CRYPTO_LIBRARY crypto REQUIRED)
+
 # FFmpeg Linux Static System Libraries
 # When linking FFmpeg static libraries on Linux, we need to link several 
 # system libraries that FFmpeg depends on (e.g. math library, threading, dynamic loader).
@@ -25,8 +28,8 @@ set(FFMPEG_SYSTEM_LIBS
     rt
     drm     # apt install libdrm-dev
     va      # apt install libva-dev
-    ssl
-    crypto
+    ${SSL_LIBRARY}
+    ${CRYPTO_LIBRARY}
     X11
     xcb
     Xau

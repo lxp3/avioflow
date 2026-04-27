@@ -207,14 +207,24 @@ jobs:
           CIBW_MANYLINUX_AARCH64_IMAGE: manylinux2014
           CIBW_BEFORE_BUILD_LINUX: >
             if command -v dnf >/dev/null 2>&1; then
-            dnf install -y alsa-lib-devel libX11-devel libxcb-devel libXau-devel zlib-devel bzip2-devel xz-devel
-            libva-devel libdrm-devel lame-devel opus-devel speex-devel libogg-devel libvorbis-devel openssl-devel libatomic;
+            dnf install -y make perl-core tar xz alsa-lib-devel libX11-devel libxcb-devel libXau-devel zlib-devel bzip2-devel xz-devel
+            libva-devel libdrm-devel lame-devel opus-devel speex-devel libogg-devel libvorbis-devel libatomic;
             else
             yum install -y epel-release &&
-            yum install -y alsa-lib-devel libX11-devel libxcb-devel libXau-devel zlib-devel bzip2-devel xz-devel
-            libva-devel libdrm-devel lame-devel opus-devel speex-devel libogg-devel libvorbis-devel openssl-devel libatomic;
-            fi
-          CIBW_ENVIRONMENT_LINUX: "CMAKE_ARGS=-DBUILD_SHARED_LIBS=OFF"
+            yum install -y make perl-core tar xz alsa-lib-devel libX11-devel libxcb-devel libXau-devel zlib-devel bzip2-devel xz-devel
+            libva-devel libdrm-devel lame-devel opus-devel speex-devel libogg-devel libvorbis-devel libatomic;
+            fi &&
+            DEPS_PREFIX=/opt/ffmpeg-deps &&
+            mkdir -p "$DEPS_PREFIX" &&
+            curl -fsSL https://www.openssl.org/source/openssl-3.0.14.tar.gz -o /tmp/openssl-3.0.14.tar.gz &&
+            tar -xzf /tmp/openssl-3.0.14.tar.gz -C /tmp &&
+            cd /tmp/openssl-3.0.14 &&
+            if [ "$(uname -m)" = "aarch64" ]; then OPENSSL_TARGET=linux-aarch64; else OPENSSL_TARGET=linux-x86_64; fi &&
+            ./Configure "$OPENSSL_TARGET" no-shared --prefix="$DEPS_PREFIX" --libdir=lib &&
+            make -j"$(nproc)" &&
+            make install_sw &&
+            cd /project
+          CIBW_ENVIRONMENT_LINUX: "CMAKE_ARGS=-DBUILD_SHARED_LIBS=OFF CMAKE_PREFIX_PATH=/opt/ffmpeg-deps CMAKE_LIBRARY_PATH=/opt/ffmpeg-deps/lib"
           CIBW_REPAIR_WHEEL_COMMAND_LINUX: "auditwheel repair -w {dest_dir} {wheel}"
           CIBW_TEST_REQUIRES: numpy
           CIBW_TEST_COMMAND: "python {project}/python/tests/test_offline_load.py {project}/public/wavs/TownTheme.mp3"
@@ -229,6 +239,85 @@ jobs:
         run: gh run cancel ${{ github.run_id }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # --- macOS C++ Build (Shared + Static, x86_64 + arm64) ---
+  build-macos-cpp:
+    needs: check-tag
+    if: needs.check-tag.outputs.build-cpp == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: macos-15-intel
+            brew-prefix: /usr/local
+            shared-libs: "ON"
+            package-kind: shared
+            pkg-dir: avioflow-shared-macos-x64
+            artifact-name: macos-cpp-binaries-shared-x86_64
+          - arch: x86_64
+            runner: macos-15-intel
+            brew-prefix: /usr/local
+            shared-libs: "OFF"
+            package-kind: static
+            pkg-dir: avioflow-static-macos-x64
+            artifact-name: macos-cpp-binaries-static-x86_64
+          - arch: aarch64
+            runner: macos-15
+            brew-prefix: /opt/homebrew
+            shared-libs: "ON"
+            package-kind: shared
+            pkg-dir: avioflow-shared-macos-arm64
+            artifact-name: macos-cpp-binaries-shared-aarch64
+          - arch: aarch64
+            runner: macos-15
+            brew-prefix: /opt/homebrew
+            shared-libs: "OFF"
+            package-kind: static
+            pkg-dir: avioflow-static-macos-arm64
+            artifact-name: macos-cpp-binaries-static-aarch64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Sync version metadata
+        run: python3 scripts/sync_version.py
+
+      - name: Install system dependencies
+        run: brew install openssl@3 lame opus speex libogg libvorbis libx11 libxcb libxau libxdmcp
+
+      - name: Build macOS C++ ${{ matrix.package-kind }} (${{ matrix.arch }})
+        run: |
+          export CMAKE_PREFIX_PATH="${{ matrix.brew-prefix }}/opt/openssl@3:${{ matrix.brew-prefix }}/opt/lame:${{ matrix.brew-prefix }}/opt/opus:${{ matrix.brew-prefix }}/opt/speex:${{ matrix.brew-prefix }}/opt/libogg:${{ matrix.brew-prefix }}/opt/libvorbis:${{ matrix.brew-prefix }}/opt/libx11:${{ matrix.brew-prefix }}/opt/libxcb:${{ matrix.brew-prefix }}/opt/libxau:${{ matrix.brew-prefix }}/opt/libxdmcp"
+          export CMAKE_LIBRARY_PATH="${{ matrix.brew-prefix }}/lib"
+          cmake -B build_macos_${{ matrix.package-kind }} \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0 \
+            -DBUILD_SHARED_LIBS=${{ matrix.shared-libs }} \
+            -DENABLE_WASAPI=OFF \
+            -DENABLE_PYTHON=OFF \
+            -DENABLE_NODE_JS=OFF \
+            -DENABLE_BINARY=ON
+          cmake --build build_macos_${{ matrix.package-kind }} --config Release -j "$(sysctl -n hw.logicalcpu)"
+          cmake --install build_macos_${{ matrix.package-kind }} --prefix "${{ matrix.pkg-dir }}" --config Release
+          if [ "${{ matrix.package-kind }}" = "shared" ]; then
+            for dylib in "${{ matrix.pkg-dir }}"/lib/*.dylib; do
+              [ -e "$dylib" ] || continue
+              install_name_tool -id "@rpath/$(basename "$dylib")" "$dylib" || true
+            done
+            for target in "${{ matrix.pkg-dir }}"/lib/*.dylib "${{ matrix.pkg-dir }}"/bin/*; do
+              [ -e "$target" ] || continue
+              otool -L "$target" 2>/dev/null | awk '/lib(av|sw).*\.dylib/{print $1}' | while read -r dep; do
+                install_name_tool -change "$dep" "@rpath/$(basename "$dep")" "$target" || true
+              done
+            done
+          fi
+          tar -czvf "${{ matrix.pkg-dir }}.tar.gz" "${{ matrix.pkg-dir }}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact-name }}
+          path: ${{ matrix.pkg-dir }}.tar.gz
 
   # ============================================================
   # Windows Build (C++ + Node.js + Python Wheels)
@@ -325,6 +414,52 @@ jobs:
         with:
           name: npm-win32-x64
           path: nodejs/npm-packages/@lxp3/win32-x64/
+
+      - name: Cancel workflow on failure
+        if: failure()
+        run: gh run cancel ${{ github.run_id }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # --- Build Python Wheels (macOS, Static) ---
+  build-python-macos:
+    needs: check-tag
+    if: needs.check-tag.outputs.build-python == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: macos-15-intel
+            brew-prefix: /usr/local
+          - arch: arm64
+            runner: macos-15
+            brew-prefix: /opt/homebrew
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Sync version metadata
+        run: python3 scripts/sync_version.py
+
+      - name: Build wheels
+        uses: pypa/cibuildwheel@v2.22.0
+        with:
+          package-dir: python
+          config-file: python/pyproject.toml
+        env:
+          CIBW_ARCHS_MACOS: ${{ matrix.arch }}
+          CIBW_BUILD: "cp38-* cp39-* cp310-* cp311-* cp312-* cp313-* cp314-*"
+          CIBW_SKIP: "pp*"
+          CIBW_BEFORE_BUILD_MACOS: "brew install openssl@3 lame opus speex libogg libvorbis libx11 libxcb libxau libxdmcp"
+          CIBW_ENVIRONMENT_MACOS: "CMAKE_ARGS=-DBUILD_SHARED_LIBS=OFF MACOSX_DEPLOYMENT_TARGET=12.0 CMAKE_PREFIX_PATH=${{ matrix.brew-prefix }}/opt/openssl@3:${{ matrix.brew-prefix }}/opt/lame:${{ matrix.brew-prefix }}/opt/opus:${{ matrix.brew-prefix }}/opt/speex:${{ matrix.brew-prefix }}/opt/libogg:${{ matrix.brew-prefix }}/opt/libvorbis:${{ matrix.brew-prefix }}/opt/libx11:${{ matrix.brew-prefix }}/opt/libxcb:${{ matrix.brew-prefix }}/opt/libxau:${{ matrix.brew-prefix }}/opt/libxdmcp CMAKE_LIBRARY_PATH=${{ matrix.brew-prefix }}/lib"
+          CIBW_TEST_REQUIRES: numpy
+          CIBW_TEST_COMMAND: "python {project}/python/tests/test_offline_load.py {project}/public/wavs/TownTheme.mp3"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-python-wheels-${{ matrix.arch }}
+          path: ./wheelhouse/*.whl
 
       - name: Cancel workflow on failure
         if: failure()
@@ -443,7 +578,7 @@ jobs:
   # Publish to GitHub, PyPI, NPM, and VS Code Marketplace
   # ============================================================
   publish:
-    needs: [check-tag, build-linux-cpp, build-linux-npm, build-python-linux, build-windows, build-python-windows, build-wasm, build-vsix]
+    needs: [check-tag, build-linux-cpp, build-linux-npm, build-python-linux, build-macos-cpp, build-python-macos, build-windows, build-python-windows, build-wasm, build-vsix]
     runs-on: ubuntu-latest
     if: |
       always() &&
@@ -451,6 +586,8 @@ jobs:
       (needs.check-tag.result == 'success') &&
       (needs.build-linux-cpp.result == 'success' || needs.build-linux-cpp.result == 'skipped') &&
       (needs.build-linux-npm.result == 'success' || needs.build-linux-npm.result == 'skipped') &&
+      (needs.build-macos-cpp.result == 'success' || needs.build-macos-cpp.result == 'skipped') &&
+      (needs.build-python-macos.result == 'success' || needs.build-python-macos.result == 'skipped') &&
       (needs.build-windows.result == 'success' || needs.build-windows.result == 'skipped') &&
       (needs.build-python-linux.result == 'success' || needs.build-python-linux.result == 'skipped') &&
       (needs.build-python-windows.result == 'success' || needs.build-python-windows.result == 'skipped') &&
@@ -486,14 +623,17 @@ jobs:
           # C++ binaries
           if [ "${{ needs.check-tag.outputs.build-cpp }}" == "true" ]; then
             cp artifacts/linux-cpp-binaries-*/* dist/ || true
+            cp artifacts/macos-cpp-binaries-*/* dist/ || true
             cp artifacts/windows-cpp-binaries/* dist/ || true
           fi
 
           # Python wheels
           if [ "${{ needs.check-tag.outputs.build-python }}" == "true" ]; then
             cp artifacts/linux-python-wheels/*.whl dist/ || true
+            cp artifacts/macos-python-wheels-*/*.whl dist/ || true
             cp artifacts/windows-python-wheels/*.whl dist/ || true
             cp artifacts/linux-python-wheels/*.whl pypi_dist/ || true
+            cp artifacts/macos-python-wheels-*/*.whl pypi_dist/ || true
             cp artifacts/windows-python-wheels/*.whl pypi_dist/ || true
           fi
 

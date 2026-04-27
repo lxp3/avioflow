@@ -10,6 +10,25 @@ elseif(WIN32)
     else()
         set(FFMPEG_PLATFORM_CONFIG "cmake/ffmpeg-win-static.cmake")
     endif()
+elseif(APPLE)
+    if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|amd64)$")
+        set(_ffmpeg_macos_arch "x86_64")
+    elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64)$")
+        set(_ffmpeg_macos_arch "aarch64")
+    else()
+        message(FATAL_ERROR
+            "Unsupported macOS architecture for prebuilt FFmpeg: ${CMAKE_SYSTEM_PROCESSOR}. "
+            "Supported architectures: x86_64, aarch64."
+        )
+    endif()
+
+    message(STATUS "Detected macOS FFmpeg arch: ${_ffmpeg_macos_arch}")
+
+    if(BUILD_SHARED_LIBS)
+        set(FFMPEG_PLATFORM_CONFIG "cmake/ffmpeg-macos-shared.cmake")
+    else()
+        set(FFMPEG_PLATFORM_CONFIG "cmake/ffmpeg-macos-static.cmake")
+    endif()
 else()
     if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|amd64)$")
         set(_ffmpeg_linux_arch "x86_64")

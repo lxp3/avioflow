@@ -49,6 +49,20 @@ if(MSVC)
     # Use dynamic CRT (/MD or /MDd) to match FFmpeg built with /MD
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
     add_definitions(-D_CRT_SECURE_NO_WARNINGS)
+elseif(APPLE)
+    # macOS/Clang optimizations
+    add_compile_options(
+        -O3
+        -fPIC
+        -fvisibility=hidden
+        -ffunction-sections
+        -fdata-sections
+        "-fdebug-prefix-map=${CMAKE_SOURCE_DIR}=."
+    )
+
+    add_link_options(
+        -Wl,-dead_strip
+    )
 else()
     # Linux/GCC/Clang optimizations
     add_compile_options(
@@ -84,7 +98,10 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 
 # RPATH configuration for Linux and macOS
-if(UNIX)
+if(APPLE)
+    set(CMAKE_INSTALL_RPATH "@loader_path;@loader_path/../lib")
+    set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
+elseif(UNIX)
     # Ensure that installed binaries can find libraries in the relative ../lib directory
     # $ORIGIN is for libraries in lib/ to find each other
     # $ORIGIN/../lib is for binaries in bin/ to find libraries in lib/
@@ -218,10 +235,19 @@ if(NOT SKBUILD)
             # Collect all DLLs from FFMPEG_BIN_DIR
             file(GLOB FFMPEG_DLLS "${FFMPEG_BIN_DIR}/*.dll")
             install(FILES ${FFMPEG_DLLS} DESTINATION bin)
+        elseif(APPLE)
+            # Collect all shared libraries from FFMPEG_LIB_DIR
+            file(GLOB FFMPEG_DYLIBS "${FFMPEG_LIB_DIR}/lib*.dylib")
+            install(FILES ${FFMPEG_DYLIBS} DESTINATION lib)
         elseif(UNIX)
             # Collect all shared libraries from FFMPEG_LIB_DIR
             file(GLOB FFMPEG_SOS "${FFMPEG_LIB_DIR}/lib*.so*")
             install(FILES ${FFMPEG_SOS} DESTINATION lib)
+        endif()
+    else()
+        if(APPLE)
+            file(GLOB FFMPEG_STATIC_LIBS "${FFMPEG_LIB_DIR}/lib*.a")
+            install(FILES ${FFMPEG_STATIC_LIBS} DESTINATION lib)
         endif()
     endif()
 
