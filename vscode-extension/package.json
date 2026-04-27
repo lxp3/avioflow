@@ -2,7 +2,7 @@
   "name": "avioflow",
   "displayName": "Avioflow",
   "description": "High-performance audio engine and toolkit for VS Code",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "publisher": "lxp3",
   "repository": {
     "type": "git",
