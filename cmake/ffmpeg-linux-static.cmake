@@ -27,7 +27,6 @@ set(FFMPEG_SYSTEM_LIBS
     va      # apt install libva-dev
     ssl
     crypto
-    atomic
     X11
     xcb
     Xau
@@ -38,6 +37,11 @@ set(FFMPEG_SYSTEM_LIBS
     vorbis
     ogg
 )
+
+find_library(ATOMIC_LIBRARY atomic)
+if(ATOMIC_LIBRARY)
+    list(APPEND FFMPEG_SYSTEM_LIBS "${ATOMIC_LIBRARY}")
+endif()
 
 # Apply these to all FFmpeg targets
 foreach(LIB IN LISTS FFMPEG_LIBS)
