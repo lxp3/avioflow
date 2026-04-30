@@ -227,6 +227,8 @@ jobs:
             mkdir -p "$DEPS_PREFIX" &&
             export PKG_CONFIG_PATH="$DEPS_PREFIX/lib/pkgconfig:$DEPS_PREFIX/lib64/pkgconfig" &&
             export CPPFLAGS="-I$DEPS_PREFIX/include" &&
+            export CFLAGS="-fPIC" &&
+            export CXXFLAGS="-fPIC" &&
             export LDFLAGS="-L$DEPS_PREFIX/lib -L$DEPS_PREFIX/lib64" &&
             export PATH="$DEPS_PREFIX/bin:$PATH" &&
 
