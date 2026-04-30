@@ -18,6 +18,7 @@ jobs:
   #   v0.1.5       -> Build and publish everything (C++, Python, npm)
   #   v0.1.5-cpp   -> Build and publish C++ only
   #   v0.1.5-py    -> Build and publish Python wheels only
+  #   v0.1.5-py-linux -> Build and publish Linux Python wheels only
   #   v0.1.5-npm   -> Build and publish npm only
   #   v0.1.5-vsix  -> Build and publish VS Code extension only
   # ============================================================
@@ -29,6 +30,7 @@ jobs:
       build-npm: ${{ steps.check.outputs.build-npm }}
       build-wasm: ${{ steps.check.outputs.build-wasm }}
       build-vsix: ${{ steps.check.outputs.build-vsix }}
+      python-target: ${{ steps.check.outputs.python-target }}
       tag-name: ${{ steps.check.outputs.tag-name }}
     steps:
       - name: Check tag format
@@ -43,11 +45,16 @@ jobs:
           BUILD_NPM="false"
           BUILD_WASM="false"
           BUILD_VSIX="false"
+          PYTHON_TARGET="all"
           
           # Check tag suffix
           if [[ "$TAG" =~ -cpp$ ]]; then
             echo "Tag ends with -cpp: Building C++ only"
             BUILD_CPP="true"
+          elif [[ "$TAG" =~ -py-linux$ ]]; then
+            echo "Tag ends with -py-linux: Building Linux Python wheels only"
+            BUILD_PYTHON="true"
+            PYTHON_TARGET="linux"
           elif [[ "$TAG" =~ -py$ ]]; then
             echo "Tag ends with -py: Building Python wheels only"
             BUILD_PYTHON="true"
@@ -64,7 +71,7 @@ jobs:
             BUILD_NPM="true"
           else
             echo "Unknown tag format: $TAG"
-            echo "Supported formats: v0.1.5, v0.1.5-cpp, v0.1.5-py, v0.1.5-npm, v0.1.5-vsix"
+            echo "Supported formats: v0.1.5, v0.1.5-cpp, v0.1.5-py, v0.1.5-py-linux, v0.1.5-npm, v0.1.5-vsix"
             exit 1
           fi
           
@@ -73,11 +80,13 @@ jobs:
           echo "build-npm=$BUILD_NPM" >> $GITHUB_OUTPUT
           echo "build-wasm=$BUILD_WASM" >> $GITHUB_OUTPUT
           echo "build-vsix=$BUILD_VSIX" >> $GITHUB_OUTPUT
+          echo "python-target=$PYTHON_TARGET" >> $GITHUB_OUTPUT
           
           echo "Build configuration:"
           echo "  C++: $BUILD_CPP"
           echo "  Python: $BUILD_PYTHON"
           echo "  npm: $BUILD_NPM"
+          echo "  Python target: $PYTHON_TARGET"
           echo "  VS Code Extension: $BUILD_VSIX"
 
   # ============================================================
@@ -181,7 +190,7 @@ jobs:
   # --- Build Python Wheels (Linux, Shared) ---
   build-python-linux:
     needs: check-tag
-    if: needs.check-tag.outputs.build-python == 'true'
+    if: needs.check-tag.outputs.build-python == 'true' && (needs.check-tag.outputs.python-target == 'all' || needs.check-tag.outputs.python-target == 'linux')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -451,7 +460,7 @@ jobs:
   # --- Build Python Wheels (macOS, Static) ---
   build-python-macos:
     needs: check-tag
-    if: needs.check-tag.outputs.build-python == 'true'
+    if: needs.check-tag.outputs.build-python == 'true' && needs.check-tag.outputs.python-target == 'all'
     strategy:
       fail-fast: false
       matrix:
@@ -497,7 +506,7 @@ jobs:
   # --- Build Python Wheels (Windows, Shared) ---
   build-python-windows:
     needs: check-tag
-    if: needs.check-tag.outputs.build-python == 'true'
+    if: needs.check-tag.outputs.build-python == 'true' && needs.check-tag.outputs.python-target == 'all'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
