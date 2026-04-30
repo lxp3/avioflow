@@ -10,8 +10,17 @@ endif()
 
 set(LIB_TYPE STATIC)
 
+set(_AVIOFLOW_ORIGINAL_FIND_LIBRARY_SUFFIXES ${CMAKE_FIND_LIBRARY_SUFFIXES})
+set(CMAKE_FIND_LIBRARY_SUFFIXES .a)
 find_library(SSL_LIBRARY ssl REQUIRED)
 find_library(CRYPTO_LIBRARY crypto REQUIRED)
+find_library(MP3LAME_LIBRARY mp3lame REQUIRED)
+find_library(OPUS_LIBRARY opus REQUIRED)
+find_library(SPEEX_LIBRARY speex REQUIRED)
+find_library(VORBISENC_LIBRARY vorbisenc REQUIRED)
+find_library(VORBIS_LIBRARY vorbis REQUIRED)
+find_library(OGG_LIBRARY ogg REQUIRED)
+set(CMAKE_FIND_LIBRARY_SUFFIXES ${_AVIOFLOW_ORIGINAL_FIND_LIBRARY_SUFFIXES})
 
 # FFmpeg Linux Static System Libraries
 # When linking FFmpeg static libraries on Linux, we need to link several 
@@ -33,12 +42,12 @@ set(FFMPEG_SYSTEM_LIBS
     X11
     xcb
     Xau
-    mp3lame
-    opus
-    speex
-    vorbisenc
-    vorbis
-    ogg
+    ${MP3LAME_LIBRARY}
+    ${OPUS_LIBRARY}
+    ${SPEEX_LIBRARY}
+    ${VORBISENC_LIBRARY}
+    ${VORBIS_LIBRARY}
+    ${OGG_LIBRARY}
 )
 
 find_library(ATOMIC_LIBRARY atomic)
