@@ -188,7 +188,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # --- Build Python Wheels (Linux, Shared) ---
-  build-python-linux:
+  build-python-linux-x86_64:
     needs: check-tag
     if: needs.check-tag.outputs.build-python == 'true' && (needs.check-tag.outputs.python-target == 'all' || needs.check-tag.outputs.python-target == 'linux')
     runs-on: ubuntu-latest
@@ -198,18 +198,13 @@ jobs:
       - name: Sync version metadata
         run: python3 scripts/sync_version.py
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-        with:
-          platforms: arm64
-
       - name: Build wheels
         uses: pypa/cibuildwheel@v2.22.0
         with:
           package-dir: python
           config-file: python/pyproject.toml
         env:
-          CIBW_ARCHS_LINUX: "x86_64 aarch64"
+          CIBW_ARCHS_LINUX: "x86_64"
           CIBW_BUILD: "cp38-* cp39-* cp310-* cp311-* cp312-* cp313-* cp314-*"
           CIBW_SKIP: "pp* *-musllinux*"
           CIBW_MANYLINUX_X86_64_IMAGE: manylinux2014
@@ -311,7 +306,139 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: linux-python-wheels
+          name: linux-python-wheels-x86_64
+          path: ./wheelhouse/*.whl
+
+      - name: Cancel workflow on failure
+        if: failure()
+        run: gh run cancel ${{ github.run_id }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-python-linux-arm64:
+    needs: check-tag
+    if: needs.check-tag.outputs.build-python == 'true' && (needs.check-tag.outputs.python-target == 'all' || needs.check-tag.outputs.python-target == 'linux')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Sync version metadata
+        run: python3 scripts/sync_version.py
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - name: Build wheels
+        uses: pypa/cibuildwheel@v2.22.0
+        with:
+          package-dir: python
+          config-file: python/pyproject.toml
+        env:
+          CIBW_ARCHS_LINUX: "aarch64"
+          CIBW_BUILD: "cp38-* cp39-* cp310-* cp311-* cp312-* cp313-* cp314-*"
+          CIBW_SKIP: "pp* *-musllinux*"
+          CIBW_MANYLINUX_X86_64_IMAGE: manylinux2014
+          CIBW_MANYLINUX_AARCH64_IMAGE: manylinux2014
+          CIBW_BEFORE_ALL_LINUX: |
+            set -euo pipefail
+            if command -v dnf >/dev/null 2>&1; then
+              dnf install -y make autoconf automake libtool pkgconfig perl-core tar xz alsa-lib-devel libX11-devel libxcb-devel libXau-devel zlib-devel bzip2-devel xz-devel libva-devel libdrm-devel libatomic
+            else
+              yum install -y epel-release
+              yum install -y make autoconf automake libtool pkgconfig perl-core tar xz alsa-lib-devel libX11-devel libxcb-devel libXau-devel zlib-devel bzip2-devel xz-devel libva-devel libdrm-devel libatomic
+            fi
+
+            DEPS_PREFIX=/opt/ffmpeg-deps &&
+            mkdir -p "$DEPS_PREFIX" &&
+            export PKG_CONFIG_PATH="$DEPS_PREFIX/lib/pkgconfig:$DEPS_PREFIX/lib64/pkgconfig" &&
+            export CPPFLAGS="-I$DEPS_PREFIX/include" &&
+            export CFLAGS="-fPIC" &&
+            export CXXFLAGS="-fPIC" &&
+            export LDFLAGS="-L$DEPS_PREFIX/lib -L$DEPS_PREFIX/lib64" &&
+            export PATH="$DEPS_PREFIX/bin:$PATH" &&
+
+            build_autotools_dep() {
+              local name="$1"
+              local version="$2"
+              local url="$3"
+              local dir="$4"
+              local lib_name="$5"
+              shift 5
+              local mirrors=("$@")
+
+              if [ -f "$DEPS_PREFIX/lib/${lib_name}" ] || [ -f "$DEPS_PREFIX/lib64/${lib_name}" ]; then
+                return 0
+              fi
+              rm -rf "/tmp/$dir"
+
+              local downloaded=0
+              for try_url in "$url" "${mirrors[@]}"; do
+                echo "Trying to download from: $try_url"
+                if curl -4 --connect-timeout 30 --max-time 300 --retry 3 --retry-delay 2 -fsSL "$try_url" -o "/tmp/$name-$version.tar.gz"; then
+                  downloaded=1
+                  break
+                fi
+                echo "Failed to download from $try_url, trying next mirror..."
+              done
+
+              if [ $downloaded -eq 0 ]; then
+                echo "Failed to download $name from all sources" >&2
+                exit 1
+              fi
+
+              tar -xzf "/tmp/$name-$version.tar.gz" -C /tmp
+              cd "/tmp/$dir"
+              ./configure --prefix="$DEPS_PREFIX" --libdir="$DEPS_PREFIX/lib" --disable-dependency-tracking --disable-shared --enable-static
+              make -j"$(nproc)"
+              make install
+              if [ ! -f "$DEPS_PREFIX/lib/${lib_name}" ] && [ ! -f "$DEPS_PREFIX/lib64/${lib_name}" ]; then
+                echo "Missing static dependency after building $name: $lib_name under $DEPS_PREFIX/lib or $DEPS_PREFIX/lib64" >&2
+                find "$DEPS_PREFIX" -maxdepth 3 -type f -name '*.a' -print >&2 || true
+                exit 1
+              fi
+              cd /project
+            }
+
+            verify_static_dep() {
+              local name="$1"
+              if [ ! -f "$DEPS_PREFIX/lib/lib${name}.a" ] && [ ! -f "$DEPS_PREFIX/lib64/lib${name}.a" ]; then
+                echo "Missing static dependency: lib${name}.a under $DEPS_PREFIX/lib or $DEPS_PREFIX/lib64" >&2
+                find "$DEPS_PREFIX" -maxdepth 3 -type f -name '*.a' -print >&2 || true
+                exit 1
+              fi
+            }
+
+            curl -4 --connect-timeout 30 --max-time 300 --retry 10 --retry-delay 3 --retry-max-time 600 -fsSL https://www.openssl.org/source/openssl-3.0.14.tar.gz -o /tmp/openssl-3.0.14.tar.gz &&
+            tar -xzf /tmp/openssl-3.0.14.tar.gz -C /tmp &&
+            cd /tmp/openssl-3.0.14 &&
+            if [ "$(uname -m)" = "aarch64" ]; then OPENSSL_TARGET=linux-aarch64; else OPENSSL_TARGET=linux-x86_64; fi &&
+            ./Configure "$OPENSSL_TARGET" no-shared --prefix="$DEPS_PREFIX" --libdir=lib &&
+            make -j"$(nproc)" &&
+            make install_sw &&
+            cd /project &&
+            build_autotools_dep ogg 1.3.5 https://downloads.xiph.org/releases/ogg/libogg-1.3.5.tar.gz libogg-1.3.5 libogg.a https://ftp.osuosl.org/pub/xiph/releases/ogg/libogg-1.3.5.tar.gz https://github.com/xiph/ogg/releases/download/v1.3.5/libogg-1.3.5.tar.gz &&
+            build_autotools_dep vorbis 1.3.7 https://downloads.xiph.org/releases/vorbis/libvorbis-1.3.7.tar.gz libvorbis-1.3.7 libvorbis.a https://ftp.osuosl.org/pub/xiph/releases/vorbis/libvorbis-1.3.7.tar.gz https://github.com/xiph/vorbis/releases/download/v1.3.7/libvorbis-1.3.7.tar.gz &&
+            build_autotools_dep speex 1.2.1 https://downloads.xiph.org/releases/speex/speex-1.2.1.tar.gz speex-1.2.1 libspeex.a https://ftp.osuosl.org/pub/xiph/releases/speex/speex-1.2.1.tar.gz https://github.com/xiph/speex/releases/download/Speex-1.2.1/speex-1.2.1.tar.gz &&
+            build_autotools_dep opus 1.5.2 https://downloads.xiph.org/releases/opus/opus-1.5.2.tar.gz opus-1.5.2 libopus.a https://ftp.osuosl.org/pub/xiph/releases/opus/opus-1.5.2.tar.gz https://github.com/xiph/opus/releases/download/v1.5.2/opus-1.5.2.tar.gz &&
+            build_autotools_dep lame 3.100 https://downloads.sourceforge.net/project/lame/lame/3.100/lame-3.100.tar.gz lame-3.100 libmp3lame.a https://sourceforge.net/projects/lame/files/lame/3.100/lame-3.100.tar.gz/download &&
+            verify_static_dep ssl &&
+            verify_static_dep crypto &&
+            verify_static_dep ogg &&
+            verify_static_dep vorbis &&
+            verify_static_dep vorbisenc &&
+            verify_static_dep speex &&
+            verify_static_dep opus &&
+            verify_static_dep mp3lame
+          CIBW_ENVIRONMENT_LINUX: "CMAKE_ARGS='-DBUILD_SHARED_LIBS=OFF -DCMAKE_PREFIX_PATH=/opt/ffmpeg-deps -DCMAKE_LIBRARY_PATH=/opt/ffmpeg-deps/lib;/opt/ffmpeg-deps/lib64' CMAKE_PREFIX_PATH=/opt/ffmpeg-deps CMAKE_LIBRARY_PATH='/opt/ffmpeg-deps/lib:/opt/ffmpeg-deps/lib64'"
+          CIBW_REPAIR_WHEEL_COMMAND_LINUX: "auditwheel repair -w {dest_dir} {wheel}"
+          CIBW_TEST_REQUIRES: numpy
+          CIBW_TEST_COMMAND: "python {project}/python/tests/test_offline_load.py {project}/public/wavs/TownTheme.mp3"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-python-wheels-arm64
           path: ./wheelhouse/*.whl
 
       - name: Cancel workflow on failure
@@ -548,7 +675,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # --- Build Python Wheels (Windows, Shared) ---
-  build-python-windows:
+  build-python-windows-x86_64:
     needs: check-tag
     if: needs.check-tag.outputs.build-python == 'true' && needs.check-tag.outputs.python-target == 'all'
     runs-on: windows-latest
@@ -574,7 +701,42 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: windows-python-wheels
+          name: windows-python-wheels-x86_64
+          path: ./wheelhouse/*.whl
+
+      - name: Cancel workflow on failure
+        if: failure()
+        run: gh run cancel ${{ github.run_id }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-python-windows-arm64:
+    needs: check-tag
+    if: needs.check-tag.outputs.build-python == 'true' && needs.check-tag.outputs.python-target == 'all'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Sync version metadata
+        shell: pwsh
+        run: python scripts/sync_version.py
+
+      - name: Build wheels
+        uses: pypa/cibuildwheel@v2.22.0
+        with:
+          package-dir: python
+          config-file: python/pyproject.toml
+        env:
+          CIBW_ARCHS_WINDOWS: ARM64
+          CIBW_BUILD: "cp38-* cp39-* cp310-* cp311-* cp312-* cp313-* cp314-*"
+          CIBW_SKIP: "pp* *-win32"
+          CIBW_ENVIRONMENT_WINDOWS: "CMAKE_ARGS=-DBUILD_SHARED_LIBS=ON"
+          CIBW_TEST_REQUIRES: numpy
+          CIBW_TEST_COMMAND: "python {project}/python/tests/test_offline_load.py {project}/public/wavs/TownTheme.mp3"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-python-wheels-arm64
           path: ./wheelhouse/*.whl
 
       - name: Cancel workflow on failure
@@ -658,7 +820,7 @@ jobs:
   # Publish to GitHub, PyPI, NPM, and VS Code Marketplace
   # ============================================================
   publish:
-    needs: [check-tag, build-linux-cpp, build-linux-npm, build-python-linux, build-macos-cpp, build-python-macos, build-windows, build-python-windows, build-wasm, build-vsix]
+    needs: [check-tag, build-linux-cpp, build-linux-npm, build-python-linux-x86_64, build-python-linux-arm64, build-macos-cpp, build-python-macos, build-windows, build-python-windows-x86_64, build-python-windows-arm64, build-wasm, build-vsix]
     runs-on: ubuntu-latest
     if: |
       always() &&
@@ -669,7 +831,10 @@ jobs:
       (needs.build-macos-cpp.result == 'success' || needs.build-macos-cpp.result == 'skipped') &&
       (needs.build-python-macos.result == 'success' || needs.build-python-macos.result == 'skipped') &&
       (needs.build-windows.result == 'success' || needs.build-windows.result == 'skipped') &&
-      (needs.build-python-linux.result == 'success' || needs.build-python-linux.result == 'skipped') &&
+      (needs.build-python-linux-x86_64.result == 'success' || needs.build-python-linux-x86_64.result == 'skipped') &&
+      (needs.build-python-linux-arm64.result == 'success' || needs.build-python-linux-arm64.result == 'skipped') &&
+      (needs.build-python-windows-x86_64.result == 'success' || needs.build-python-windows-x86_64.result == 'skipped') &&
+      (needs.build-python-windows-arm64.result == 'success' || needs.build-python-windows-arm64.result == 'skipped') &&
       (needs.build-python-windows.result == 'success' || needs.build-python-windows.result == 'skipped') &&
       (needs.build-wasm.result == 'success' || needs.build-wasm.result == 'skipped') &&
       (needs.build-vsix.result == 'success' || needs.build-vsix.result == 'skipped')
@@ -709,12 +874,16 @@ jobs:
 
           # Python wheels
           if [ "${{ needs.check-tag.outputs.build-python }}" == "true" ]; then
-            cp artifacts/linux-python-wheels/*.whl dist/ || true
+            cp artifacts/linux-python-wheels-x86_64/*.whl dist/ || true
+            cp artifacts/linux-python-wheels-arm64/*.whl dist/ || true
             cp artifacts/macos-python-wheels-*/*.whl dist/ || true
-            cp artifacts/windows-python-wheels/*.whl dist/ || true
-            cp artifacts/linux-python-wheels/*.whl pypi_dist/ || true
+            cp artifacts/windows-python-wheels-x86_64/*.whl dist/ || true
+            cp artifacts/windows-python-wheels-arm64/*.whl dist/ || true
+            cp artifacts/linux-python-wheels-x86_64/*.whl pypi_dist/ || true
+            cp artifacts/linux-python-wheels-arm64/*.whl pypi_dist/ || true
             cp artifacts/macos-python-wheels-*/*.whl pypi_dist/ || true
-            cp artifacts/windows-python-wheels/*.whl pypi_dist/ || true
+            cp artifacts/windows-python-wheels-x86_64/*.whl pypi_dist/ || true
+            cp artifacts/windows-python-wheels-arm64/*.whl pypi_dist/ || true
           fi
 
           # WASM Engine
