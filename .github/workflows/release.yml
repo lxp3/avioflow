@@ -141,7 +141,7 @@ jobs:
   # ============================================================
   # Linux Node.js Build (Modern - manylinux_2_28)
   # ============================================================
-  build-linux-npm:
+  build-linux-npm-x64:
     needs: check-tag
     if: needs.check-tag.outputs.build-npm == 'true'
     runs-on: ubuntu-latest
@@ -180,10 +180,59 @@ jobs:
 
       - name: Cancel workflow on failure
         if: failure()
+        run: gh run cancel ${{ github.run_id }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-linux-npm-arm64:
+    needs: check-tag
+    if: needs.check-tag.outputs.build-npm == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Sync version metadata
+        run: python3 scripts/sync_version.py
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - name: Build in manylinux_2_28 container
         run: |
-          curl -X POST -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-            -H "Accept: application/vnd.github.v3+json" \
-            "https://api.github.com/repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/cancel"
+          docker run --rm --platform linux/arm64 \
+            -v $(pwd):/io -w /io \
+            quay.io/pypa/manylinux_2_28_aarch64 \
+            bash -c "
+              dnf install -y bzip2-devel xz-devel libva-devel libdrm-devel && \
+              curl -fsSL https://rpm.nodesource.com/setup_20.x | bash - && \
+              dnf install -y nodejs && \
+              npm install -g pnpm && \
+              bash build-nodejs.sh && \
+              cp build-nodejs/bin/avioflow.node nodejs/npm-packages/@lxp3/linux-arm64/avioflow.node
+            "
+
+      - name: Verify Node.js Addon
+        run: |
+          docker run --rm --platform linux/arm64 \
+            -v $(pwd):/io -w /io/nodejs \
+            quay.io/pypa/manylinux_2_28_aarch64 \
+            bash -c "
+              curl -fsSL https://rpm.nodesource.com/setup_20.x | bash - && \
+              dnf install -y nodejs && \
+              export AVIOFLOW_BINDINGS_PATH=\"\$(pwd)/npm-packages/@lxp3/linux-arm64/avioflow.node\" && \
+              node tests/test-offline-load.js
+            "
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: npm-linux-arm64
+          path: nodejs/npm-packages/@lxp3/linux-arm64/
+
+      - name: Cancel workflow on failure
+        if: failure()
+        run: gh run cancel ${{ github.run_id }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -628,6 +677,99 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  # --- Build macOS Node.js Addon ---
+  build-macos-npm-x64:
+    needs: check-tag
+    if: needs.check-tag.outputs.build-npm == 'true'
+    runs-on: macos-15-intel
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Sync version metadata
+        run: python3 scripts/sync_version.py
+
+      - name: Install system dependencies
+        run: brew install openssl@3 lame opus speex libogg libvorbis
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build Node.js Addon
+        run: |
+          export CMAKE_PREFIX_PATH="/usr/local/opt/openssl@3:/usr/local/opt/lame:/usr/local/opt/opus:/usr/local/opt/speex:/usr/local/opt/libogg:/usr/local/opt/libvorbis"
+          bash build-nodejs.sh
+          cp build-nodejs/bin/avioflow.node nodejs/npm-packages/@lxp3/darwin-x64/avioflow.node
+
+      - name: Verify Node.js Addon
+        working-directory: nodejs
+        run: |
+          export AVIOFLOW_BINDINGS_PATH="$(pwd)/npm-packages/@lxp3/darwin-x64/avioflow.node"
+          node tests/test-offline-load.js
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: npm-darwin-x64
+          path: nodejs/npm-packages/@lxp3/darwin-x64/
+
+      - name: Cancel workflow on failure
+        if: failure()
+        run: gh run cancel ${{ github.run_id }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-macos-npm-arm64:
+    needs: check-tag
+    if: needs.check-tag.outputs.build-npm == 'true'
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Sync version metadata
+        run: python3 scripts/sync_version.py
+
+      - name: Install system dependencies
+        run: brew install openssl@3 lame opus speex libogg libvorbis
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build Node.js Addon
+        run: |
+          export CMAKE_PREFIX_PATH="/opt/homebrew/opt/openssl@3:/opt/homebrew/opt/lame:/opt/homebrew/opt/opus:/opt/homebrew/opt/speex:/opt/homebrew/opt/libogg:/opt/homebrew/opt/libvorbis"
+          bash build-nodejs.sh
+          cp build-nodejs/bin/avioflow.node nodejs/npm-packages/@lxp3/darwin-arm64/avioflow.node
+
+      - name: Verify Node.js Addon
+        working-directory: nodejs
+        run: |
+          export AVIOFLOW_BINDINGS_PATH="$(pwd)/npm-packages/@lxp3/darwin-arm64/avioflow.node"
+          node tests/test-offline-load.js
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: npm-darwin-arm64
+          path: nodejs/npm-packages/@lxp3/darwin-arm64/
+
+      - name: Cancel workflow on failure
+        if: failure()
+        run: gh run cancel ${{ github.run_id }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   # --- Build Python Wheels (macOS, Static) ---
   build-python-macos:
     needs: check-tag
@@ -785,14 +927,17 @@ jobs:
   # Publish to GitHub, PyPI, NPM, and VS Code Marketplace
   # ============================================================
   publish:
-    needs: [check-tag, build-linux-cpp, build-linux-npm, build-python-linux-x86_64, build-python-linux-arm64, build-macos-cpp, build-python-macos, build-windows, build-python-windows-x86_64, build-wasm, build-vsix]
+    needs: [check-tag, build-linux-cpp, build-linux-npm-x64, build-linux-npm-arm64, build-macos-npm-x64, build-macos-npm-arm64, build-python-linux-x86_64, build-python-linux-arm64, build-macos-cpp, build-python-macos, build-windows, build-python-windows-x86_64, build-wasm, build-vsix]
     runs-on: ubuntu-latest
     if: |
       always() &&
       startsWith(github.ref, 'refs/tags/') &&
       (needs.check-tag.result == 'success') &&
       (needs.build-linux-cpp.result == 'success' || needs.build-linux-cpp.result == 'skipped') &&
-      (needs.build-linux-npm.result == 'success' || needs.build-linux-npm.result == 'skipped') &&
+      (needs.build-linux-npm-x64.result == 'success' || needs.build-linux-npm-x64.result == 'skipped') &&
+      (needs.build-linux-npm-arm64.result == 'success' || needs.build-linux-npm-arm64.result == 'skipped') &&
+      (needs.build-macos-npm-x64.result == 'success' || needs.build-macos-npm-x64.result == 'skipped') &&
+      (needs.build-macos-npm-arm64.result == 'success' || needs.build-macos-npm-arm64.result == 'skipped') &&
       (needs.build-macos-cpp.result == 'success' || needs.build-macos-cpp.result == 'skipped') &&
       (needs.build-python-macos.result == 'success' || needs.build-python-macos.result == 'skipped') &&
       (needs.build-windows.result == 'success' || needs.build-windows.result == 'skipped') &&
@@ -896,6 +1041,48 @@ jobs:
       - name: Publish @lxp3/linux-x64 to NPM
         if: needs.check-tag.outputs.build-npm == 'true'
         working-directory: nodejs/npm-packages/@lxp3/linux-x64
+        run: |
+          PACKAGE_NAME=$(node -p "require('./package.json').name")
+          PACKAGE_VERSION=$(node -p "require('./package.json').version")
+          if npm view "$PACKAGE_NAME@$PACKAGE_VERSION" version > /dev/null 2>&1; then
+            echo "Version $PACKAGE_VERSION of $PACKAGE_NAME already exists. Skipping."
+          else
+            pnpm publish --no-git-checks --access public
+          fi
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish @lxp3/linux-arm64 to NPM
+        if: needs.check-tag.outputs.build-npm == 'true'
+        working-directory: nodejs/npm-packages/@lxp3/linux-arm64
+        run: |
+          PACKAGE_NAME=$(node -p "require('./package.json').name")
+          PACKAGE_VERSION=$(node -p "require('./package.json').version")
+          if npm view "$PACKAGE_NAME@$PACKAGE_VERSION" version > /dev/null 2>&1; then
+            echo "Version $PACKAGE_VERSION of $PACKAGE_NAME already exists. Skipping."
+          else
+            pnpm publish --no-git-checks --access public
+          fi
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish @lxp3/darwin-x64 to NPM
+        if: needs.check-tag.outputs.build-npm == 'true'
+        working-directory: nodejs/npm-packages/@lxp3/darwin-x64
+        run: |
+          PACKAGE_NAME=$(node -p "require('./package.json').name")
+          PACKAGE_VERSION=$(node -p "require('./package.json').version")
+          if npm view "$PACKAGE_NAME@$PACKAGE_VERSION" version > /dev/null 2>&1; then
+            echo "Version $PACKAGE_VERSION of $PACKAGE_NAME already exists. Skipping."
+          else
+            pnpm publish --no-git-checks --access public
+          fi
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish @lxp3/darwin-arm64 to NPM
+        if: needs.check-tag.outputs.build-npm == 'true'
+        working-directory: nodejs/npm-packages/@lxp3/darwin-arm64
         run: |
           PACKAGE_NAME=$(node -p "require('./package.json').name")
           PACKAGE_VERSION=$(node -p "require('./package.json').version")
