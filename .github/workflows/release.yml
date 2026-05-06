@@ -237,7 +237,7 @@ jobs:
               local version="$2"
               local url="$3"
               local dir="$4"
-              if pkg-config --exists "$name"; then
+              if [ -f "$DEPS_PREFIX/lib/lib${name}.a" ] || [ -f "$DEPS_PREFIX/lib64/lib${name}.a" ]; then
                 return 0
               fi
               curl -fsSL "$url" -o "/tmp/$name-$version.tar.gz"
