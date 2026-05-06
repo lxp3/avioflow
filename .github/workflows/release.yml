@@ -710,41 +710,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  build-python-windows-arm64:
-    needs: check-tag
-    if: needs.check-tag.outputs.build-python == 'true' && needs.check-tag.outputs.python-target == 'all'
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Sync version metadata
-        shell: pwsh
-        run: python scripts/sync_version.py
-
-      - name: Build wheels
-        uses: pypa/cibuildwheel@v2.22.0
-        with:
-          package-dir: python
-          config-file: python/pyproject.toml
-        env:
-          CIBW_ARCHS_WINDOWS: ARM64
-          CIBW_BUILD: "cp38-* cp39-* cp310-* cp311-* cp312-* cp313-* cp314-*"
-          CIBW_SKIP: "pp* *-win32"
-          CIBW_ENVIRONMENT_WINDOWS: "CMAKE_ARGS=-DBUILD_SHARED_LIBS=ON"
-          CIBW_TEST_REQUIRES: numpy
-          CIBW_TEST_COMMAND: "python {project}/python/tests/test_offline_load.py {project}/public/wavs/TownTheme.mp3"
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: windows-python-wheels-arm64
-          path: ./wheelhouse/*.whl
-
-      - name: Cancel workflow on failure
-        if: failure()
-        run: gh run cancel ${{ github.run_id }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
   # ============================================================
   # Build WASM Engine (Platform Independent)
   # ============================================================
@@ -820,7 +785,7 @@ jobs:
   # Publish to GitHub, PyPI, NPM, and VS Code Marketplace
   # ============================================================
   publish:
-    needs: [check-tag, build-linux-cpp, build-linux-npm, build-python-linux-x86_64, build-python-linux-arm64, build-macos-cpp, build-python-macos, build-windows, build-python-windows-x86_64, build-python-windows-arm64, build-wasm, build-vsix]
+    needs: [check-tag, build-linux-cpp, build-linux-npm, build-python-linux-x86_64, build-python-linux-arm64, build-macos-cpp, build-python-macos, build-windows, build-python-windows-x86_64, build-wasm, build-vsix]
     runs-on: ubuntu-latest
     if: |
       always() &&
@@ -834,7 +799,6 @@ jobs:
       (needs.build-python-linux-x86_64.result == 'success' || needs.build-python-linux-x86_64.result == 'skipped') &&
       (needs.build-python-linux-arm64.result == 'success' || needs.build-python-linux-arm64.result == 'skipped') &&
       (needs.build-python-windows-x86_64.result == 'success' || needs.build-python-windows-x86_64.result == 'skipped') &&
-      (needs.build-python-windows-arm64.result == 'success' || needs.build-python-windows-arm64.result == 'skipped') &&
       (needs.build-python-windows.result == 'success' || needs.build-python-windows.result == 'skipped') &&
       (needs.build-wasm.result == 'success' || needs.build-wasm.result == 'skipped') &&
       (needs.build-vsix.result == 'success' || needs.build-vsix.result == 'skipped')
@@ -878,12 +842,10 @@ jobs:
             cp artifacts/linux-python-wheels-arm64/*.whl dist/ || true
             cp artifacts/macos-python-wheels-*/*.whl dist/ || true
             cp artifacts/windows-python-wheels-x86_64/*.whl dist/ || true
-            cp artifacts/windows-python-wheels-arm64/*.whl dist/ || true
             cp artifacts/linux-python-wheels-x86_64/*.whl pypi_dist/ || true
             cp artifacts/linux-python-wheels-arm64/*.whl pypi_dist/ || true
             cp artifacts/macos-python-wheels-*/*.whl pypi_dist/ || true
             cp artifacts/windows-python-wheels-x86_64/*.whl pypi_dist/ || true
-            cp artifacts/windows-python-wheels-arm64/*.whl pypi_dist/ || true
           fi
 
           # WASM Engine
