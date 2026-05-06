@@ -799,7 +799,6 @@ jobs:
       (needs.build-python-linux-x86_64.result == 'success' || needs.build-python-linux-x86_64.result == 'skipped') &&
       (needs.build-python-linux-arm64.result == 'success' || needs.build-python-linux-arm64.result == 'skipped') &&
       (needs.build-python-windows-x86_64.result == 'success' || needs.build-python-windows-x86_64.result == 'skipped') &&
-      (needs.build-python-windows.result == 'success' || needs.build-python-windows.result == 'skipped') &&
       (needs.build-wasm.result == 'success' || needs.build-wasm.result == 'skipped') &&
       (needs.build-vsix.result == 'success' || needs.build-vsix.result == 'skipped')
     steps:
