@@ -242,7 +242,7 @@ jobs:
                 return 0
               fi
               rm -rf "/tmp/$dir"
-              curl -fsSL "$url" -o "/tmp/$name-$version.tar.gz"
+              curl -4 --retry 5 --retry-all-errors --retry-delay 2 -fsSL "$url" -o "/tmp/$name-$version.tar.gz"
               tar -xzf "/tmp/$name-$version.tar.gz" -C /tmp
               cd "/tmp/$dir"
               ./configure --prefix="$DEPS_PREFIX" --libdir="$DEPS_PREFIX/lib" --disable-dependency-tracking --disable-shared --enable-static
@@ -265,7 +265,7 @@ jobs:
               fi
             }
 
-            curl -fsSL https://www.openssl.org/source/openssl-3.0.14.tar.gz -o /tmp/openssl-3.0.14.tar.gz &&
+            curl -4 --retry 5 --retry-all-errors --retry-delay 2 -fsSL https://www.openssl.org/source/openssl-3.0.14.tar.gz -o /tmp/openssl-3.0.14.tar.gz &&
             tar -xzf /tmp/openssl-3.0.14.tar.gz -C /tmp &&
             cd /tmp/openssl-3.0.14 &&
             if [ "$(uname -m)" = "aarch64" ]; then OPENSSL_TARGET=linux-aarch64; else OPENSSL_TARGET=linux-x86_64; fi &&
