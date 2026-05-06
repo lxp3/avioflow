@@ -238,11 +238,29 @@ jobs:
               local url="$3"
               local dir="$4"
               local lib_name="$5"
+              shift 5
+              local mirrors=("$@")
+
               if [ -f "$DEPS_PREFIX/lib/${lib_name}" ] || [ -f "$DEPS_PREFIX/lib64/${lib_name}" ]; then
                 return 0
               fi
               rm -rf "/tmp/$dir"
-              curl -4 --retry 5 --retry-delay 2 -fsSL "$url" -o "/tmp/$name-$version.tar.gz"
+
+              local downloaded=0
+              for try_url in "$url" "${mirrors[@]}"; do
+                echo "Trying to download from: $try_url"
+                if curl -4 --connect-timeout 30 --max-time 300 --retry 3 --retry-delay 2 -fsSL "$try_url" -o "/tmp/$name-$version.tar.gz"; then
+                  downloaded=1
+                  break
+                fi
+                echo "Failed to download from $try_url, trying next mirror..."
+              done
+
+              if [ $downloaded -eq 0 ]; then
+                echo "Failed to download $name from all sources" >&2
+                exit 1
+              fi
+
               tar -xzf "/tmp/$name-$version.tar.gz" -C /tmp
               cd "/tmp/$dir"
               ./configure --prefix="$DEPS_PREFIX" --libdir="$DEPS_PREFIX/lib" --disable-dependency-tracking --disable-shared --enable-static
@@ -265,7 +283,7 @@ jobs:
               fi
             }
 
-            curl -4 --retry 5 --retry-delay 2 -fsSL https://www.openssl.org/source/openssl-3.0.14.tar.gz -o /tmp/openssl-3.0.14.tar.gz &&
+            curl -4 --connect-timeout 30 --max-time 300 --retry 10 --retry-delay 3 --retry-max-time 600 -fsSL https://www.openssl.org/source/openssl-3.0.14.tar.gz -o /tmp/openssl-3.0.14.tar.gz &&
             tar -xzf /tmp/openssl-3.0.14.tar.gz -C /tmp &&
             cd /tmp/openssl-3.0.14 &&
             if [ "$(uname -m)" = "aarch64" ]; then OPENSSL_TARGET=linux-aarch64; else OPENSSL_TARGET=linux-x86_64; fi &&
@@ -273,11 +291,11 @@ jobs:
             make -j"$(nproc)" &&
             make install_sw &&
             cd /project &&
-            build_autotools_dep ogg 1.3.5 https://downloads.xiph.org/releases/ogg/libogg-1.3.5.tar.gz libogg-1.3.5 libogg.a &&
-            build_autotools_dep vorbis 1.3.7 https://downloads.xiph.org/releases/vorbis/libvorbis-1.3.7.tar.gz libvorbis-1.3.7 libvorbis.a &&
-            build_autotools_dep speex 1.2.1 https://downloads.xiph.org/releases/speex/speex-1.2.1.tar.gz speex-1.2.1 libspeex.a &&
-            build_autotools_dep opus 1.5.2 https://downloads.xiph.org/releases/opus/opus-1.5.2.tar.gz opus-1.5.2 libopus.a &&
-            build_autotools_dep lame 3.100 https://downloads.sourceforge.net/project/lame/lame/3.100/lame-3.100.tar.gz lame-3.100 libmp3lame.a &&
+            build_autotools_dep ogg 1.3.5 https://downloads.xiph.org/releases/ogg/libogg-1.3.5.tar.gz libogg-1.3.5 libogg.a https://ftp.osuosl.org/pub/xiph/releases/ogg/libogg-1.3.5.tar.gz https://github.com/xiph/ogg/releases/download/v1.3.5/libogg-1.3.5.tar.gz &&
+            build_autotools_dep vorbis 1.3.7 https://downloads.xiph.org/releases/vorbis/libvorbis-1.3.7.tar.gz libvorbis-1.3.7 libvorbis.a https://ftp.osuosl.org/pub/xiph/releases/vorbis/libvorbis-1.3.7.tar.gz https://github.com/xiph/vorbis/releases/download/v1.3.7/libvorbis-1.3.7.tar.gz &&
+            build_autotools_dep speex 1.2.1 https://downloads.xiph.org/releases/speex/speex-1.2.1.tar.gz speex-1.2.1 libspeex.a https://ftp.osuosl.org/pub/xiph/releases/speex/speex-1.2.1.tar.gz https://github.com/xiph/speex/releases/download/Speex-1.2.1/speex-1.2.1.tar.gz &&
+            build_autotools_dep opus 1.5.2 https://downloads.xiph.org/releases/opus/opus-1.5.2.tar.gz opus-1.5.2 libopus.a https://ftp.osuosl.org/pub/xiph/releases/opus/opus-1.5.2.tar.gz https://github.com/xiph/opus/releases/download/v1.5.2/opus-1.5.2.tar.gz &&
+            build_autotools_dep lame 3.100 https://downloads.sourceforge.net/project/lame/lame/3.100/lame-3.100.tar.gz lame-3.100 libmp3lame.a https://sourceforge.net/projects/lame/files/lame/3.100/lame-3.100.tar.gz/download &&
             verify_static_dep ssl &&
             verify_static_dep crypto &&
             verify_static_dep ogg &&
