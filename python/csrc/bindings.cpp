@@ -187,7 +187,7 @@ PYBIND11_MODULE(_avioflow, m) {
     m.def("set_log_level", [](const std::string& level) {
         avioflow_set_log_level(level.c_str());
     }, 
-    py::arg("level") = "info",
+    py::arg("level") = "error",
     R"pbdoc(
         Set FFmpeg logging verbosity level.
 
@@ -197,7 +197,8 @@ PYBIND11_MODULE(_avioflow, m) {
                 - "fatal": Only fatal errors
                 - "error": All errors
                 - "warning": Errors and warnings
-                - "info": General information (default)
+                - "info": General information
+                - "error": Default; errors only
                 - "debug": Detailed debugging info
                 - "trace": Maximum verbosity
     )pbdoc");

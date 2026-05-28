@@ -6,7 +6,7 @@ import io
 ReadableBuffer = Union[bytes, bytearray, memoryview, io.BytesIO]
 SourceInput = Union[str, os.PathLike, ReadableBuffer]
 
-def set_log_level(level: str = "info") -> None:
+def set_log_level(level: str = "error") -> None:
     """
     Set FFmpeg logging verbosity level.
 
@@ -16,7 +16,8 @@ def set_log_level(level: str = "info") -> None:
             - "fatal": Only fatal errors
             - "error": All errors
             - "warning": Errors and warnings
-            - "info": General information (default)
+            - "info": General information
+            - "error": Default; errors only
             - "debug": Detailed debugging info
             - "trace": Maximum verbosity
     """

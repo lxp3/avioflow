@@ -1,0 +1,47 @@
+param(
+    [string]$Classifier = "",
+    [string]$TargetArch = "x64"
+)
+
+$ErrorActionPreference = "Stop"
+$RootDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+
+if (-not $Classifier) {
+    if ($TargetArch -eq "arm64") {
+        $Classifier = "windows-aarch64"
+    } else {
+        $Classifier = "windows-x86_64"
+    }
+}
+
+$BuildDir = Join-Path $RootDir "build-java"
+$Platform = if ($TargetArch -eq "arm64") { "ARM64" } else { "x64" }
+
+cmake -S $RootDir -B $BuildDir `
+    -A $Platform `
+    -DCMAKE_BUILD_TYPE=Release `
+    -DBUILD_SHARED_LIBS=OFF `
+    -DENABLE_WASAPI=ON `
+    -DENABLE_PYTHON=OFF `
+    -DENABLE_NODE_JS=OFF `
+    -DENABLE_JAVA=ON `
+    -DENABLE_BINARY=OFF `
+    -DBUILD_TESTS=OFF
+
+cmake --build $BuildDir --config Release -j 4
+
+$NativeDir = Join-Path $RootDir "java/build/native/$Classifier"
+New-Item -ItemType Directory -Force -Path $NativeDir | Out-Null
+
+$Dll = Join-Path $BuildDir "bin/Release/avioflow_jni.dll"
+if (-not (Test-Path $Dll)) {
+    $Dll = Join-Path $BuildDir "bin/avioflow_jni.dll"
+}
+Copy-Item $Dll $NativeDir
+
+$GradleCmd = if ($env:GRADLE_CMD) { $env:GRADLE_CMD } else { "gradle" }
+$GradleTasks = if ($env:AVIOFLOW_SKIP_TESTS -eq "1") { @("nativeJar") } else { @("test", "nativeJar") }
+& $GradleCmd -p "$RootDir/java" `
+    "-Pavioflow.nativeClassifier=$Classifier" `
+    "-Pavioflow.nativeLibraryDir=$NativeDir" `
+    $GradleTasks

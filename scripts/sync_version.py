@@ -121,6 +121,21 @@ def sync_wasm() -> None:
     )
 
 
+def sync_java() -> None:
+    path = ROOT / "java" / "build.gradle.kts"
+    if path.exists():
+        update_regex(
+            path,
+            r'^version\s*=\s*providers\.fileContents\(layout\.projectDirectory\.file\("\.\./version\.txt"\)\)\.asText\.get\(\)\.trim\(\)\r?$',
+            'version = providers.fileContents(layout.projectDirectory.file("../version.txt")).asText.get().trim()',
+        )
+    update_regex(
+        ROOT / "README.md",
+        r"io\.github\.lxp3:avioflow:\d+\.\d+\.\d+",
+        f"io.github.lxp3:avioflow:{VERSION}",
+    )
+
+
 def sync_vscode() -> None:
     update_json(
         ROOT / "vscode-extension" / "package.json",
@@ -138,6 +153,7 @@ def main() -> None:
     sync_python()
     sync_node_package()
     sync_wasm()
+    sync_java()
     sync_vscode()
     print(f"Synchronized repository version to {VERSION}")
 

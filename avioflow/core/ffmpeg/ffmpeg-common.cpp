@@ -1,5 +1,6 @@
 #include "ffmpeg-common.h"
 #include <algorithm>
+#include <cctype>
 #include <cstdlib>
 #include <set>
 
@@ -13,7 +14,7 @@ void internal_set_log_level(const char *level) {
     if (env_level != nullptr) {
       log_level_str = env_level;
     } else {
-      log_level_str = "info";
+      log_level_str = "error";
     }
   } else {
     log_level_str = level;
@@ -45,6 +46,14 @@ void internal_set_log_level(const char *level) {
 
   av_log_set_level(av_level);
 }
+
+namespace {
+struct DefaultFFmpegLogLevel {
+  DefaultFFmpegLogLevel() { internal_set_log_level(nullptr); }
+};
+
+DefaultFFmpegLogLevel default_ffmpeg_log_level;
+} // namespace
 
 std::vector<std::string> internal_get_supported_decoders() {
   std::set<std::string> decoders;

@@ -7,6 +7,7 @@
 namespace avioflow {
 
 // Global configuration
+// Defaults to "error" when AVIOFLOW_LOG_LEVEL is not set.
 // level: "quiet", "panic", "fatal", "error", "warning", "info", "verbose",
 // "debug", "trace"
 AVIOFLOW_API void avioflow_set_log_level(const char *level = nullptr);
