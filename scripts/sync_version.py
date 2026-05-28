@@ -81,23 +81,29 @@ def sync_python() -> None:
 
 
 def sync_node_package() -> None:
-    update_json(
-        ROOT / "nodejs" / "package.json",
-        lambda data: (
-            data.__setitem__("version", VERSION),
-            data.setdefault("optionalDependencies", {}).__setitem__("@lxp3/linux-x64", VERSION),
-            data.setdefault("optionalDependencies", {}).__setitem__("@lxp3/win32-x64", VERSION),
-        ),
+    node_platform_packages = (
+        "@lxp3/linux-x64",
+        "@lxp3/linux-arm64",
+        "@lxp3/darwin-x64",
+        "@lxp3/darwin-arm64",
+        "@lxp3/win32-x64",
+        "@lxp3/win32-arm64",
     )
 
-    update_json(
-        ROOT / "nodejs" / "npm-packages" / "@lxp3" / "linux-x64" / "package.json",
-        lambda data: data.__setitem__("version", VERSION),
-    )
-    update_json(
-        ROOT / "nodejs" / "npm-packages" / "@lxp3" / "win32-x64" / "package.json",
-        lambda data: data.__setitem__("version", VERSION),
-    )
+    def update_node_root(data: dict) -> None:
+        data["version"] = VERSION
+        optional_deps = data.setdefault("optionalDependencies", {})
+        for package_name in node_platform_packages:
+            optional_deps[package_name] = VERSION
+
+    update_json(ROOT / "nodejs" / "package.json", update_node_root)
+
+    for package_name in node_platform_packages:
+        package_dir = package_name.removeprefix("@lxp3/")
+        update_json(
+            ROOT / "nodejs" / "npm-packages" / "@lxp3" / package_dir / "package.json",
+            lambda data: data.__setitem__("version", VERSION),
+        )
 
     def update_package_lock(data: dict) -> None:
         data["version"] = VERSION

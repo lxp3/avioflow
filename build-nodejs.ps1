@@ -1,3 +1,8 @@
+param(
+    [ValidateSet("x64", "arm64")]
+    [string]$TargetArch = "x64"
+)
+
 $ErrorActionPreference = "Stop"
 
 # 获取目录
@@ -41,6 +46,7 @@ try {
     Write-Host "Running cmake-js compile..."
     # 执行编译命令
     & cmake-js compile --out build-nodejs `
+        --arch $TargetArch `
         --CDENABLE_NODE_JS=ON `
         --CDENABLE_PYTHON=OFF `
         --CDENABLE_BINARY=OFF `
@@ -57,6 +63,11 @@ try {
 
 # 3. 测试阶段
 Write-Host "`n=== Testing ABI Compatibility ==="
+if ($TargetArch -ne "x64") {
+    Write-Host "Skipping runtime test for cross-built $TargetArch artifact."
+    exit 0
+}
+
 Push-Location $NodejsDir
 
 try {

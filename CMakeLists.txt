@@ -161,15 +161,7 @@ if(ENABLE_WASAPI AND WIN32)
     target_include_directories(avioflow PRIVATE "${MINIAUDIO_INCLUDE_DIR}")
 endif()
 
-# Helper to link only existing FFmpeg targets
-set(FFMPEG_TARGETS "")
-foreach(LIB IN ITEMS avdevice avformat avfilter avcodec swscale swresample avutil)
-    if(TARGET ffmpeg::${LIB})
-        list(APPEND FFMPEG_TARGETS ffmpeg::${LIB})
-    endif()
-endforeach()
-
-target_link_libraries(avioflow PUBLIC ${FFMPEG_TARGETS})
+target_link_libraries(avioflow PUBLIC ffmpeg::ffmpeg)
 
 if(WIN32)
     target_link_libraries(avioflow PRIVATE Winmm)
