@@ -102,12 +102,28 @@ jobs:
         include:
           - arch: x86_64
             docker-image: quay.io/pypa/manylinux2014_x86_64
+            shared-libs: "ON"
+            package-kind: shared
             pkg-dir: avioflow-shared-linux-x64
-            artifact-name: linux-cpp-binaries-x86_64
+            artifact-name: linux-cpp-binaries-shared-x86_64
+          - arch: x86_64
+            docker-image: quay.io/pypa/manylinux2014_x86_64
+            shared-libs: "OFF"
+            package-kind: static
+            pkg-dir: avioflow-static-linux-x64
+            artifact-name: linux-cpp-binaries-static-x86_64
           - arch: aarch64
             docker-image: quay.io/pypa/manylinux2014_aarch64
+            shared-libs: "ON"
+            package-kind: shared
             pkg-dir: avioflow-shared-linux-arm64
-            artifact-name: linux-cpp-binaries-aarch64
+            artifact-name: linux-cpp-binaries-shared-aarch64
+          - arch: aarch64
+            docker-image: quay.io/pypa/manylinux2014_aarch64
+            shared-libs: "OFF"
+            package-kind: static
+            pkg-dir: avioflow-static-linux-arm64
+            artifact-name: linux-cpp-binaries-static-aarch64
     steps:
       - uses: actions/checkout@v4
 
@@ -120,13 +136,13 @@ jobs:
         with:
           platforms: arm64
 
-      - name: Build C++ Shared Binaries in manylinux2014 (${{ matrix.arch }})
+      - name: Build C++ ${{ matrix.package-kind }} Binaries in manylinux2014 (${{ matrix.arch }})
         run: |
           docker run --rm -v $(pwd):/io -w /io ${{ matrix.docker-image }} bash -c "
-            cmake -B build_shared -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=ON -DENABLE_WASAPI=OFF -DENABLE_PYTHON=OFF -DENABLE_NODE_JS=OFF -DENABLE_BINARY=ON && \
-            cmake --build build_shared --config Release -j \$(nproc) && \
+            cmake -B build_${{ matrix.package-kind }} -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=${{ matrix.shared-libs }} -DENABLE_WASAPI=OFF -DENABLE_PYTHON=OFF -DENABLE_NODE_JS=OFF -DENABLE_BINARY=ON && \
+            cmake --build build_${{ matrix.package-kind }} --config Release -j \$(nproc) && \
             PKG_DIR=\"${{ matrix.pkg-dir }}\" && \
-            cmake --install build_shared --prefix \$PKG_DIR && \
+            cmake --install build_${{ matrix.package-kind }} --prefix \$PKG_DIR && \
             tar -czvf \$PKG_DIR.tar.gz \$PKG_DIR
           "
 
@@ -392,16 +408,40 @@ jobs:
           - arch: x64
             cmake-platform: x64
             msvc-arch: x64
+            shared-libs: "ON"
+            package-kind: shared
             pkg-dir: avioflow-shared-win-x64
-            cpp-artifact-name: windows-cpp-binaries-x64
+            cpp-artifact-name: windows-cpp-binaries-shared-x64
             npm-package: win32-x64
             npm-artifact-name: npm-win32-x64
             run-tests: true
+          - arch: x64
+            cmake-platform: x64
+            msvc-arch: x64
+            shared-libs: "OFF"
+            package-kind: static
+            pkg-dir: avioflow-static-win-x64
+            cpp-artifact-name: windows-cpp-binaries-static-x64
+            npm-package: win32-x64
+            npm-artifact-name: npm-win32-x64
+            run-tests: false
           - arch: arm64
             cmake-platform: ARM64
             msvc-arch: amd64_arm64
+            shared-libs: "ON"
+            package-kind: shared
             pkg-dir: avioflow-shared-win-arm64
-            cpp-artifact-name: windows-cpp-binaries-arm64
+            cpp-artifact-name: windows-cpp-binaries-shared-arm64
+            npm-package: win32-arm64
+            npm-artifact-name: npm-win32-arm64
+            run-tests: false
+          - arch: arm64
+            cmake-platform: ARM64
+            msvc-arch: amd64_arm64
+            shared-libs: "OFF"
+            package-kind: static
+            pkg-dir: avioflow-static-win-arm64
+            cpp-artifact-name: windows-cpp-binaries-static-arm64
             npm-package: win32-arm64
             npm-artifact-name: npm-win32-arm64
             run-tests: false
@@ -429,32 +469,32 @@ jobs:
           cache: 'pnpm'
           cache-dependency-path: nodejs/pnpm-lock.yaml
 
-      # --- Build C++ Shared Binaries (Only if build-cpp is true) ---
-      - name: Build C++ Shared Binaries
+      # --- Build C++ Binaries (Only if build-cpp is true) ---
+      - name: Build C++ ${{ matrix.package-kind }} Binaries
         if: needs.check-tag.outputs.build-cpp == 'true'
         shell: pwsh
         run: |
-          cmake -B build_shared `
+          cmake -B build_${{ matrix.package-kind }} `
             -A ${{ matrix.cmake-platform }} `
             -DCMAKE_BUILD_TYPE=Release `
-            -DBUILD_SHARED_LIBS=ON `
+            -DBUILD_SHARED_LIBS=${{ matrix.shared-libs }} `
             -DENABLE_WASAPI=ON `
             -DENABLE_PYTHON=OFF `
             -DENABLE_NODE_JS=OFF `
             -DENABLE_BINARY=ON
-          cmake --build build_shared --config Release -j 4
+          cmake --build build_${{ matrix.package-kind }} --config Release -j 4
 
       - name: Package C++ Binaries
         if: needs.check-tag.outputs.build-cpp == 'true'
         shell: pwsh
         run: |
           $PkgDir = "${{ matrix.pkg-dir }}"
-          cmake --install build_shared --prefix $PkgDir --config Release
+          cmake --install build_${{ matrix.package-kind }} --prefix $PkgDir --config Release
           Compress-Archive -Path "$PkgDir/*" -DestinationPath "$PkgDir.zip"
 
       # --- Build Node.js Addon (Static, Node-API 8 for Node.js >= 16) ---
       - name: Build Node.js Addon (Node-API 8)
-        if: needs.check-tag.outputs.build-npm == 'true'
+        if: needs.check-tag.outputs.build-npm == 'true' && matrix.package-kind == 'shared'
         shell: pwsh
         run: |
           # Use the specialized build script
@@ -473,7 +513,7 @@ jobs:
 
       # Verify the built module works
       - name: Verify Node.js Addon
-        if: needs.check-tag.outputs.build-npm == 'true' && matrix.run-tests
+        if: needs.check-tag.outputs.build-npm == 'true' && matrix.package-kind == 'shared' && matrix.run-tests
         shell: pwsh
         working-directory: nodejs
         run: |
@@ -492,7 +532,7 @@ jobs:
           path: ${{ matrix.pkg-dir }}.zip
 
       - uses: actions/upload-artifact@v4
-        if: needs.check-tag.outputs.build-npm == 'true'
+        if: needs.check-tag.outputs.build-npm == 'true' && matrix.package-kind == 'shared'
         with:
           name: ${{ matrix.npm-artifact-name }}
           path: nodejs/npm-packages/@lxp3/${{ matrix.npm-package }}/

@@ -17,6 +17,7 @@ AvioFlow is a high-performance and easy-to-use streaming audio decoding library.
 | ---------- | ------------ | -------------------- | --- | --- |
 | python     | pybind11     | pip install avioflow |     |     |
 | JavaScript | node-add-api | npm install avioflow |     |     |
+| Java       | JNI          | Gradle/Maven         |     |     |
 |            | wasm         |                      |     |     |
 |            | vsix         |                      |     |     |
 
@@ -28,12 +29,59 @@ AvioFlow is a high-performance and easy-to-use streaming audio decoding library.
 pip install avioflow
 ```
 
+### Java
+
+Gradle users need the main Java API jar plus one native classifier for the target platform:
+
+```kotlin
+dependencies {
+    implementation("io.github.lxp3:avioflow:0.3.2")
+    runtimeOnly("io.github.lxp3:avioflow:0.3.2:linux-x86_64")
+}
+```
+
+Maven:
+
+```xml
+<dependency>
+  <groupId>io.github.lxp3</groupId>
+  <artifactId>avioflow</artifactId>
+  <version>0.3.2</version>
+</dependency>
+<dependency>
+  <groupId>io.github.lxp3</groupId>
+  <artifactId>avioflow</artifactId>
+  <version>0.3.2</version>
+  <classifier>linux-x86_64</classifier>
+  <scope>runtime</scope>
+</dependency>
+```
+
+Native classifiers: `linux-x86_64`, `linux-aarch64`, `macos-x86_64`, `macos-aarch64`, `windows-x86_64`, `windows-aarch64`.
+
 
 ### C++ (CMake)
+Download the C++ package for your platform and linkage, then point CMake at the
+extracted package root with `CMAKE_PREFIX_PATH`.
+
 ```cmake
-find_package(avioflow REQUIRED)
-target_link_libraries(your_target avioflow::avioflow)
+find_package(avioflow CONFIG REQUIRED)
+target_link_libraries(your_target PRIVATE avioflow::avioflow)
 ```
+
+Release packages are split by linkage and platform:
+
+- `avioflow-shared-linux-x64`, `avioflow-static-linux-x64`
+- `avioflow-shared-linux-arm64`, `avioflow-static-linux-arm64`
+- `avioflow-shared-macos-x64`, `avioflow-static-macos-x64`
+- `avioflow-shared-macos-arm64`, `avioflow-static-macos-arm64`
+- `avioflow-shared-win-x64`, `avioflow-static-win-x64`
+- `avioflow-shared-win-arm64`, `avioflow-static-win-arm64`
+
+Shared packages include the FFmpeg dynamic libraries needed at runtime. Static
+packages include FFmpeg static libraries, transitive static dependency metadata,
+and the bundled FFmpeg CMake package, so consumers do not need to configure
+FFmpeg separately.
 
 ---
 
@@ -312,6 +360,40 @@ devices.forEach(dev => {
 });
 ```
 
+---
+
+## Java API
+
+### File Decoding
+
+```java
+import io.github.lxp3.avioflow.AudioDecoder;
+import io.github.lxp3.avioflow.AudioStreamOptions;
+
+try (AudioDecoder decoder = new AudioDecoder(
+        new AudioStreamOptions().outputSampleRate(16000))) {
+    decoder.open("audio.mp3");
+    float[][] samples = decoder.getSamples();
+    System.out.println(samples.length + " channels");
+}
+```
+
+### Encoding
+
+```java
+import io.github.lxp3.avioflow.AudioEncoder;
+import io.github.lxp3.avioflow.AudioWriteOptions;
+
+AudioEncoder.saveAudio(
+    "out.wav",
+    samples,
+    new AudioWriteOptions()
+        .containerFormat("wav")
+        .codecName("pcm_s16le")
+        .sampleRate(16000)
+);
+```
+
 
 ---
 
@@ -334,6 +416,12 @@ This will configure and build the C++ library and Python bindings.
 ./build-nodejs.sh
 ```
 This will build the Node.js bindings using `cmake-js` and run compatibility tests.
+
+### Java Build
+```bash
+./build-java.sh linux-x86_64
+```
+This builds the JNI library and creates a platform classifier jar.
 
 ---
 

@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.20)
 file(READ "${CMAKE_CURRENT_SOURCE_DIR}/version.txt" AVIOFLOW_VERSION_RAW)
 string(STRIP "${AVIOFLOW_VERSION_RAW}" AVIOFLOW_VERSION)
 project(avioflow VERSION ${AVIOFLOW_VERSION} LANGUAGES CXX)
+include(CMakePackageConfigHelpers)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -11,6 +12,7 @@ option(BUILD_TESTS "Build tests and examples" ON)
 option(ENABLE_WASAPI "Enable WASAPI loopback capture support" OFF)
 option(ENABLE_PYTHON "Enable Python bindings" OFF)
 option(ENABLE_NODE_JS "Enable Node.js bindings" OFF)
+option(ENABLE_JAVA "Enable Java JNI bindings" OFF)
 option(ENABLE_BINARY "Whether to build binaries" OFF)
 
 # Logic to force static build if Node.js is enabled
@@ -197,6 +199,11 @@ if(ENABLE_NODE_JS)
     add_subdirectory(nodejs/csrc)
 endif()
 
+# --- Java JNI Bindings ---
+if(ENABLE_JAVA)
+    add_subdirectory(java/src/main/cpp)
+endif()
+
 # --- WebAssembly Bindings ---
 option(ENABLE_WASM "Enable WebAssembly bindings" OFF)
 if(ENABLE_WASM)
@@ -216,12 +223,46 @@ if(NOT SKBUILD)
 
     # Install library
     install(TARGETS avioflow
+        EXPORT avioflowTargets
         RUNTIME DESTINATION bin
         LIBRARY DESTINATION lib
         ARCHIVE DESTINATION lib
+        INCLUDES DESTINATION include
     )
 
-    # Install FFmpeg shared libraries
+    set(AVIOFLOW_CMAKE_INSTALL_DIR "lib/cmake/avioflow")
+
+    configure_package_config_file(
+        "${CMAKE_CURRENT_SOURCE_DIR}/cmake/avioflowConfig.cmake.in"
+        "${CMAKE_CURRENT_BINARY_DIR}/avioflowConfig.cmake"
+        INSTALL_DESTINATION "${AVIOFLOW_CMAKE_INSTALL_DIR}"
+    )
+
+    write_basic_package_version_file(
+        "${CMAKE_CURRENT_BINARY_DIR}/avioflowConfigVersion.cmake"
+        VERSION "${PROJECT_VERSION}"
+        COMPATIBILITY SameMajorVersion
+    )
+
+    install(EXPORT avioflowTargets
+        FILE avioflowTargets.cmake
+        NAMESPACE avioflow::
+        DESTINATION "${AVIOFLOW_CMAKE_INSTALL_DIR}"
+    )
+
+    install(FILES
+        "${CMAKE_CURRENT_BINARY_DIR}/avioflowConfig.cmake"
+        "${CMAKE_CURRENT_BINARY_DIR}/avioflowConfigVersion.cmake"
+        DESTINATION "${AVIOFLOW_CMAKE_INSTALL_DIR}"
+    )
+
+    if(EXISTS "${FFMPEG_ROOT}/lib/cmake/FFmpeg")
+        install(DIRECTORY "${FFMPEG_ROOT}/lib/cmake/FFmpeg"
+            DESTINATION lib/cmake
+        )
+    endif()
+
+    # Install bundled FFmpeg runtime or static dependency payload.
     if(BUILD_SHARED_LIBS)
         if(WIN32)
             # Collect all DLLs from FFMPEG_BIN_DIR
@@ -237,10 +278,14 @@ if(NOT SKBUILD)
             install(FILES ${FFMPEG_SOS} DESTINATION lib)
         endif()
     else()
-        if(APPLE)
-            file(GLOB FFMPEG_STATIC_LIBS "${FFMPEG_LIB_DIR}/lib*.a")
-            install(FILES ${FFMPEG_STATIC_LIBS} DESTINATION lib)
-        endif()
+        install(DIRECTORY "${FFMPEG_ROOT}/lib/"
+            DESTINATION lib
+            FILES_MATCHING
+                PATTERN "*.a"
+                PATTERN "*.lib"
+                PATTERN "*.pc"
+                PATTERN "*.cmake"
+        )
     endif()
 
     # (Optional) Install CLI tools if ENABLE_BINARY is on
