@@ -1,6 +1,6 @@
 {
   "name": "@lxp3/linux-x64",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "description": "Linux x64 native bindings for avioflow",
   "os": [
     "linux"

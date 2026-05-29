@@ -1,7 +1,6 @@
 include(FetchContent)
-include(CheckCXXSourceCompiles)
 
-set(_ffmpeg_release_base "https://github.com/lxp3/ffmpeg-build/releases/download/v0.3.3")
+set(_ffmpeg_release_base "https://github.com/lxp3/ffmpeg-build/releases/download/v0.3.4")
 
 function(_avioflow_normalize_arch out_var)
     if(WIN32 AND CMAKE_GENERATOR_PLATFORM)
@@ -21,123 +20,6 @@ function(_avioflow_normalize_arch out_var)
             "Unsupported FFmpeg architecture: ${_processor}. "
             "Supported architectures: x86_64, aarch64."
         )
-    endif()
-endfunction()
-
-function(_avioflow_patch_ffmpeg_imported_targets)
-    set(_ffmpeg_import_targets
-        ffmpeg::ffmpeg
-        ffmpeg::avdevice
-        ffmpeg::avfilter
-        ffmpeg::avformat
-        ffmpeg::avcodec
-        ffmpeg::swscale
-        ffmpeg::swresample
-        ffmpeg::avutil
-    )
-
-    if(WIN32 AND NOT BUILD_SHARED_LIBS)
-        foreach(_ffmpeg_lib avdevice avfilter avformat avcodec swscale swresample avutil)
-            if(TARGET ffmpeg::${_ffmpeg_lib})
-                set(_ffmpeg_windows_lib_candidates
-                    "${FFmpeg_LIBRARY_DIR}/lib${_ffmpeg_lib}.lib"
-                    "${FFmpeg_LIBRARY_DIR}/${_ffmpeg_lib}.lib"
-                    "${FFmpeg_LIBRARY_DIR}/lib${_ffmpeg_lib}.a"
-                    "${FFmpeg_LIBRARY_DIR}/${_ffmpeg_lib}.a"
-                )
-                foreach(_ffmpeg_windows_lib IN LISTS _ffmpeg_windows_lib_candidates)
-                    if(EXISTS "${_ffmpeg_windows_lib}")
-                        set_target_properties(ffmpeg::${_ffmpeg_lib} PROPERTIES
-                            IMPORTED_LOCATION "${_ffmpeg_windows_lib}"
-                        )
-                        break()
-                    endif()
-                endforeach()
-            endif()
-        endforeach()
-        if(TARGET ffmpeg::ffmpeg)
-            set_property(TARGET ffmpeg::ffmpeg APPEND PROPERTY
-                INTERFACE_LINK_LIBRARIES shlwapi vfw32
-            )
-        endif()
-    endif()
-
-    if(APPLE)
-        set(_ffmpeg_frameworks
-            AppKit
-            AudioToolbox
-            AVFoundation
-            CoreAudio
-            CoreFoundation
-            CoreMedia
-            CoreVideo
-            Security
-            VideoToolbox
-        )
-
-        foreach(_ffmpeg_target IN LISTS _ffmpeg_import_targets)
-            if(TARGET ${_ffmpeg_target})
-                get_target_property(_ffmpeg_links ${_ffmpeg_target} INTERFACE_LINK_LIBRARIES)
-                if(_ffmpeg_links)
-                    set(_ffmpeg_patched_links "")
-                    set(_ffmpeg_framework_options "")
-                    set(_ffmpeg_expect_framework_name OFF)
-                    foreach(_ffmpeg_link IN LISTS _ffmpeg_links)
-                        if(_ffmpeg_expect_framework_name)
-                            list(APPEND _ffmpeg_framework_options "LINKER:-framework,${_ffmpeg_link}")
-                            set(_ffmpeg_expect_framework_name OFF)
-                        elseif(_ffmpeg_link STREQUAL "-framework")
-                            set(_ffmpeg_expect_framework_name ON)
-                        elseif(_ffmpeg_link IN_LIST _ffmpeg_frameworks)
-                            list(APPEND _ffmpeg_framework_options "LINKER:-framework,${_ffmpeg_link}")
-                        else()
-                            list(APPEND _ffmpeg_patched_links "${_ffmpeg_link}")
-                        endif()
-                    endforeach()
-                    set_target_properties(${_ffmpeg_target} PROPERTIES
-                        INTERFACE_LINK_LIBRARIES "${_ffmpeg_patched_links}"
-                    )
-                    if(_ffmpeg_framework_options)
-                        set_property(TARGET ${_ffmpeg_target} APPEND PROPERTY
-                            INTERFACE_LINK_OPTIONS "${_ffmpeg_framework_options}"
-                        )
-                    endif()
-                endif()
-            endif()
-        endforeach()
-    endif()
-
-    if(UNIX AND NOT APPLE AND NOT BUILD_SHARED_LIBS)
-        set(_ffmpeg_needs_atomic OFF)
-        foreach(_ffmpeg_target IN LISTS _ffmpeg_import_targets)
-            if(TARGET ${_ffmpeg_target})
-                get_target_property(_ffmpeg_links ${_ffmpeg_target} INTERFACE_LINK_LIBRARIES)
-                if(_ffmpeg_links AND atomic IN_LIST _ffmpeg_links)
-                    set(_ffmpeg_needs_atomic ON)
-                endif()
-            endif()
-        endforeach()
-
-        if(_ffmpeg_needs_atomic)
-            set(_avioflow_saved_required_libraries "${CMAKE_REQUIRED_LIBRARIES}")
-            set(CMAKE_REQUIRED_LIBRARIES atomic)
-            check_cxx_source_compiles("int main() { return 0; }" AVIOFLOW_HAVE_LIBATOMIC)
-            set(CMAKE_REQUIRED_LIBRARIES "${_avioflow_saved_required_libraries}")
-
-            if(NOT AVIOFLOW_HAVE_LIBATOMIC)
-                foreach(_ffmpeg_target IN LISTS _ffmpeg_import_targets)
-                    if(TARGET ${_ffmpeg_target})
-                        get_target_property(_ffmpeg_links ${_ffmpeg_target} INTERFACE_LINK_LIBRARIES)
-                        if(_ffmpeg_links)
-                            list(REMOVE_ITEM _ffmpeg_links atomic)
-                            set_target_properties(${_ffmpeg_target} PROPERTIES
-                                INTERFACE_LINK_LIBRARIES "${_ffmpeg_links}"
-                            )
-                        endif()
-                    endif()
-                endforeach()
-            endif()
-        endif()
     endif()
 endfunction()
 
@@ -170,29 +52,29 @@ set(_ffmpeg_package "ffmpeg-7.1-${_ffmpeg_linkage}-${_ffmpeg_arch}-${_ffmpeg_pla
 set(FFMPEG_URL "${_ffmpeg_release_base}/${_ffmpeg_package}")
 
 if(_ffmpeg_package STREQUAL "ffmpeg-7.1-static-x86_64-linux-gnu.tar.gz")
-    set(FFMPEG_HASH "6fd78bd897607d8f1d105347c4864aba629f9d11b085443649a0f557028ae83a")
+    set(FFMPEG_HASH "20830ece2d6d3716af0b71a412d6565be1760e277bd5ee14ba07c52dcc6f55c0")
 elseif(_ffmpeg_package STREQUAL "ffmpeg-7.1-static-aarch64-linux-gnu.tar.gz")
-    set(FFMPEG_HASH "6861522ac6d45c487e1bd6addb5cafe8bad8a76bab3ce4e04aa8feeddf40a56c")
+    set(FFMPEG_HASH "a258959964d2be85dd5757a0315b6cb154a3b2eec1c0232b2e274ea7ead6487a")
 elseif(_ffmpeg_package STREQUAL "ffmpeg-7.1-shared-x86_64-linux-gnu.tar.gz")
-    set(FFMPEG_HASH "44ef7f09add1a22599ed1da550ac37d06d709fbcf11fa46362d4a170b6bad320")
+    set(FFMPEG_HASH "d3e4c011bf82a794bc48420b12245dcf0ac208baa1452179e8397edcbba264ff")
 elseif(_ffmpeg_package STREQUAL "ffmpeg-7.1-shared-aarch64-linux-gnu.tar.gz")
-    set(FFMPEG_HASH "0f9443ddd605b1fa2e438b1f442423f698e7e27f274f6d7cbfee426d3e8b63d4")
+    set(FFMPEG_HASH "fa7d118748edf48f7270193ca29ea23fd4a44377b8b1a7414214838dd39dbde9")
 elseif(_ffmpeg_package STREQUAL "ffmpeg-7.1-static-x86_64-macos.tar.gz")
-    set(FFMPEG_HASH "3b5237a64c83c21cd147f3eeb54937de0149b8111874eb6d60f202d26c507a74")
+    set(FFMPEG_HASH "b171fb6bba99c0e51de10784ee281fd8da56ea247e49512f4bf6dd920c229748")
 elseif(_ffmpeg_package STREQUAL "ffmpeg-7.1-static-aarch64-macos.tar.gz")
-    set(FFMPEG_HASH "f1330fa5523aeaf739677240a7f8b7d5f18169947bd588358cd19daed71655a5")
+    set(FFMPEG_HASH "72ffc438538d142128ee6cf098d55965791a01410a18095372ca971faefb27eb")
 elseif(_ffmpeg_package STREQUAL "ffmpeg-7.1-shared-x86_64-macos.tar.gz")
-    set(FFMPEG_HASH "fde6c41f7a0b9d1a9e4931867198351a8b3490a38c942f876db6da0ba2ec1586")
+    set(FFMPEG_HASH "32ba6c47919ddb5650f6624513519649cfbc654849c6ab7d57a0b2081ba269fe")
 elseif(_ffmpeg_package STREQUAL "ffmpeg-7.1-shared-aarch64-macos.tar.gz")
-    set(FFMPEG_HASH "de71beeeee51f62d76e47b5a5d25d33a836f9bea2660e450307ad682c84ba78a")
+    set(FFMPEG_HASH "4b86e038e9a27adf5d16c478995806ff32dcd7deda5c4710f12467e0e860116d")
 elseif(_ffmpeg_package STREQUAL "ffmpeg-7.1-static-x86_64-msvc.tar.gz")
-    set(FFMPEG_HASH "d5024d062ce0619abbdb175b67f6dc78c0b3e3e9cebe0799d65c0654e692c2fe")
+    set(FFMPEG_HASH "9320cfee3c05c70d0db0319584e6aea8fba930bbec69bcf2d1c2cc99ed10eab7")
 elseif(_ffmpeg_package STREQUAL "ffmpeg-7.1-static-aarch64-msvc.tar.gz")
-    set(FFMPEG_HASH "dc6e56b5ba404aab3977366b54c5061bef1a3e8c90a859f28238f25f5e18060f")
+    set(FFMPEG_HASH "93dca5646c19f0117bee990260ab72a84c29b8cf89b4de7bc27214be210b29da")
 elseif(_ffmpeg_package STREQUAL "ffmpeg-7.1-shared-x86_64-w64-mingw32.tar.gz")
-    set(FFMPEG_HASH "bd5505b5461cddfef1bff0aac3515ef12b9ae710fc24ec697a96fc8e89beca89")
+    set(FFMPEG_HASH "5a64f04ed9e3db27e8074bc3b27fa7504d4829b2ca42e914ac58d2d3d35f11b3")
 elseif(_ffmpeg_package STREQUAL "ffmpeg-7.1-shared-aarch64-w64-mingw32.tar.gz")
-    set(FFMPEG_HASH "6fc83d7bb4af16d3a5b80cf854b5d1fd6d3b7b57a23ddd24ddef4d8d06d62dfe")
+    set(FFMPEG_HASH "a8b7278921d1822c7b7d92ccc389e86ac98c1d81e6a6f6ef08706be22dd2b017")
 else()
     message(FATAL_ERROR "Unsupported FFmpeg package selection: ${_ffmpeg_package}")
 endif()
@@ -243,7 +125,6 @@ set(FFmpeg_DIR "${FFMPEG_ROOT}/lib/cmake/FFmpeg" CACHE PATH "FFmpeg CMake packag
 
 message(STATUS "FFmpeg Root set to: ${FFMPEG_ROOT}")
 find_package(FFmpeg CONFIG REQUIRED)
-_avioflow_patch_ffmpeg_imported_targets()
 
 set(FFMPEG_INCLUDE_DIRS "${FFmpeg_INCLUDE_DIR}")
 set(FFMPEG_LIB_DIR "${FFmpeg_LIBRARY_DIR}")

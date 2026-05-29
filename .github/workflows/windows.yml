@@ -109,6 +109,30 @@ jobs:
         run: |
           $PkgDir = "${{ matrix.pkg-dir }}"
           cmake --install build_${{ matrix.package-kind }} --prefix $PkgDir --config Release
+
+          $SmokeDir = Join-Path $PkgDir ".smoke"
+          New-Item -ItemType Directory -Force -Path $SmokeDir | Out-Null
+          Set-Content -Path (Join-Path $SmokeDir "CMakeLists.txt") -Value @(
+            "cmake_minimum_required(VERSION 3.20)",
+            "project(avioflow_consumer LANGUAGES CXX)",
+            "find_package(avioflow CONFIG REQUIRED)",
+            "add_executable(avioflow_smoke main.cpp)",
+            "target_link_libraries(avioflow_smoke PRIVATE avioflow::avioflow)"
+          )
+          Set-Content -Path (Join-Path $SmokeDir "main.cpp") -Value @(
+            '#include "avioflow-cxx-api.h"',
+            "int main() {",
+            "    avioflow::AudioStreamOptions options{};",
+            "    (void)options;",
+            "    return 0;",
+            "}"
+          )
+
+          cmake -S $SmokeDir -B (Join-Path $SmokeDir "build") -DCMAKE_PREFIX_PATH=$PkgDir
+          cmake --build (Join-Path $SmokeDir "build") --config Release -j 4
+          $Env:Path = "$(Join-Path $PkgDir 'bin');$Env:Path"
+          & (Join-Path $SmokeDir "build\Release\avioflow_smoke.exe")
+
           Compress-Archive -Path "$PkgDir/*" -DestinationPath "$PkgDir.zip"
 
       # --- Build Node.js Addon (Static, Node-API 8 for Node.js >= 16) ---

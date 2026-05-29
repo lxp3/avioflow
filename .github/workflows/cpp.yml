@@ -60,6 +60,26 @@ jobs:
             cmake --build build_${{ matrix.package-kind }} --config Release -j \$(nproc) && \
             PKG_DIR=\"${{ matrix.pkg-dir }}\" && \
             cmake --install build_${{ matrix.package-kind }} --prefix \$PKG_DIR && \
+            SMOKE_DIR=\"\$PKG_DIR/.smoke\" && \
+            mkdir -p \"\$SMOKE_DIR\" && \
+            printf '%s\n' \
+              'cmake_minimum_required(VERSION 3.20)' \
+              'project(avioflow_consumer LANGUAGES CXX)' \
+              'find_package(avioflow CONFIG REQUIRED)' \
+              'add_executable(avioflow_smoke main.cpp)' \
+              'target_link_libraries(avioflow_smoke PRIVATE avioflow::avioflow)' \
+              > \"\$SMOKE_DIR/CMakeLists.txt\" && \
+            printf '%s\n' \
+              '#include \"avioflow-cxx-api.h\"' \
+              'int main() {' \
+              '    avioflow::AudioStreamOptions options{};' \
+              '    (void)options;' \
+              '    return 0;' \
+              '}' \
+              > \"\$SMOKE_DIR/main.cpp\" && \
+            cmake -S \"\$SMOKE_DIR\" -B \"\$SMOKE_DIR/build\" -DCMAKE_PREFIX_PATH=\"$(pwd)/\$PKG_DIR\" && \
+            cmake --build \"\$SMOKE_DIR/build\" --config Release -j \$(nproc) && \
+            \"\$SMOKE_DIR/build/avioflow_smoke\" && \
             tar -czvf \$PKG_DIR.tar.gz \$PKG_DIR
           "
 
