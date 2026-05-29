@@ -14,30 +14,34 @@ permissions:
 jobs:
   build-linux-cpp:
     if: inputs.build-cpp
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - arch: x86_64
+            runner: ubuntu-latest
             docker-image: quay.io/pypa/manylinux2014_x86_64
             shared-libs: "ON"
             package-kind: shared
             pkg-dir: avioflow-shared-linux-x64
             artifact-name: linux-cpp-binaries-shared-x86_64
           - arch: x86_64
+            runner: ubuntu-latest
             docker-image: quay.io/pypa/manylinux2014_x86_64
             shared-libs: "OFF"
             package-kind: static
             pkg-dir: avioflow-static-linux-x64
             artifact-name: linux-cpp-binaries-static-x86_64
           - arch: aarch64
+            runner: ubuntu-24.04-arm
             docker-image: quay.io/pypa/manylinux2014_aarch64
             shared-libs: "ON"
             package-kind: shared
             pkg-dir: avioflow-shared-linux-arm64
             artifact-name: linux-cpp-binaries-shared-aarch64
           - arch: aarch64
+            runner: ubuntu-24.04-arm
             docker-image: quay.io/pypa/manylinux2014_aarch64
             shared-libs: "OFF"
             package-kind: static
@@ -48,12 +52,6 @@ jobs:
 
       - name: Sync version metadata
         run: python3 scripts/sync_version.py
-
-      - name: Set up QEMU
-        if: matrix.arch == 'aarch64'
-        uses: docker/setup-qemu-action@v3
-        with:
-          platforms: arm64
 
       - name: Build C++ ${{ matrix.package-kind }} Binaries in manylinux2014 (${{ matrix.arch }})
         run: |
@@ -138,4 +136,3 @@ jobs:
         with:
           name: ${{ matrix.artifact-name }}
           path: ${{ matrix.pkg-dir }}.tar.gz
-

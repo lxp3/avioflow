@@ -47,17 +47,12 @@ jobs:
 
   build-python-linux-arm64:
     if: inputs.build-python && (inputs.python-target == 'all' || inputs.python-target == 'linux')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v4
 
       - name: Sync version metadata
         run: python3 scripts/sync_version.py
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-        with:
-          platforms: arm64
 
       - name: Build wheels
         uses: pypa/cibuildwheel@v2.22.0
@@ -171,4 +166,3 @@ jobs:
         with:
           name: windows-python-wheels-arm64
           path: ./wheelhouse/*.whl
-

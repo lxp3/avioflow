@@ -7,7 +7,7 @@ from importlib.metadata import PackageNotFoundError, version
 if sys.platform == "win32" and sys.version_info >= (3, 8):
     pkg_dir = os.path.dirname(__file__)
     if os.path.isdir(pkg_dir):
-        os.add_dll_directory(pkg_dir)
+        _dll_directory_handle = os.add_dll_directory(pkg_dir)
 
 try:
     __version__ = version("avioflow")
