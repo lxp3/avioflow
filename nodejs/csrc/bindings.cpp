@@ -121,8 +121,8 @@ Napi::Value Load(const Napi::CallbackInfo &info) {
   try {
     AudioDecoder decoder(opts);
     decoder.open(path);
-    auto meta = decoder.get_metadata();
     auto samples = decoder.get_samples();
+    auto meta = decoder.get_metadata();
 
     Napi::Object result = Napi::Object::New(env);
     result.Set("metadata", MetadataToJs(env, meta));

@@ -177,15 +177,24 @@ namespace avioflow
         options_.output_sample_rate.value() >= 0) {
       out_rate = options_.output_sample_rate.value();
     }
+    AVChannelLayout out_layout;
+    if (options_.output_num_channels.has_value() &&
+        options_.output_num_channels.value() > 0) {
+      av_channel_layout_default(&out_layout, options_.output_num_channels.value());
+    } else {
+      check_av_error(av_channel_layout_copy(&out_layout, &frame->ch_layout),
+                     "Could not copy output channel layout");
+    }
 
     needs_resample_ = (src_sample_format != output_sample_format_) ||
-                      (src_sample_rate != out_rate);
+                      (src_sample_rate != out_rate) ||
+                      (av_channel_layout_compare(&frame->ch_layout, &out_layout) != 0);
 
     if (needs_resample_)
     {
       SwrContext *swr = nullptr;
       check_av_error(
-          swr_alloc_set_opts2(&swr, &frame->ch_layout, output_sample_format_,
+          swr_alloc_set_opts2(&swr, &out_layout, output_sample_format_,
                               out_rate, &frame->ch_layout,
                               src_sample_format, src_sample_rate, 0, nullptr),
           "Could not initialize resampler");
@@ -195,6 +204,9 @@ namespace avioflow
                      "Could not initialize resampler context");
     }
 
+    metadata_.sample_rate = out_rate;
+    metadata_.num_channels = out_layout.nb_channels;
+    av_channel_layout_uninit(&out_layout);
     resampler_initialized_ = true;
   }
 
@@ -226,8 +238,14 @@ namespace avioflow
       av_frame_unref(converted_frame_.get());
       converted_frame_->format = output_sample_format_;
       converted_frame_->sample_rate = out_rate;
-      check_av_error(av_channel_layout_copy(&converted_frame_->ch_layout, &frame_->ch_layout),
-                     "Could not copy channel layout");
+      if (options_.output_num_channels.has_value() &&
+          options_.output_num_channels.value() > 0) {
+        av_channel_layout_default(&converted_frame_->ch_layout,
+                                  options_.output_num_channels.value());
+      } else {
+        check_av_error(av_channel_layout_copy(&converted_frame_->ch_layout, &frame_->ch_layout),
+                       "Could not copy channel layout");
+      }
       converted_frame_->nb_samples = out_samples;
 
       check_av_error(av_frame_get_buffer(converted_frame_.get(), 0),
@@ -249,6 +267,8 @@ namespace avioflow
     }
     else
     {
+      metadata_.sample_rate = frame_->sample_rate;
+      metadata_.num_channels = frame_->ch_layout.nb_channels;
       return frame_.get();
     }
   }
@@ -319,8 +339,8 @@ namespace avioflow
       if (ret == AVERROR_EOF)
       {
         metadata_.num_samples = total_samples_decoded_;
-        if (codec_ctx_->sample_rate > 0) {
-            metadata_.duration = static_cast<double>(total_samples_decoded_) / codec_ctx_->sample_rate;
+        if (metadata_.sample_rate > 0) {
+            metadata_.duration = static_cast<double>(total_samples_decoded_) / metadata_.sample_rate;
         }
         eof_reached_ = true;
         return nullptr;

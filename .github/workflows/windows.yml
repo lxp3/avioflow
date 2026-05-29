@@ -154,9 +154,3 @@ jobs:
           name: ${{ matrix.npm-artifact-name }}
           path: nodejs/npm-packages/@lxp3/${{ matrix.npm-package }}/
 
-      - name: Cancel workflow on failure
-        if: failure()
-        run: gh run cancel ${{ github.run_id }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-

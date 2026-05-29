@@ -44,12 +44,6 @@ jobs:
           name: npm-linux-x64
           path: nodejs/npm-packages/@lxp3/linux-x64/
 
-      - name: Cancel workflow on failure
-        if: failure()
-        run: gh run cancel ${{ github.run_id }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
   build-linux-npm-arm64:
     if: inputs.build-npm
     runs-on: ubuntu-latest
@@ -94,13 +88,6 @@ jobs:
           name: npm-linux-arm64
           path: nodejs/npm-packages/@lxp3/linux-arm64/
 
-      - name: Cancel workflow on failure
-        if: failure()
-        run: gh run cancel ${{ github.run_id }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-
   build-macos-npm-x64:
     if: inputs.build-npm
     runs-on: macos-15-intel
@@ -136,12 +123,6 @@ jobs:
           name: npm-darwin-x64
           path: nodejs/npm-packages/@lxp3/darwin-x64/
 
-      - name: Cancel workflow on failure
-        if: failure()
-        run: gh run cancel ${{ github.run_id }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
   build-macos-npm-arm64:
     if: inputs.build-npm
     runs-on: macos-15
@@ -176,10 +157,4 @@ jobs:
         with:
           name: npm-darwin-arm64
           path: nodejs/npm-packages/@lxp3/darwin-arm64/
-
-      - name: Cancel workflow on failure
-        if: failure()
-        run: gh run cancel ${{ github.run_id }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

@@ -183,9 +183,30 @@ jobs:
         run: |
           shopt -s nullglob
           mkdir -p dist pypi_dist vsix_dist
+          require_glob() {
+            local description="$1"
+            shift
+            local matches=("$@")
+            if [ "${#matches[@]}" -eq 0 ]; then
+              echo "Missing required artifact: $description"
+              exit 1
+            fi
+          }
 
           # C++ binaries
           if [ "${{ needs.check-tag.outputs.build-cpp }}" == "true" ]; then
+            require_glob "Linux shared x86_64 C++ package" artifacts/linux-cpp-binaries-shared-x86_64/*.tar.gz
+            require_glob "Linux static x86_64 C++ package" artifacts/linux-cpp-binaries-static-x86_64/*.tar.gz
+            require_glob "Linux shared arm64 C++ package" artifacts/linux-cpp-binaries-shared-aarch64/*.tar.gz
+            require_glob "Linux static arm64 C++ package" artifacts/linux-cpp-binaries-static-aarch64/*.tar.gz
+            require_glob "macOS shared x86_64 C++ package" artifacts/macos-cpp-binaries-shared-x86_64/*.tar.gz
+            require_glob "macOS static x86_64 C++ package" artifacts/macos-cpp-binaries-static-x86_64/*.tar.gz
+            require_glob "macOS shared arm64 C++ package" artifacts/macos-cpp-binaries-shared-aarch64/*.tar.gz
+            require_glob "macOS static arm64 C++ package" artifacts/macos-cpp-binaries-static-aarch64/*.tar.gz
+            require_glob "Windows shared x64 C++ package" artifacts/windows-cpp-binaries-shared-x64/*.zip
+            require_glob "Windows static x64 C++ package" artifacts/windows-cpp-binaries-static-x64/*.zip
+            require_glob "Windows shared arm64 C++ package" artifacts/windows-cpp-binaries-shared-arm64/*.zip
+            require_glob "Windows static arm64 C++ package" artifacts/windows-cpp-binaries-static-arm64/*.zip
             for file in artifacts/linux-cpp-binaries-*/* artifacts/macos-cpp-binaries-*/* artifacts/windows-cpp-binaries-*/*; do
               cp "$file" dist/
             done
@@ -193,6 +214,14 @@ jobs:
 
           # Python wheels
           if [ "${{ needs.check-tag.outputs.build-python }}" == "true" ]; then
+            require_glob "Linux Python x86_64 wheels" artifacts/linux-python-wheels-x86_64/*.whl
+            require_glob "Linux Python arm64 wheels" artifacts/linux-python-wheels-arm64/*.whl
+            if [ "${{ needs.check-tag.outputs.python-target }}" == "all" ]; then
+              require_glob "macOS Python x86_64 wheels" artifacts/macos-python-wheels-x86_64/*.whl
+              require_glob "macOS Python arm64 wheels" artifacts/macos-python-wheels-arm64/*.whl
+              require_glob "Windows Python x86_64 wheels" artifacts/windows-python-wheels-x86_64/*.whl
+              require_glob "Windows Python arm64 wheels" artifacts/windows-python-wheels-arm64/*.whl
+            fi
             for wheel in artifacts/linux-python-wheels-*/*.whl artifacts/macos-python-wheels-*/*.whl artifacts/windows-python-wheels-*/*.whl; do
               cp "$wheel" dist/
               cp "$wheel" pypi_dist/
@@ -201,6 +230,12 @@ jobs:
 
           # NPM native packages
           if [ "${{ needs.check-tag.outputs.build-npm }}" == "true" ]; then
+            require_glob "Linux x64 npm native module" artifacts/npm-linux-x64/avioflow.node
+            require_glob "Linux arm64 npm native module" artifacts/npm-linux-arm64/avioflow.node
+            require_glob "macOS x64 npm native module" artifacts/npm-darwin-x64/avioflow.node
+            require_glob "macOS arm64 npm native module" artifacts/npm-darwin-arm64/avioflow.node
+            require_glob "Windows x64 npm native module" artifacts/npm-win32-x64/avioflow.node
+            require_glob "Windows arm64 npm native module" artifacts/npm-win32-arm64/avioflow.node
             cp artifacts/npm-linux-x64/avioflow.node nodejs/npm-packages/@lxp3/linux-x64/
             cp artifacts/npm-linux-arm64/avioflow.node nodejs/npm-packages/@lxp3/linux-arm64/
             cp artifacts/npm-darwin-x64/avioflow.node nodejs/npm-packages/@lxp3/darwin-x64/
@@ -211,12 +246,15 @@ jobs:
 
           # WASM Engine
           if [ "${{ needs.check-tag.outputs.build-wasm }}" == "true" ]; then
+             require_glob "WASM engine" artifacts/wasm-engine/avioflow-*.wasm
+             require_glob "WASM JavaScript loader" artifacts/wasm-engine/avioflow-*.js
              cp artifacts/wasm-engine/avioflow-*.wasm dist/
              cp artifacts/wasm-engine/avioflow-*.js dist/
           fi
 
           # VS Code extension
           if [ "${{ needs.check-tag.outputs.build-vsix }}" == "true" ]; then
+            require_glob "VS Code extension package" artifacts/vscode-extension/*.vsix
             cp artifacts/vscode-extension/*.vsix vsix_dist/
             cp artifacts/vscode-extension/*.vsix dist/
           fi

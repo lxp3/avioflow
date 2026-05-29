@@ -45,12 +45,6 @@ jobs:
           name: linux-python-wheels-x86_64
           path: ./wheelhouse/*.whl
 
-      - name: Cancel workflow on failure
-        if: failure()
-        run: gh run cancel ${{ github.run_id }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
   build-python-linux-arm64:
     if: inputs.build-python && (inputs.python-target == 'all' || inputs.python-target == 'linux')
     runs-on: ubuntu-latest
@@ -85,13 +79,6 @@ jobs:
         with:
           name: linux-python-wheels-arm64
           path: ./wheelhouse/*.whl
-
-      - name: Cancel workflow on failure
-        if: failure()
-        run: gh run cancel ${{ github.run_id }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
 
   build-python-macos:
     if: inputs.build-python && inputs.python-target == 'all'
@@ -128,12 +115,6 @@ jobs:
           name: macos-python-wheels-${{ matrix.arch }}
           path: ./wheelhouse/*.whl
 
-      - name: Cancel workflow on failure
-        if: failure()
-        run: gh run cancel ${{ github.run_id }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
   # --- Build Python Wheels (Windows, Shared) ---
 
   build-python-windows-x86_64:
@@ -164,12 +145,6 @@ jobs:
           name: windows-python-wheels-x86_64
           path: ./wheelhouse/*.whl
 
-      - name: Cancel workflow on failure
-        if: failure()
-        run: gh run cancel ${{ github.run_id }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
   build-python-windows-arm64:
     if: inputs.build-python && inputs.python-target == 'all'
     runs-on: windows-latest
@@ -196,10 +171,4 @@ jobs:
         with:
           name: windows-python-wheels-arm64
           path: ./wheelhouse/*.whl
-
-      - name: Cancel workflow on failure
-        if: failure()
-        run: gh run cancel ${{ github.run_id }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

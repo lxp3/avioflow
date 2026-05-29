@@ -66,16 +66,22 @@ run_test() {
     fi
 }
 
-# Test with available Node versions
-if [ -s "$HOME/.nvm/nvm.sh" ]; then
+# Test with current Node by default. Set AVIOFLOW_TEST_ALL_NODE_VERSIONS=1
+# to smoke-test every installed nvm Node version >= 16 locally.
+if [ "${AVIOFLOW_TEST_ALL_NODE_VERSIONS:-0}" = "1" ] && [ -s "$HOME/.nvm/nvm.sh" ]; then
     source "$HOME/.nvm/nvm.sh"
-    for ver in $(nvm list --no-colors | grep -o 'v[0-9]*\.[0-9]*\.[0-9]*' | sort -uV); do
+    TESTED_NODE_VERSION=false
+    for ver in $(nvm list --no-colors | grep -o 'v[0-9]*\.[0-9]*\.[0-9]*' | sort -uV || true); do
         major=${ver%%.*}; major=${major#v}
         if [ "$major" -ge 16 ]; then
             nvm use "$ver" >/dev/null 2>&1
             run_test "node"
+            TESTED_NODE_VERSION=true
         fi
     done
+    if [ "$TESTED_NODE_VERSION" = false ]; then
+        run_test "node"
+    fi
 else
     run_test "node"
 fi
