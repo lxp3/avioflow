@@ -1,21 +1,9 @@
 name: Java
 
 on:
-  pull_request:
-    paths:
-      - 'java/**'
-      - 'avioflow/**'
-      - 'cmake/**'
-      - 'CMakeLists.txt'
-      - 'build-java.*'
-      - 'scripts/sync_version.py'
-      - '.github/workflows/java.yml'
   push:
-    branches:
-      - main
     tags:
       - 'v*'
-  workflow_dispatch:
 
 permissions:
   contents: read
