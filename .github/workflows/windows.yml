@@ -109,6 +109,7 @@ jobs:
         run: |
           $PkgDir = "${{ matrix.pkg-dir }}"
           cmake --install build_${{ matrix.package-kind }} --prefix $PkgDir --config Release
+          $PkgPath = (Resolve-Path $PkgDir).Path
 
           $SmokeDir = Join-Path $PkgDir ".smoke"
           New-Item -ItemType Directory -Force -Path $SmokeDir | Out-Null
@@ -128,10 +129,12 @@ jobs:
             "}"
           )
 
-          cmake -S $SmokeDir -B (Join-Path $SmokeDir "build") -DCMAKE_PREFIX_PATH=$PkgDir
+          cmake -S $SmokeDir -B (Join-Path $SmokeDir "build") -DCMAKE_PREFIX_PATH=$PkgPath
           cmake --build (Join-Path $SmokeDir "build") --config Release -j 4
-          $Env:Path = "$(Join-Path $PkgDir 'bin');$Env:Path"
-          & (Join-Path $SmokeDir "build\Release\avioflow_smoke.exe")
+          if ("${{ matrix.run-tests }}" -eq "true") {
+            $Env:Path = "$(Join-Path $PkgPath 'bin');$Env:Path"
+            & (Join-Path $SmokeDir "build\Release\avioflow_smoke.exe")
+          }
 
           Compress-Archive -Path "$PkgDir/*" -DestinationPath "$PkgDir.zip"
 

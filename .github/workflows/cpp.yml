@@ -77,7 +77,7 @@ jobs:
               '    return 0;' \
               '}' \
               > \"\$SMOKE_DIR/main.cpp\" && \
-            cmake -S \"\$SMOKE_DIR\" -B \"\$SMOKE_DIR/build\" -DCMAKE_PREFIX_PATH=\"$(pwd)/\$PKG_DIR\" && \
+            cmake -S \"\$SMOKE_DIR\" -B \"\$SMOKE_DIR/build\" -DCMAKE_PREFIX_PATH=\"\$(pwd)/\$PKG_DIR\" && \
             cmake --build \"\$SMOKE_DIR/build\" --config Release -j \$(nproc) && \
             \"\$SMOKE_DIR/build/avioflow_smoke\" && \
             tar -czvf \$PKG_DIR.tar.gz \$PKG_DIR

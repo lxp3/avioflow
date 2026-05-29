@@ -1,4 +1,5 @@
 include(FetchContent)
+include(CheckCXXSourceCompiles)
 
 set(_ffmpeg_release_base "https://github.com/lxp3/ffmpeg-build/releases/download/v0.3.4")
 
@@ -21,6 +22,33 @@ function(_avioflow_normalize_arch out_var)
             "Supported architectures: x86_64, aarch64."
         )
     endif()
+endfunction()
+
+function(_avioflow_remove_unavailable_atomic)
+    if(NOT (UNIX AND NOT APPLE AND NOT BUILD_SHARED_LIBS))
+        return()
+    endif()
+
+    set(_avioflow_saved_required_libraries "${CMAKE_REQUIRED_LIBRARIES}")
+    set(CMAKE_REQUIRED_LIBRARIES atomic)
+    check_cxx_source_compiles("int main() { return 0; }" AVIOFLOW_HAVE_LIBATOMIC)
+    set(CMAKE_REQUIRED_LIBRARIES "${_avioflow_saved_required_libraries}")
+
+    if(AVIOFLOW_HAVE_LIBATOMIC)
+        return()
+    endif()
+
+    foreach(_ffmpeg_target ffmpeg::ffmpeg ffmpeg::avdevice ffmpeg::avfilter ffmpeg::avformat ffmpeg::avcodec ffmpeg::swscale ffmpeg::swresample ffmpeg::avutil)
+        if(TARGET ${_ffmpeg_target})
+            get_target_property(_ffmpeg_links ${_ffmpeg_target} INTERFACE_LINK_LIBRARIES)
+            if(_ffmpeg_links)
+                list(REMOVE_ITEM _ffmpeg_links atomic)
+                set_target_properties(${_ffmpeg_target} PROPERTIES
+                    INTERFACE_LINK_LIBRARIES "${_ffmpeg_links}"
+                )
+            endif()
+        endif()
+    endforeach()
 endfunction()
 
 if(EMSCRIPTEN)
@@ -125,6 +153,7 @@ set(FFmpeg_DIR "${FFMPEG_ROOT}/lib/cmake/FFmpeg" CACHE PATH "FFmpeg CMake packag
 
 message(STATUS "FFmpeg Root set to: ${FFMPEG_ROOT}")
 find_package(FFmpeg CONFIG REQUIRED)
+_avioflow_remove_unavailable_atomic()
 
 set(FFMPEG_INCLUDE_DIRS "${FFmpeg_INCLUDE_DIR}")
 set(FFMPEG_LIB_DIR "${FFmpeg_LIBRARY_DIR}")
