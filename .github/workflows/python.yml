@@ -1,0 +1,205 @@
+name: Release Python
+
+on:
+  workflow_call:
+    inputs:
+      build-python:
+        required: true
+        type: boolean
+      python-target:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  build-python-linux-x86_64:
+    if: inputs.build-python && (inputs.python-target == 'all' || inputs.python-target == 'linux')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Sync version metadata
+        run: python3 scripts/sync_version.py
+
+      - name: Build wheels
+        uses: pypa/cibuildwheel@v2.22.0
+        with:
+          package-dir: python
+          config-file: python/pyproject.toml
+        env:
+          CIBW_ARCHS_LINUX: "x86_64"
+          CIBW_BUILD: "cp38-* cp39-* cp310-* cp311-* cp312-* cp313-* cp314-*"
+          CIBW_SKIP: "pp* *-musllinux*"
+          CIBW_MANYLINUX_X86_64_IMAGE: manylinux2014
+          CIBW_MANYLINUX_AARCH64_IMAGE: manylinux2014
+          CIBW_ENVIRONMENT_LINUX: "CMAKE_ARGS='-DBUILD_SHARED_LIBS=OFF'"
+          CIBW_REPAIR_WHEEL_COMMAND_LINUX: "auditwheel repair -w {dest_dir} {wheel}"
+          CIBW_TEST_REQUIRES: numpy
+          CIBW_TEST_COMMAND: "python {project}/python/tests/test_offline_load.py {project}/public/wavs/TownTheme.mp3"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-python-wheels-x86_64
+          path: ./wheelhouse/*.whl
+
+      - name: Cancel workflow on failure
+        if: failure()
+        run: gh run cancel ${{ github.run_id }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-python-linux-arm64:
+    if: inputs.build-python && (inputs.python-target == 'all' || inputs.python-target == 'linux')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Sync version metadata
+        run: python3 scripts/sync_version.py
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - name: Build wheels
+        uses: pypa/cibuildwheel@v2.22.0
+        with:
+          package-dir: python
+          config-file: python/pyproject.toml
+        env:
+          CIBW_ARCHS_LINUX: "aarch64"
+          CIBW_BUILD: "cp38-* cp39-* cp310-* cp311-* cp312-* cp313-* cp314-*"
+          CIBW_SKIP: "pp* *-musllinux*"
+          CIBW_MANYLINUX_X86_64_IMAGE: manylinux2014
+          CIBW_MANYLINUX_AARCH64_IMAGE: manylinux2014
+          CIBW_ENVIRONMENT_LINUX: "CMAKE_ARGS='-DBUILD_SHARED_LIBS=OFF'"
+          CIBW_REPAIR_WHEEL_COMMAND_LINUX: "auditwheel repair -w {dest_dir} {wheel}"
+          CIBW_TEST_REQUIRES: numpy
+          CIBW_TEST_COMMAND: "python {project}/python/tests/test_offline_load.py {project}/public/wavs/TownTheme.mp3"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-python-wheels-arm64
+          path: ./wheelhouse/*.whl
+
+      - name: Cancel workflow on failure
+        if: failure()
+        run: gh run cancel ${{ github.run_id }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+
+  build-python-macos:
+    if: inputs.build-python && inputs.python-target == 'all'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: macos-15-intel
+          - arch: arm64
+            runner: macos-15
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Sync version metadata
+        run: python3 scripts/sync_version.py
+
+      - name: Build wheels
+        uses: pypa/cibuildwheel@v2.22.0
+        with:
+          package-dir: python
+          config-file: python/pyproject.toml
+        env:
+          CIBW_ARCHS_MACOS: ${{ matrix.arch }}
+          CIBW_BUILD: "cp38-* cp39-* cp310-* cp311-* cp312-* cp313-* cp314-*"
+          CIBW_SKIP: "pp*"
+          CIBW_ENVIRONMENT_MACOS: "CMAKE_ARGS=-DBUILD_SHARED_LIBS=OFF MACOSX_DEPLOYMENT_TARGET=12.0"
+          CIBW_TEST_REQUIRES: numpy
+          CIBW_TEST_COMMAND: "python {project}/python/tests/test_offline_load.py {project}/public/wavs/TownTheme.mp3"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-python-wheels-${{ matrix.arch }}
+          path: ./wheelhouse/*.whl
+
+      - name: Cancel workflow on failure
+        if: failure()
+        run: gh run cancel ${{ github.run_id }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # --- Build Python Wheels (Windows, Shared) ---
+
+  build-python-windows-x86_64:
+    if: inputs.build-python && inputs.python-target == 'all'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Sync version metadata
+        shell: pwsh
+        run: python scripts/sync_version.py
+
+      - name: Build wheels
+        uses: pypa/cibuildwheel@v2.22.0
+        with:
+          package-dir: python
+          config-file: python/pyproject.toml
+        env:
+          CIBW_ARCHS_WINDOWS: AMD64
+          CIBW_BUILD: "cp38-* cp39-* cp310-* cp311-* cp312-* cp313-* cp314-*"
+          CIBW_SKIP: "pp* *-win32"
+          CIBW_ENVIRONMENT_WINDOWS: "CMAKE_ARGS=-DBUILD_SHARED_LIBS=ON"
+          CIBW_TEST_REQUIRES: numpy
+          CIBW_TEST_COMMAND: "python {project}/python/tests/test_offline_load.py {project}/public/wavs/TownTheme.mp3"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-python-wheels-x86_64
+          path: ./wheelhouse/*.whl
+
+      - name: Cancel workflow on failure
+        if: failure()
+        run: gh run cancel ${{ github.run_id }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-python-windows-arm64:
+    if: inputs.build-python && inputs.python-target == 'all'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Sync version metadata
+        shell: pwsh
+        run: python scripts/sync_version.py
+
+      - name: Build wheels
+        uses: pypa/cibuildwheel@v2.22.0
+        with:
+          package-dir: python
+          config-file: python/pyproject.toml
+        env:
+          CIBW_ARCHS_WINDOWS: ARM64
+          CIBW_BUILD: "cp38-* cp39-* cp310-* cp311-* cp312-* cp313-* cp314-*"
+          CIBW_SKIP: "pp* *-win32"
+          CIBW_ENVIRONMENT_WINDOWS: "CMAKE_ARGS=-DBUILD_SHARED_LIBS=ON"
+          CIBW_TEST_SKIP: "*-win_arm64"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-python-wheels-arm64
+          path: ./wheelhouse/*.whl
+
+      - name: Cancel workflow on failure
+        if: failure()
+        run: gh run cancel ${{ github.run_id }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+

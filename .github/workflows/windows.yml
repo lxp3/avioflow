@@ -1,0 +1,162 @@
+name: Release Windows
+
+on:
+  workflow_call:
+    inputs:
+      build-cpp:
+        required: true
+        type: boolean
+      build-npm:
+        required: true
+        type: boolean
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  build-windows:
+    if: inputs.build-cpp || inputs.build-npm
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            cmake-platform: x64
+            msvc-arch: x64
+            shared-libs: "ON"
+            package-kind: shared
+            pkg-dir: avioflow-shared-win-x64
+            cpp-artifact-name: windows-cpp-binaries-shared-x64
+            npm-package: win32-x64
+            npm-artifact-name: npm-win32-x64
+            run-tests: true
+          - arch: x64
+            cmake-platform: x64
+            msvc-arch: x64
+            shared-libs: "OFF"
+            package-kind: static
+            pkg-dir: avioflow-static-win-x64
+            cpp-artifact-name: windows-cpp-binaries-static-x64
+            npm-package: win32-x64
+            npm-artifact-name: npm-win32-x64
+            run-tests: false
+          - arch: arm64
+            cmake-platform: ARM64
+            msvc-arch: amd64_arm64
+            shared-libs: "ON"
+            package-kind: shared
+            pkg-dir: avioflow-shared-win-arm64
+            cpp-artifact-name: windows-cpp-binaries-shared-arm64
+            npm-package: win32-arm64
+            npm-artifact-name: npm-win32-arm64
+            run-tests: false
+          - arch: arm64
+            cmake-platform: ARM64
+            msvc-arch: amd64_arm64
+            shared-libs: "OFF"
+            package-kind: static
+            pkg-dir: avioflow-static-win-arm64
+            cpp-artifact-name: windows-cpp-binaries-static-arm64
+            npm-package: win32-arm64
+            npm-artifact-name: npm-win32-arm64
+            run-tests: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Sync version metadata
+        shell: pwsh
+        run: python scripts/sync_version.py
+
+      - name: Set up MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: ${{ matrix.msvc-arch }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+          cache-dependency-path: nodejs/pnpm-lock.yaml
+
+      # --- Build C++ Binaries (Only if build-cpp is true) ---
+      - name: Build C++ ${{ matrix.package-kind }} Binaries
+        if: inputs.build-cpp
+        shell: pwsh
+        run: |
+          cmake -B build_${{ matrix.package-kind }} `
+            -A ${{ matrix.cmake-platform }} `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DBUILD_SHARED_LIBS=${{ matrix.shared-libs }} `
+            -DENABLE_WASAPI=ON `
+            -DENABLE_PYTHON=OFF `
+            -DENABLE_NODE_JS=OFF `
+            -DENABLE_BINARY=ON
+          cmake --build build_${{ matrix.package-kind }} --config Release -j 4
+
+      - name: Package C++ Binaries
+        if: inputs.build-cpp
+        shell: pwsh
+        run: |
+          $PkgDir = "${{ matrix.pkg-dir }}"
+          cmake --install build_${{ matrix.package-kind }} --prefix $PkgDir --config Release
+          Compress-Archive -Path "$PkgDir/*" -DestinationPath "$PkgDir.zip"
+
+      # --- Build Node.js Addon (Static, Node-API 8 for Node.js >= 16) ---
+      - name: Build Node.js Addon (Node-API 8)
+        if: inputs.build-npm && matrix.package-kind == 'shared'
+        shell: pwsh
+        run: |
+          # Use the specialized build script
+          ./build-nodejs.ps1 -TargetArch ${{ matrix.arch }}
+
+          # Copy to platform-specific package directory
+          $outputFile = "build-nodejs/bin/avioflow.node"
+          if (-not (Test-Path $outputFile)) { $outputFile = "build-nodejs/bin/Release/avioflow.node" }
+          Copy-Item $outputFile "nodejs/npm-packages/@lxp3/${{ matrix.npm-package }}/avioflow.node"
+
+          Write-Host "=== Platform Package Info ==="
+          Write-Host "Package: @lxp3/${{ matrix.npm-package }}"
+          Write-Host "Node-API version: 8"
+          Write-Host "Compatible with: Node.js 16+"
+          Get-ChildItem nodejs/npm-packages/@lxp3/${{ matrix.npm-package }}/
+
+      # Verify the built module works
+      - name: Verify Node.js Addon
+        if: inputs.build-npm && matrix.package-kind == 'shared' && matrix.run-tests
+        shell: pwsh
+        working-directory: nodejs
+        run: |
+          Write-Host "Verifying native module loads correctly..."
+          node -e "const m = require('./npm-packages/@lxp3/${{ matrix.npm-package }}/avioflow.node'); console.log('Exports:', Object.keys(m));"
+
+          $env:AVIOFLOW_BINDINGS_PATH = "$(Get-Location)/npm-packages/@lxp3/${{ matrix.npm-package }}/avioflow.node"
+          node tests/test-offline-load.js
+          Write-Host "Verification passed!"
+
+      # --- Upload Artifacts ---
+      - uses: actions/upload-artifact@v4
+        if: inputs.build-cpp
+        with:
+          name: ${{ matrix.cpp-artifact-name }}
+          path: ${{ matrix.pkg-dir }}.zip
+
+      - uses: actions/upload-artifact@v4
+        if: inputs.build-npm && matrix.package-kind == 'shared'
+        with:
+          name: ${{ matrix.npm-artifact-name }}
+          path: nodejs/npm-packages/@lxp3/${{ matrix.npm-package }}/
+
+      - name: Cancel workflow on failure
+        if: failure()
+        run: gh run cancel ${{ github.run_id }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+

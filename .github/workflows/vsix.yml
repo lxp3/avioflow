@@ -1,0 +1,46 @@
+name: Release VSIX
+
+on:
+  workflow_call:
+    inputs:
+      build-vsix:
+        required: true
+        type: boolean
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  build-vsix:
+    if: inputs.build-vsix
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Sync version metadata
+        shell: pwsh
+        run: python scripts/sync_version.py
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+          cache-dependency-path: vscode-extension/pnpm-lock.yaml
+
+      - name: Build and Package Extension
+        shell: pwsh
+        run: ./build-vsix.ps1
+
+      - name: Upload VSIX Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vscode-extension
+          path: vscode-extension/*.vsix
+

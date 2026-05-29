@@ -7,20 +7,10 @@ on:
 
 permissions:
   contents: write
-  id-token: write # Required for provenance
-  actions: write # Required for cancelling other jobs
+  id-token: write
+  actions: write
 
 jobs:
-  # ============================================================
-  # Determine what to build based on tag
-  # Tag formats:
-  #   v0.1.5       -> Build and publish everything (C++, Python, npm)
-  #   v0.1.5-cpp   -> Build and publish C++ only
-  #   v0.1.5-py    -> Build and publish Python wheels only
-  #   v0.1.5-py-linux -> Build and publish Linux Python wheels only
-  #   v0.1.5-npm   -> Build and publish npm only
-  #   v0.1.5-vsix  -> Build and publish VS Code extension only
-  # ============================================================
   check-tag:
     runs-on: ubuntu-latest
     outputs:
@@ -29,6 +19,7 @@ jobs:
       build-npm: ${{ steps.check.outputs.build-npm }}
       build-wasm: ${{ steps.check.outputs.build-wasm }}
       build-vsix: ${{ steps.check.outputs.build-vsix }}
+      build-java: ${{ steps.check.outputs.build-java }}
       python-target: ${{ steps.check.outputs.python-target }}
       tag-name: ${{ steps.check.outputs.tag-name }}
     steps:
@@ -44,6 +35,7 @@ jobs:
           BUILD_NPM="false"
           BUILD_WASM="false"
           BUILD_VSIX="false"
+          BUILD_JAVA="false"
           PYTHON_TARGET="all"
           
           # Check tag suffix
@@ -63,14 +55,18 @@ jobs:
           elif [[ "$TAG" =~ -vsix$ ]]; then
             echo "Tag ends with -vsix: Building VS Code extension only"
             BUILD_VSIX="true"
+          elif [[ "$TAG" =~ -java$ ]]; then
+            echo "Tag ends with -java: Building Java only"
+            BUILD_JAVA="true"
           elif [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "Tag is version only: Building everything"
             BUILD_CPP="true"
             BUILD_PYTHON="true"
             BUILD_NPM="true"
+            BUILD_JAVA="true"
           else
             echo "Unknown tag format: $TAG"
-            echo "Supported formats: v0.1.5, v0.1.5-cpp, v0.1.5-py, v0.1.5-py-linux, v0.1.5-npm, v0.1.5-vsix"
+            echo "Supported formats: v0.1.5, v0.1.5-cpp, v0.1.5-py, v0.1.5-py-linux, v0.1.5-npm, v0.1.5-vsix, v0.1.5-java"
             exit 1
           fi
           
@@ -79,6 +75,7 @@ jobs:
           echo "build-npm=$BUILD_NPM" >> $GITHUB_OUTPUT
           echo "build-wasm=$BUILD_WASM" >> $GITHUB_OUTPUT
           echo "build-vsix=$BUILD_VSIX" >> $GITHUB_OUTPUT
+          echo "build-java=$BUILD_JAVA" >> $GITHUB_OUTPUT
           echo "python-target=$PYTHON_TARGET" >> $GITHUB_OUTPUT
           
           echo "Build configuration:"
@@ -87,754 +84,79 @@ jobs:
           echo "  npm: $BUILD_NPM"
           echo "  Python target: $PYTHON_TARGET"
           echo "  VS Code Extension: $BUILD_VSIX"
+          echo "  Java: $BUILD_JAVA"
 
-  # ============================================================
-  # Linux C++ Build (Maximum Compatibility - manylinux2014)
-  # ============================================================
-  build-linux-cpp:
+  cpp:
     needs: check-tag
     if: needs.check-tag.outputs.build-cpp == 'true'
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - arch: x86_64
-            docker-image: quay.io/pypa/manylinux2014_x86_64
-            shared-libs: "ON"
-            package-kind: shared
-            pkg-dir: avioflow-shared-linux-x64
-            artifact-name: linux-cpp-binaries-shared-x86_64
-          - arch: x86_64
-            docker-image: quay.io/pypa/manylinux2014_x86_64
-            shared-libs: "OFF"
-            package-kind: static
-            pkg-dir: avioflow-static-linux-x64
-            artifact-name: linux-cpp-binaries-static-x86_64
-          - arch: aarch64
-            docker-image: quay.io/pypa/manylinux2014_aarch64
-            shared-libs: "ON"
-            package-kind: shared
-            pkg-dir: avioflow-shared-linux-arm64
-            artifact-name: linux-cpp-binaries-shared-aarch64
-          - arch: aarch64
-            docker-image: quay.io/pypa/manylinux2014_aarch64
-            shared-libs: "OFF"
-            package-kind: static
-            pkg-dir: avioflow-static-linux-arm64
-            artifact-name: linux-cpp-binaries-static-aarch64
-    steps:
-      - uses: actions/checkout@v4
+    uses: ./.github/workflows/cpp.yml
+    with:
+      build-cpp: ${{ needs.check-tag.outputs.build-cpp == 'true' }}
+    secrets: inherit
 
-      - name: Sync version metadata
-        run: python3 scripts/sync_version.py
-
-      - name: Set up QEMU
-        if: matrix.arch == 'aarch64'
-        uses: docker/setup-qemu-action@v3
-        with:
-          platforms: arm64
-
-      - name: Build C++ ${{ matrix.package-kind }} Binaries in manylinux2014 (${{ matrix.arch }})
-        run: |
-          docker run --rm -v $(pwd):/io -w /io ${{ matrix.docker-image }} bash -c "
-            cmake -B build_${{ matrix.package-kind }} -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=${{ matrix.shared-libs }} -DENABLE_WASAPI=OFF -DENABLE_PYTHON=OFF -DENABLE_NODE_JS=OFF -DENABLE_BINARY=ON && \
-            cmake --build build_${{ matrix.package-kind }} --config Release -j \$(nproc) && \
-            PKG_DIR=\"${{ matrix.pkg-dir }}\" && \
-            cmake --install build_${{ matrix.package-kind }} --prefix \$PKG_DIR && \
-            tar -czvf \$PKG_DIR.tar.gz \$PKG_DIR
-          "
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.artifact-name }}
-          path: ${{ matrix.pkg-dir }}.tar.gz
-
-  # ============================================================
-  # Linux Node.js Build (Modern - manylinux_2_28)
-  # ============================================================
-  build-linux-npm-x64:
+  node:
     needs: check-tag
     if: needs.check-tag.outputs.build-npm == 'true'
-    runs-on: ubuntu-latest
-    container: quay.io/pypa/manylinux_2_28_x86_64
-    steps:
-      - uses: actions/checkout@v4
+    uses: ./.github/workflows/node.yml
+    with:
+      build-npm: ${{ needs.check-tag.outputs.build-npm == 'true' }}
+    secrets: inherit
 
-      - name: Sync version metadata
-        run: python3 scripts/sync_version.py
-
-      - name: Install Node.js 20
-        run: |
-          curl -fsSL https://rpm.nodesource.com/setup_20.x | bash -
-          dnf install -y nodejs
-          npm install -g pnpm
-
-      - name: Build Node.js Addon
-        run: |
-          bash build-nodejs.sh
-          cp build-nodejs/bin/avioflow.node nodejs/npm-packages/@lxp3/linux-x64/avioflow.node
-
-      - name: Verify Node.js Addon
-        working-directory: nodejs
-        run: |
-          export AVIOFLOW_BINDINGS_PATH="$(pwd)/npm-packages/@lxp3/linux-x64/avioflow.node"
-          node tests/test-offline-load.js
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: npm-linux-x64
-          path: nodejs/npm-packages/@lxp3/linux-x64/
-
-      - name: Cancel workflow on failure
-        if: failure()
-        run: gh run cancel ${{ github.run_id }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  build-linux-npm-arm64:
-    needs: check-tag
-    if: needs.check-tag.outputs.build-npm == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Sync version metadata
-        run: python3 scripts/sync_version.py
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-        with:
-          platforms: arm64
-
-      - name: Build in manylinux_2_28 container
-        run: |
-          docker run --rm --platform linux/arm64 \
-            -v $(pwd):/io -w /io \
-            quay.io/pypa/manylinux_2_28_aarch64 \
-            bash -c "
-              curl -fsSL https://rpm.nodesource.com/setup_20.x | bash - && \
-              dnf install -y nodejs && \
-              npm install -g pnpm && \
-              bash build-nodejs.sh && \
-              cp build-nodejs/bin/avioflow.node nodejs/npm-packages/@lxp3/linux-arm64/avioflow.node
-            "
-
-      - name: Verify Node.js Addon
-        run: |
-          docker run --rm --platform linux/arm64 \
-            -v $(pwd):/io -w /io/nodejs \
-            quay.io/pypa/manylinux_2_28_aarch64 \
-            bash -c "
-              curl -fsSL https://rpm.nodesource.com/setup_20.x | bash - && \
-              dnf install -y nodejs && \
-              export AVIOFLOW_BINDINGS_PATH=\"\$(pwd)/npm-packages/@lxp3/linux-arm64/avioflow.node\" && \
-              node tests/test-offline-load.js
-            "
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: npm-linux-arm64
-          path: nodejs/npm-packages/@lxp3/linux-arm64/
-
-      - name: Cancel workflow on failure
-        if: failure()
-        run: gh run cancel ${{ github.run_id }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  # --- Build Python Wheels (Linux, Shared) ---
-  build-python-linux-x86_64:
-    needs: check-tag
-    if: needs.check-tag.outputs.build-python == 'true' && (needs.check-tag.outputs.python-target == 'all' || needs.check-tag.outputs.python-target == 'linux')
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Sync version metadata
-        run: python3 scripts/sync_version.py
-
-      - name: Build wheels
-        uses: pypa/cibuildwheel@v2.22.0
-        with:
-          package-dir: python
-          config-file: python/pyproject.toml
-        env:
-          CIBW_ARCHS_LINUX: "x86_64"
-          CIBW_BUILD: "cp38-* cp39-* cp310-* cp311-* cp312-* cp313-* cp314-*"
-          CIBW_SKIP: "pp* *-musllinux*"
-          CIBW_MANYLINUX_X86_64_IMAGE: manylinux2014
-          CIBW_MANYLINUX_AARCH64_IMAGE: manylinux2014
-          CIBW_ENVIRONMENT_LINUX: "CMAKE_ARGS='-DBUILD_SHARED_LIBS=OFF'"
-          CIBW_REPAIR_WHEEL_COMMAND_LINUX: "auditwheel repair -w {dest_dir} {wheel}"
-          CIBW_TEST_REQUIRES: numpy
-          CIBW_TEST_COMMAND: "python {project}/python/tests/test_offline_load.py {project}/public/wavs/TownTheme.mp3"
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: linux-python-wheels-x86_64
-          path: ./wheelhouse/*.whl
-
-      - name: Cancel workflow on failure
-        if: failure()
-        run: gh run cancel ${{ github.run_id }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  build-python-linux-arm64:
-    needs: check-tag
-    if: needs.check-tag.outputs.build-python == 'true' && (needs.check-tag.outputs.python-target == 'all' || needs.check-tag.outputs.python-target == 'linux')
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Sync version metadata
-        run: python3 scripts/sync_version.py
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-        with:
-          platforms: arm64
-
-      - name: Build wheels
-        uses: pypa/cibuildwheel@v2.22.0
-        with:
-          package-dir: python
-          config-file: python/pyproject.toml
-        env:
-          CIBW_ARCHS_LINUX: "aarch64"
-          CIBW_BUILD: "cp38-* cp39-* cp310-* cp311-* cp312-* cp313-* cp314-*"
-          CIBW_SKIP: "pp* *-musllinux*"
-          CIBW_MANYLINUX_X86_64_IMAGE: manylinux2014
-          CIBW_MANYLINUX_AARCH64_IMAGE: manylinux2014
-          CIBW_ENVIRONMENT_LINUX: "CMAKE_ARGS='-DBUILD_SHARED_LIBS=OFF'"
-          CIBW_REPAIR_WHEEL_COMMAND_LINUX: "auditwheel repair -w {dest_dir} {wheel}"
-          CIBW_TEST_REQUIRES: numpy
-          CIBW_TEST_COMMAND: "python {project}/python/tests/test_offline_load.py {project}/public/wavs/TownTheme.mp3"
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: linux-python-wheels-arm64
-          path: ./wheelhouse/*.whl
-
-      - name: Cancel workflow on failure
-        if: failure()
-        run: gh run cancel ${{ github.run_id }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  # --- macOS C++ Build (Shared + Static, x86_64 + arm64) ---
-  build-macos-cpp:
-    needs: check-tag
-    if: needs.check-tag.outputs.build-cpp == 'true'
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - arch: x86_64
-            runner: macos-15-intel
-            shared-libs: "ON"
-            package-kind: shared
-            pkg-dir: avioflow-shared-macos-x64
-            artifact-name: macos-cpp-binaries-shared-x86_64
-          - arch: x86_64
-            runner: macos-15-intel
-            shared-libs: "OFF"
-            package-kind: static
-            pkg-dir: avioflow-static-macos-x64
-            artifact-name: macos-cpp-binaries-static-x86_64
-          - arch: aarch64
-            runner: macos-15
-            shared-libs: "ON"
-            package-kind: shared
-            pkg-dir: avioflow-shared-macos-arm64
-            artifact-name: macos-cpp-binaries-shared-aarch64
-          - arch: aarch64
-            runner: macos-15
-            shared-libs: "OFF"
-            package-kind: static
-            pkg-dir: avioflow-static-macos-arm64
-            artifact-name: macos-cpp-binaries-static-aarch64
-    runs-on: ${{ matrix.runner }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Sync version metadata
-        run: python3 scripts/sync_version.py
-
-      - name: Build macOS C++ ${{ matrix.package-kind }} (${{ matrix.arch }})
-        run: |
-          cmake -B build_macos_${{ matrix.package-kind }} \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0 \
-            -DBUILD_SHARED_LIBS=${{ matrix.shared-libs }} \
-            -DENABLE_WASAPI=OFF \
-            -DENABLE_PYTHON=OFF \
-            -DENABLE_NODE_JS=OFF \
-            -DENABLE_BINARY=ON
-          cmake --build build_macos_${{ matrix.package-kind }} --config Release -j "$(sysctl -n hw.logicalcpu)"
-          cmake --install build_macos_${{ matrix.package-kind }} --prefix "${{ matrix.pkg-dir }}" --config Release
-          if [ "${{ matrix.package-kind }}" = "shared" ]; then
-            for dylib in "${{ matrix.pkg-dir }}"/lib/*.dylib; do
-              [ -e "$dylib" ] || continue
-              install_name_tool -id "@rpath/$(basename "$dylib")" "$dylib" || true
-            done
-            for target in "${{ matrix.pkg-dir }}"/lib/*.dylib "${{ matrix.pkg-dir }}"/bin/*; do
-              [ -e "$target" ] || continue
-              otool -L "$target" 2>/dev/null | awk '/lib(av|sw).*\.dylib/{print $1}' | while read -r dep; do
-                install_name_tool -change "$dep" "@rpath/$(basename "$dep")" "$target" || true
-              done
-            done
-          fi
-          tar -czvf "${{ matrix.pkg-dir }}.tar.gz" "${{ matrix.pkg-dir }}"
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.artifact-name }}
-          path: ${{ matrix.pkg-dir }}.tar.gz
-
-  # ============================================================
-  # Windows Build (C++ + Node.js + Python Wheels)
-  # ============================================================
-  build-windows:
+  windows:
     needs: check-tag
     if: needs.check-tag.outputs.build-cpp == 'true' || needs.check-tag.outputs.build-npm == 'true'
-    runs-on: windows-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - arch: x64
-            cmake-platform: x64
-            msvc-arch: x64
-            shared-libs: "ON"
-            package-kind: shared
-            pkg-dir: avioflow-shared-win-x64
-            cpp-artifact-name: windows-cpp-binaries-shared-x64
-            npm-package: win32-x64
-            npm-artifact-name: npm-win32-x64
-            run-tests: true
-          - arch: x64
-            cmake-platform: x64
-            msvc-arch: x64
-            shared-libs: "OFF"
-            package-kind: static
-            pkg-dir: avioflow-static-win-x64
-            cpp-artifact-name: windows-cpp-binaries-static-x64
-            npm-package: win32-x64
-            npm-artifact-name: npm-win32-x64
-            run-tests: false
-          - arch: arm64
-            cmake-platform: ARM64
-            msvc-arch: amd64_arm64
-            shared-libs: "ON"
-            package-kind: shared
-            pkg-dir: avioflow-shared-win-arm64
-            cpp-artifact-name: windows-cpp-binaries-shared-arm64
-            npm-package: win32-arm64
-            npm-artifact-name: npm-win32-arm64
-            run-tests: false
-          - arch: arm64
-            cmake-platform: ARM64
-            msvc-arch: amd64_arm64
-            shared-libs: "OFF"
-            package-kind: static
-            pkg-dir: avioflow-static-win-arm64
-            cpp-artifact-name: windows-cpp-binaries-static-arm64
-            npm-package: win32-arm64
-            npm-artifact-name: npm-win32-arm64
-            run-tests: false
-    steps:
-      - uses: actions/checkout@v4
+    uses: ./.github/workflows/windows.yml
+    with:
+      build-cpp: ${{ needs.check-tag.outputs.build-cpp == 'true' }}
+      build-npm: ${{ needs.check-tag.outputs.build-npm == 'true' }}
+    secrets: inherit
 
-      - name: Sync version metadata
-        shell: pwsh
-        run: python scripts/sync_version.py
-
-      - name: Set up MSVC
-        uses: ilammy/msvc-dev-cmd@v1
-        with:
-          arch: ${{ matrix.msvc-arch }}
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'pnpm'
-          cache-dependency-path: nodejs/pnpm-lock.yaml
-
-      # --- Build C++ Binaries (Only if build-cpp is true) ---
-      - name: Build C++ ${{ matrix.package-kind }} Binaries
-        if: needs.check-tag.outputs.build-cpp == 'true'
-        shell: pwsh
-        run: |
-          cmake -B build_${{ matrix.package-kind }} `
-            -A ${{ matrix.cmake-platform }} `
-            -DCMAKE_BUILD_TYPE=Release `
-            -DBUILD_SHARED_LIBS=${{ matrix.shared-libs }} `
-            -DENABLE_WASAPI=ON `
-            -DENABLE_PYTHON=OFF `
-            -DENABLE_NODE_JS=OFF `
-            -DENABLE_BINARY=ON
-          cmake --build build_${{ matrix.package-kind }} --config Release -j 4
-
-      - name: Package C++ Binaries
-        if: needs.check-tag.outputs.build-cpp == 'true'
-        shell: pwsh
-        run: |
-          $PkgDir = "${{ matrix.pkg-dir }}"
-          cmake --install build_${{ matrix.package-kind }} --prefix $PkgDir --config Release
-          Compress-Archive -Path "$PkgDir/*" -DestinationPath "$PkgDir.zip"
-
-      # --- Build Node.js Addon (Static, Node-API 8 for Node.js >= 16) ---
-      - name: Build Node.js Addon (Node-API 8)
-        if: needs.check-tag.outputs.build-npm == 'true' && matrix.package-kind == 'shared'
-        shell: pwsh
-        run: |
-          # Use the specialized build script
-          ./build-nodejs.ps1 -TargetArch ${{ matrix.arch }}
-
-          # Copy to platform-specific package directory
-          $outputFile = "build-nodejs/bin/avioflow.node"
-          if (-not (Test-Path $outputFile)) { $outputFile = "build-nodejs/bin/Release/avioflow.node" }
-          Copy-Item $outputFile "nodejs/npm-packages/@lxp3/${{ matrix.npm-package }}/avioflow.node"
-
-          Write-Host "=== Platform Package Info ==="
-          Write-Host "Package: @lxp3/${{ matrix.npm-package }}"
-          Write-Host "Node-API version: 8"
-          Write-Host "Compatible with: Node.js 16+"
-          Get-ChildItem nodejs/npm-packages/@lxp3/${{ matrix.npm-package }}/
-
-      # Verify the built module works
-      - name: Verify Node.js Addon
-        if: needs.check-tag.outputs.build-npm == 'true' && matrix.package-kind == 'shared' && matrix.run-tests
-        shell: pwsh
-        working-directory: nodejs
-        run: |
-          Write-Host "Verifying native module loads correctly..."
-          node -e "const m = require('./npm-packages/@lxp3/${{ matrix.npm-package }}/avioflow.node'); console.log('Exports:', Object.keys(m));"
-
-          $env:AVIOFLOW_BINDINGS_PATH = "$(Get-Location)/npm-packages/@lxp3/${{ matrix.npm-package }}/avioflow.node"
-          node tests/test-offline-load.js
-          Write-Host "Verification passed!"
-
-      # --- Upload Artifacts ---
-      - uses: actions/upload-artifact@v4
-        if: needs.check-tag.outputs.build-cpp == 'true'
-        with:
-          name: ${{ matrix.cpp-artifact-name }}
-          path: ${{ matrix.pkg-dir }}.zip
-
-      - uses: actions/upload-artifact@v4
-        if: needs.check-tag.outputs.build-npm == 'true' && matrix.package-kind == 'shared'
-        with:
-          name: ${{ matrix.npm-artifact-name }}
-          path: nodejs/npm-packages/@lxp3/${{ matrix.npm-package }}/
-
-      - name: Cancel workflow on failure
-        if: failure()
-        run: gh run cancel ${{ github.run_id }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  # --- Build macOS Node.js Addon ---
-  build-macos-npm-x64:
+  python:
     needs: check-tag
-    if: needs.check-tag.outputs.build-npm == 'true'
-    runs-on: macos-15-intel
-    steps:
-      - uses: actions/checkout@v4
+    if: needs.check-tag.outputs.build-python == 'true'
+    uses: ./.github/workflows/python.yml
+    with:
+      build-python: ${{ needs.check-tag.outputs.build-python == 'true' }}
+      python-target: ${{ needs.check-tag.outputs.python-target }}
+    secrets: inherit
 
-      - name: Sync version metadata
-        run: python3 scripts/sync_version.py
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Build Node.js Addon
-        run: |
-          bash build-nodejs.sh
-          cp build-nodejs/bin/avioflow.node nodejs/npm-packages/@lxp3/darwin-x64/avioflow.node
-
-      - name: Verify Node.js Addon
-        working-directory: nodejs
-        run: |
-          export AVIOFLOW_BINDINGS_PATH="$(pwd)/npm-packages/@lxp3/darwin-x64/avioflow.node"
-          node tests/test-offline-load.js
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: npm-darwin-x64
-          path: nodejs/npm-packages/@lxp3/darwin-x64/
-
-      - name: Cancel workflow on failure
-        if: failure()
-        run: gh run cancel ${{ github.run_id }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  build-macos-npm-arm64:
+  java:
     needs: check-tag
-    if: needs.check-tag.outputs.build-npm == 'true'
-    runs-on: macos-15
-    steps:
-      - uses: actions/checkout@v4
+    if: needs.check-tag.outputs.build-java == 'true'
+    uses: ./.github/workflows/java.yml
+    secrets: inherit
 
-      - name: Sync version metadata
-        run: python3 scripts/sync_version.py
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Build Node.js Addon
-        run: |
-          bash build-nodejs.sh
-          cp build-nodejs/bin/avioflow.node nodejs/npm-packages/@lxp3/darwin-arm64/avioflow.node
-
-      - name: Verify Node.js Addon
-        working-directory: nodejs
-        run: |
-          export AVIOFLOW_BINDINGS_PATH="$(pwd)/npm-packages/@lxp3/darwin-arm64/avioflow.node"
-          node tests/test-offline-load.js
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: npm-darwin-arm64
-          path: nodejs/npm-packages/@lxp3/darwin-arm64/
-
-      - name: Cancel workflow on failure
-        if: failure()
-        run: gh run cancel ${{ github.run_id }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  # --- Build Python Wheels (macOS, Static) ---
-  build-python-macos:
-    needs: check-tag
-    if: needs.check-tag.outputs.build-python == 'true' && needs.check-tag.outputs.python-target == 'all'
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - arch: x86_64
-            runner: macos-15-intel
-          - arch: arm64
-            runner: macos-15
-    runs-on: ${{ matrix.runner }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Sync version metadata
-        run: python3 scripts/sync_version.py
-
-      - name: Build wheels
-        uses: pypa/cibuildwheel@v2.22.0
-        with:
-          package-dir: python
-          config-file: python/pyproject.toml
-        env:
-          CIBW_ARCHS_MACOS: ${{ matrix.arch }}
-          CIBW_BUILD: "cp38-* cp39-* cp310-* cp311-* cp312-* cp313-* cp314-*"
-          CIBW_SKIP: "pp*"
-          CIBW_ENVIRONMENT_MACOS: "CMAKE_ARGS=-DBUILD_SHARED_LIBS=OFF MACOSX_DEPLOYMENT_TARGET=12.0"
-          CIBW_TEST_REQUIRES: numpy
-          CIBW_TEST_COMMAND: "python {project}/python/tests/test_offline_load.py {project}/public/wavs/TownTheme.mp3"
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: macos-python-wheels-${{ matrix.arch }}
-          path: ./wheelhouse/*.whl
-
-      - name: Cancel workflow on failure
-        if: failure()
-        run: gh run cancel ${{ github.run_id }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  # --- Build Python Wheels (Windows, Shared) ---
-  build-python-windows-x86_64:
-    needs: check-tag
-    if: needs.check-tag.outputs.build-python == 'true' && needs.check-tag.outputs.python-target == 'all'
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Sync version metadata
-        shell: pwsh
-        run: python scripts/sync_version.py
-
-      - name: Build wheels
-        uses: pypa/cibuildwheel@v2.22.0
-        with:
-          package-dir: python
-          config-file: python/pyproject.toml
-        env:
-          CIBW_ARCHS_WINDOWS: AMD64
-          CIBW_BUILD: "cp38-* cp39-* cp310-* cp311-* cp312-* cp313-* cp314-*"
-          CIBW_SKIP: "pp* *-win32"
-          CIBW_ENVIRONMENT_WINDOWS: "CMAKE_ARGS=-DBUILD_SHARED_LIBS=ON"
-          CIBW_TEST_REQUIRES: numpy
-          CIBW_TEST_COMMAND: "python {project}/python/tests/test_offline_load.py {project}/public/wavs/TownTheme.mp3"
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: windows-python-wheels-x86_64
-          path: ./wheelhouse/*.whl
-
-      - name: Cancel workflow on failure
-        if: failure()
-        run: gh run cancel ${{ github.run_id }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  build-python-windows-arm64:
-    needs: check-tag
-    if: needs.check-tag.outputs.build-python == 'true' && needs.check-tag.outputs.python-target == 'all'
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Sync version metadata
-        shell: pwsh
-        run: python scripts/sync_version.py
-
-      - name: Build wheels
-        uses: pypa/cibuildwheel@v2.22.0
-        with:
-          package-dir: python
-          config-file: python/pyproject.toml
-        env:
-          CIBW_ARCHS_WINDOWS: ARM64
-          CIBW_BUILD: "cp38-* cp39-* cp310-* cp311-* cp312-* cp313-* cp314-*"
-          CIBW_SKIP: "pp* *-win32"
-          CIBW_ENVIRONMENT_WINDOWS: "CMAKE_ARGS=-DBUILD_SHARED_LIBS=ON"
-          CIBW_TEST_SKIP: "*-win_arm64"
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: windows-python-wheels-arm64
-          path: ./wheelhouse/*.whl
-
-      - name: Cancel workflow on failure
-        if: failure()
-        run: gh run cancel ${{ github.run_id }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  # ============================================================
-  # Build WASM Engine (Platform Independent)
-  # ============================================================
-  build-wasm:
+  wasm:
     needs: check-tag
     if: needs.check-tag.outputs.build-wasm == 'true'
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
+    uses: ./.github/workflows/wasm.yml
+    with:
+      build-wasm: ${{ needs.check-tag.outputs.build-wasm == 'true' }}
+      tag-name: ${{ needs.check-tag.outputs.tag-name }}
+    secrets: inherit
 
-      - name: Sync version metadata
-        shell: pwsh
-        run: python scripts/sync_version.py
-
-      - name: Build WASM
-        shell: pwsh
-        run: ./build-wasm.ps1
-
-      - name: Prepare WASM Artifact
-        shell: pwsh
-        run: |
-          $TAG = "${{ needs.check-tag.outputs.tag-name }}"
-          $VERSION = $TAG.TrimStart('v').Replace('-vsix', '')
-          Copy-Item "wasm/dist/avioflow.wasm" "avioflow-$VERSION.wasm"
-          Copy-Item "wasm/dist/avioflow.js" "avioflow-$VERSION.js"
-
-      - name: Upload WASM Artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: wasm-engine
-          path: |
-            avioflow-*.wasm
-            avioflow-*.js
-            wasm/dist/
-
-  # ============================================================
-  # Build VS Code Extension (.vsix)
-  # ============================================================
-  build-vsix:
+  vsix:
     needs: check-tag
     if: needs.check-tag.outputs.build-vsix == 'true'
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
+    uses: ./.github/workflows/vsix.yml
+    with:
+      build-vsix: ${{ needs.check-tag.outputs.build-vsix == 'true' }}
+    secrets: inherit
 
-      - name: Sync version metadata
-        shell: pwsh
-        run: python scripts/sync_version.py
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: 'pnpm'
-          cache-dependency-path: vscode-extension/pnpm-lock.yaml
-
-      - name: Build and Package Extension
-        shell: pwsh
-        run: ./build-vsix.ps1
-
-      - name: Upload VSIX Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: vscode-extension
-          path: vscode-extension/*.vsix
-
-  # ============================================================
-  # Publish to GitHub, PyPI, NPM, and VS Code Marketplace
-  # ============================================================
   publish:
-    needs: [check-tag, build-linux-cpp, build-linux-npm-x64, build-linux-npm-arm64, build-macos-npm-x64, build-macos-npm-arm64, build-python-linux-x86_64, build-python-linux-arm64, build-macos-cpp, build-python-macos, build-windows, build-python-windows-x86_64, build-python-windows-arm64, build-wasm, build-vsix]
+    needs: [check-tag, cpp, node, windows, python, java, wasm, vsix]
     runs-on: ubuntu-latest
     if: |
       always() &&
       startsWith(github.ref, 'refs/tags/') &&
       (needs.check-tag.result == 'success') &&
-      (needs.build-linux-cpp.result == 'success' || needs.build-linux-cpp.result == 'skipped') &&
-      (needs.build-linux-npm-x64.result == 'success' || needs.build-linux-npm-x64.result == 'skipped') &&
-      (needs.build-linux-npm-arm64.result == 'success' || needs.build-linux-npm-arm64.result == 'skipped') &&
-      (needs.build-macos-npm-x64.result == 'success' || needs.build-macos-npm-x64.result == 'skipped') &&
-      (needs.build-macos-npm-arm64.result == 'success' || needs.build-macos-npm-arm64.result == 'skipped') &&
-      (needs.build-macos-cpp.result == 'success' || needs.build-macos-cpp.result == 'skipped') &&
-      (needs.build-python-macos.result == 'success' || needs.build-python-macos.result == 'skipped') &&
-      (needs.build-windows.result == 'success' || needs.build-windows.result == 'skipped') &&
-      (needs.build-python-linux-x86_64.result == 'success' || needs.build-python-linux-x86_64.result == 'skipped') &&
-      (needs.build-python-linux-arm64.result == 'success' || needs.build-python-linux-arm64.result == 'skipped') &&
-      (needs.build-python-windows-x86_64.result == 'success' || needs.build-python-windows-x86_64.result == 'skipped') &&
-      (needs.build-python-windows-arm64.result == 'success' || needs.build-python-windows-arm64.result == 'skipped') &&
-      (needs.build-wasm.result == 'success' || needs.build-wasm.result == 'skipped') &&
-      (needs.build-vsix.result == 'success' || needs.build-vsix.result == 'skipped')
+      (needs.cpp.result == 'success' || needs.cpp.result == 'skipped') &&
+      (needs.node.result == 'success' || needs.node.result == 'skipped') &&
+      (needs.windows.result == 'success' || needs.windows.result == 'skipped') &&
+      (needs.python.result == 'success' || needs.python.result == 'skipped') &&
+      (needs.java.result == 'success' || needs.java.result == 'skipped') &&
+      (needs.wasm.result == 'success' || needs.wasm.result == 'skipped') &&
+      (needs.vsix.result == 'success' || needs.vsix.result == 'skipped')
     steps:
       - uses: actions/checkout@v4
 
@@ -859,27 +181,22 @@ jobs:
       # Prepare directories
       - name: Prepare release files
         run: |
+          shopt -s nullglob
           mkdir -p dist pypi_dist vsix_dist
 
           # C++ binaries
           if [ "${{ needs.check-tag.outputs.build-cpp }}" == "true" ]; then
-            cp artifacts/linux-cpp-binaries-*/* dist/
-            cp artifacts/macos-cpp-binaries-*/* dist/
-            cp artifacts/windows-cpp-binaries-*/* dist/
+            for file in artifacts/linux-cpp-binaries-*/* artifacts/macos-cpp-binaries-*/* artifacts/windows-cpp-binaries-*/*; do
+              cp "$file" dist/
+            done
           fi
 
           # Python wheels
           if [ "${{ needs.check-tag.outputs.build-python }}" == "true" ]; then
-            cp artifacts/linux-python-wheels-x86_64/*.whl dist/
-            cp artifacts/linux-python-wheels-arm64/*.whl dist/
-            cp artifacts/macos-python-wheels-*/*.whl dist/
-            cp artifacts/windows-python-wheels-x86_64/*.whl dist/
-            cp artifacts/windows-python-wheels-arm64/*.whl dist/
-            cp artifacts/linux-python-wheels-x86_64/*.whl pypi_dist/
-            cp artifacts/linux-python-wheels-arm64/*.whl pypi_dist/
-            cp artifacts/macos-python-wheels-*/*.whl pypi_dist/
-            cp artifacts/windows-python-wheels-x86_64/*.whl pypi_dist/
-            cp artifacts/windows-python-wheels-arm64/*.whl pypi_dist/
+            for wheel in artifacts/linux-python-wheels-*/*.whl artifacts/macos-python-wheels-*/*.whl artifacts/windows-python-wheels-*/*.whl; do
+              cp "$wheel" dist/
+              cp "$wheel" pypi_dist/
+            done
           fi
 
           # NPM native packages

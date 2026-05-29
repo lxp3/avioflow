@@ -1,0 +1,48 @@
+name: Release WASM
+
+on:
+  workflow_call:
+    inputs:
+      build-wasm:
+        required: true
+        type: boolean
+      tag-name:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  build-wasm:
+    if: inputs.build-wasm
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Sync version metadata
+        shell: pwsh
+        run: python scripts/sync_version.py
+
+      - name: Build WASM
+        shell: pwsh
+        run: ./build-wasm.ps1
+
+      - name: Prepare WASM Artifact
+        shell: pwsh
+        run: |
+          $TAG = "${{ inputs.tag-name }}"
+          $VERSION = $TAG.TrimStart('v').Replace('-vsix', '')
+          Copy-Item "wasm/dist/avioflow.wasm" "avioflow-$VERSION.wasm"
+          Copy-Item "wasm/dist/avioflow.js" "avioflow-$VERSION.js"
+
+      - name: Upload WASM Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: wasm-engine
+          path: |
+            avioflow-*.wasm
+            avioflow-*.js
+            wasm/dist/
+

@@ -1,0 +1,185 @@
+name: Release Node.js
+
+on:
+  workflow_call:
+    inputs:
+      build-npm:
+        required: true
+        type: boolean
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  build-linux-npm-x64:
+    if: inputs.build-npm
+    runs-on: ubuntu-latest
+    container: quay.io/pypa/manylinux_2_28_x86_64
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Sync version metadata
+        run: python3 scripts/sync_version.py
+
+      - name: Install Node.js 20
+        run: |
+          curl -fsSL https://rpm.nodesource.com/setup_20.x | bash -
+          dnf install -y nodejs
+          npm install -g pnpm
+
+      - name: Build Node.js Addon
+        run: |
+          bash build-nodejs.sh
+          cp build-nodejs/bin/avioflow.node nodejs/npm-packages/@lxp3/linux-x64/avioflow.node
+
+      - name: Verify Node.js Addon
+        working-directory: nodejs
+        run: |
+          export AVIOFLOW_BINDINGS_PATH="$(pwd)/npm-packages/@lxp3/linux-x64/avioflow.node"
+          node tests/test-offline-load.js
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: npm-linux-x64
+          path: nodejs/npm-packages/@lxp3/linux-x64/
+
+      - name: Cancel workflow on failure
+        if: failure()
+        run: gh run cancel ${{ github.run_id }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-linux-npm-arm64:
+    if: inputs.build-npm
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Sync version metadata
+        run: python3 scripts/sync_version.py
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - name: Build in manylinux_2_28 container
+        run: |
+          docker run --rm --platform linux/arm64 \
+            -v $(pwd):/io -w /io \
+            quay.io/pypa/manylinux_2_28_aarch64 \
+            bash -c "
+              curl -fsSL https://rpm.nodesource.com/setup_20.x | bash - && \
+              dnf install -y nodejs && \
+              npm install -g pnpm && \
+              bash build-nodejs.sh && \
+              cp build-nodejs/bin/avioflow.node nodejs/npm-packages/@lxp3/linux-arm64/avioflow.node
+            "
+
+      - name: Verify Node.js Addon
+        run: |
+          docker run --rm --platform linux/arm64 \
+            -v $(pwd):/io -w /io/nodejs \
+            quay.io/pypa/manylinux_2_28_aarch64 \
+            bash -c "
+              curl -fsSL https://rpm.nodesource.com/setup_20.x | bash - && \
+              dnf install -y nodejs && \
+              export AVIOFLOW_BINDINGS_PATH=\"\$(pwd)/npm-packages/@lxp3/linux-arm64/avioflow.node\" && \
+              node tests/test-offline-load.js
+            "
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: npm-linux-arm64
+          path: nodejs/npm-packages/@lxp3/linux-arm64/
+
+      - name: Cancel workflow on failure
+        if: failure()
+        run: gh run cancel ${{ github.run_id }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+
+  build-macos-npm-x64:
+    if: inputs.build-npm
+    runs-on: macos-15-intel
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Sync version metadata
+        run: python3 scripts/sync_version.py
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build Node.js Addon
+        run: |
+          bash build-nodejs.sh
+          cp build-nodejs/bin/avioflow.node nodejs/npm-packages/@lxp3/darwin-x64/avioflow.node
+
+      - name: Verify Node.js Addon
+        working-directory: nodejs
+        run: |
+          export AVIOFLOW_BINDINGS_PATH="$(pwd)/npm-packages/@lxp3/darwin-x64/avioflow.node"
+          node tests/test-offline-load.js
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: npm-darwin-x64
+          path: nodejs/npm-packages/@lxp3/darwin-x64/
+
+      - name: Cancel workflow on failure
+        if: failure()
+        run: gh run cancel ${{ github.run_id }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-macos-npm-arm64:
+    if: inputs.build-npm
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Sync version metadata
+        run: python3 scripts/sync_version.py
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build Node.js Addon
+        run: |
+          bash build-nodejs.sh
+          cp build-nodejs/bin/avioflow.node nodejs/npm-packages/@lxp3/darwin-arm64/avioflow.node
+
+      - name: Verify Node.js Addon
+        working-directory: nodejs
+        run: |
+          export AVIOFLOW_BINDINGS_PATH="$(pwd)/npm-packages/@lxp3/darwin-arm64/avioflow.node"
+          node tests/test-offline-load.js
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: npm-darwin-arm64
+          path: nodejs/npm-packages/@lxp3/darwin-arm64/
+
+      - name: Cancel workflow on failure
+        if: failure()
+        run: gh run cancel ${{ github.run_id }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+

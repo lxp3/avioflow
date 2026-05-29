@@ -1,4 +1,5 @@
 include(FetchContent)
+include(CheckCXXSourceCompiles)
 
 set(_ffmpeg_release_base "https://github.com/lxp3/ffmpeg-build/releases/download/v0.3.3")
 
@@ -104,6 +105,39 @@ function(_avioflow_patch_ffmpeg_imported_targets)
                 endif()
             endif()
         endforeach()
+    endif()
+
+    if(UNIX AND NOT APPLE AND NOT BUILD_SHARED_LIBS)
+        set(_ffmpeg_needs_atomic OFF)
+        foreach(_ffmpeg_target IN LISTS _ffmpeg_import_targets)
+            if(TARGET ${_ffmpeg_target})
+                get_target_property(_ffmpeg_links ${_ffmpeg_target} INTERFACE_LINK_LIBRARIES)
+                if(_ffmpeg_links AND atomic IN_LIST _ffmpeg_links)
+                    set(_ffmpeg_needs_atomic ON)
+                endif()
+            endif()
+        endforeach()
+
+        if(_ffmpeg_needs_atomic)
+            set(_avioflow_saved_required_libraries "${CMAKE_REQUIRED_LIBRARIES}")
+            set(CMAKE_REQUIRED_LIBRARIES atomic)
+            check_cxx_source_compiles("int main() { return 0; }" AVIOFLOW_HAVE_LIBATOMIC)
+            set(CMAKE_REQUIRED_LIBRARIES "${_avioflow_saved_required_libraries}")
+
+            if(NOT AVIOFLOW_HAVE_LIBATOMIC)
+                foreach(_ffmpeg_target IN LISTS _ffmpeg_import_targets)
+                    if(TARGET ${_ffmpeg_target})
+                        get_target_property(_ffmpeg_links ${_ffmpeg_target} INTERFACE_LINK_LIBRARIES)
+                        if(_ffmpeg_links)
+                            list(REMOVE_ITEM _ffmpeg_links atomic)
+                            set_target_properties(${_ffmpeg_target} PROPERTIES
+                                INTERFACE_LINK_LIBRARIES "${_ffmpeg_links}"
+                            )
+                        endif()
+                    endif()
+                endforeach()
+            endif()
+        endif()
     endif()
 endfunction()
 

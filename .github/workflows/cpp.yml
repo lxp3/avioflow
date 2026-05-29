@@ -1,0 +1,141 @@
+name: Release C++
+
+on:
+  workflow_call:
+    inputs:
+      build-cpp:
+        required: true
+        type: boolean
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  build-linux-cpp:
+    if: inputs.build-cpp
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            docker-image: quay.io/pypa/manylinux2014_x86_64
+            shared-libs: "ON"
+            package-kind: shared
+            pkg-dir: avioflow-shared-linux-x64
+            artifact-name: linux-cpp-binaries-shared-x86_64
+          - arch: x86_64
+            docker-image: quay.io/pypa/manylinux2014_x86_64
+            shared-libs: "OFF"
+            package-kind: static
+            pkg-dir: avioflow-static-linux-x64
+            artifact-name: linux-cpp-binaries-static-x86_64
+          - arch: aarch64
+            docker-image: quay.io/pypa/manylinux2014_aarch64
+            shared-libs: "ON"
+            package-kind: shared
+            pkg-dir: avioflow-shared-linux-arm64
+            artifact-name: linux-cpp-binaries-shared-aarch64
+          - arch: aarch64
+            docker-image: quay.io/pypa/manylinux2014_aarch64
+            shared-libs: "OFF"
+            package-kind: static
+            pkg-dir: avioflow-static-linux-arm64
+            artifact-name: linux-cpp-binaries-static-aarch64
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Sync version metadata
+        run: python3 scripts/sync_version.py
+
+      - name: Set up QEMU
+        if: matrix.arch == 'aarch64'
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - name: Build C++ ${{ matrix.package-kind }} Binaries in manylinux2014 (${{ matrix.arch }})
+        run: |
+          docker run --rm -v $(pwd):/io -w /io ${{ matrix.docker-image }} bash -c "
+            cmake -B build_${{ matrix.package-kind }} -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=${{ matrix.shared-libs }} -DENABLE_WASAPI=OFF -DENABLE_PYTHON=OFF -DENABLE_NODE_JS=OFF -DENABLE_BINARY=ON && \
+            cmake --build build_${{ matrix.package-kind }} --config Release -j \$(nproc) && \
+            PKG_DIR=\"${{ matrix.pkg-dir }}\" && \
+            cmake --install build_${{ matrix.package-kind }} --prefix \$PKG_DIR && \
+            tar -czvf \$PKG_DIR.tar.gz \$PKG_DIR
+          "
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact-name }}
+          path: ${{ matrix.pkg-dir }}.tar.gz
+
+
+  build-macos-cpp:
+    if: inputs.build-cpp
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: macos-15-intel
+            shared-libs: "ON"
+            package-kind: shared
+            pkg-dir: avioflow-shared-macos-x64
+            artifact-name: macos-cpp-binaries-shared-x86_64
+          - arch: x86_64
+            runner: macos-15-intel
+            shared-libs: "OFF"
+            package-kind: static
+            pkg-dir: avioflow-static-macos-x64
+            artifact-name: macos-cpp-binaries-static-x86_64
+          - arch: aarch64
+            runner: macos-15
+            shared-libs: "ON"
+            package-kind: shared
+            pkg-dir: avioflow-shared-macos-arm64
+            artifact-name: macos-cpp-binaries-shared-aarch64
+          - arch: aarch64
+            runner: macos-15
+            shared-libs: "OFF"
+            package-kind: static
+            pkg-dir: avioflow-static-macos-arm64
+            artifact-name: macos-cpp-binaries-static-aarch64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Sync version metadata
+        run: python3 scripts/sync_version.py
+
+      - name: Build macOS C++ ${{ matrix.package-kind }} (${{ matrix.arch }})
+        run: |
+          cmake -B build_macos_${{ matrix.package-kind }} \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0 \
+            -DBUILD_SHARED_LIBS=${{ matrix.shared-libs }} \
+            -DENABLE_WASAPI=OFF \
+            -DENABLE_PYTHON=OFF \
+            -DENABLE_NODE_JS=OFF \
+            -DENABLE_BINARY=ON
+          cmake --build build_macos_${{ matrix.package-kind }} --config Release -j "$(sysctl -n hw.logicalcpu)"
+          cmake --install build_macos_${{ matrix.package-kind }} --prefix "${{ matrix.pkg-dir }}" --config Release
+          if [ "${{ matrix.package-kind }}" = "shared" ]; then
+            for dylib in "${{ matrix.pkg-dir }}"/lib/*.dylib; do
+              [ -e "$dylib" ] || continue
+              install_name_tool -id "@rpath/$(basename "$dylib")" "$dylib" || true
+            done
+            for target in "${{ matrix.pkg-dir }}"/lib/*.dylib "${{ matrix.pkg-dir }}"/bin/*; do
+              [ -e "$target" ] || continue
+              otool -L "$target" 2>/dev/null | awk '/lib(av|sw).*\.dylib/{print $1}' | while read -r dep; do
+                install_name_tool -change "$dep" "@rpath/$(basename "$dep")" "$target" || true
+              done
+            done
+          fi
+          tar -czvf "${{ matrix.pkg-dir }}.tar.gz" "${{ matrix.pkg-dir }}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact-name }}
+          path: ${{ matrix.pkg-dir }}.tar.gz
+

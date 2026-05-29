@@ -35,8 +35,8 @@ Gradle users need the main Java API jar plus one native classifier for the targe
 
 ```kotlin
 dependencies {
-    implementation("io.github.lxp3:avioflow:0.3.2")
-    runtimeOnly("io.github.lxp3:avioflow:0.3.2:linux-x86_64")
+    implementation("io.github.lxp3:avioflow:0.3.3")
+    runtimeOnly("io.github.lxp3:avioflow:0.3.3:linux-x86_64")
 }
 ```
 
