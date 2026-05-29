@@ -27,7 +27,7 @@ jobs:
         run: python3 scripts/sync_version.py
 
       - name: Build Java main jar
-        run: gradle -p java clean jar sourcesJar javadocJar
+        run: gradle -p java clean jar sourcesJar mavenPlainJavadocJar
 
       - uses: actions/upload-artifact@v4
         with:

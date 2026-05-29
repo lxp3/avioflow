@@ -15,7 +15,6 @@ val nativeRootDir = providers.gradleProperty("avioflow.nativeRootDir")
     .orElse(layout.buildDirectory.dir("native").map { it.asFile })
 
 java {
-    withJavadocJar()
     withSourcesJar()
 }
 
