@@ -4,6 +4,12 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag or build selector, for example v0.3.4'
+        required: true
+        default: 'v0.3.4'
 
 permissions:
   contents: write
@@ -25,8 +31,14 @@ jobs:
     steps:
       - name: Check tag format
         id: check
+        env:
+          DISPATCH_TAG: ${{ github.event.inputs.tag }}
         run: |
-          TAG="${GITHUB_REF#refs/tags/}"
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+            TAG="$DISPATCH_TAG"
+          else
+            TAG="${GITHUB_REF#refs/tags/}"
+          fi
           echo "tag-name=$TAG" >> $GITHUB_OUTPUT
           
           # Default: build nothing
@@ -148,7 +160,7 @@ jobs:
     runs-on: ubuntu-latest
     if: |
       always() &&
-      startsWith(github.ref, 'refs/tags/') &&
+      (startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch') &&
       (needs.check-tag.result == 'success') &&
       (needs.cpp.result == 'success' || needs.cpp.result == 'skipped') &&
       (needs.node.result == 'success' || needs.node.result == 'skipped') &&
@@ -264,6 +276,8 @@ jobs:
         if: needs.check-tag.outputs.build-cpp == 'true' || needs.check-tag.outputs.build-python == 'true' || needs.check-tag.outputs.build-vsix == 'true'
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ needs.check-tag.outputs.tag-name }}
+          overwrite_files: true
           files: |
             dist/*
         env:
