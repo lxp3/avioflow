@@ -55,32 +55,32 @@ jobs:
             runner: ubuntu-latest
             shell: bash
             command: ./build-java.sh linux-x86_64
-            test: true
+            skip-tests: '0'
           - classifier: linux-aarch64
             runner: ubuntu-24.04-arm
             shell: bash
             command: ./build-java.sh linux-aarch64
-            test: true
+            skip-tests: '0'
           - classifier: macos-x86_64
             runner: macos-15-intel
             shell: bash
             command: ./build-java.sh macos-x86_64
-            test: true
+            skip-tests: '0'
           - classifier: macos-aarch64
             runner: macos-15
             shell: bash
             command: ./build-java.sh macos-aarch64
-            test: true
+            skip-tests: '0'
           - classifier: windows-x86_64
             runner: windows-latest
             shell: pwsh
             command: ./build-java.ps1 -Classifier windows-x86_64 -TargetArch x64
-            test: true
+            skip-tests: '0'
           - classifier: windows-aarch64
             runner: windows-latest
             shell: pwsh
             command: ./build-java.ps1 -Classifier windows-aarch64 -TargetArch arm64
-            test: false
+            skip-tests: '1'
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
@@ -100,7 +100,7 @@ jobs:
       - name: Build native classifier
         shell: ${{ matrix.shell }}
         env:
-          AVIOFLOW_SKIP_TESTS: ${{ matrix.test == false && '1' || '0' }}
+          AVIOFLOW_SKIP_TESTS: ${{ matrix.skip-tests }}
         run: ${{ matrix.command }}
 
       - uses: actions/upload-artifact@v4
