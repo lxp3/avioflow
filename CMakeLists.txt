@@ -144,6 +144,7 @@ else()
 endif()
 
 add_library(avioflow ${AVIOFLOW_TYPE} ${AVIOFLOW_SOURCES})
+target_compile_features(avioflow PUBLIC cxx_std_17)
 target_compile_definitions(avioflow PRIVATE AVIOFLOW_EXPORTS)
 if(NOT BUILD_SHARED_LIBS STREQUAL "ON")
     target_compile_definitions(avioflow PUBLIC AVIOFLOW_STATIC)

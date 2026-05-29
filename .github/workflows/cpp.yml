@@ -77,9 +77,9 @@ jobs:
               '    return 0;' \
               '}' \
               > \"\$SMOKE_DIR/main.cpp\" && \
-            cmake -S \"\$SMOKE_DIR\" -B \"\$SMOKE_DIR/build\" -DCMAKE_PREFIX_PATH=\"\$(pwd)/\$PKG_DIR\" && \
+            cmake -S \"\$SMOKE_DIR\" -B \"\$SMOKE_DIR/build\" -Davioflow_DIR=\"\$(pwd)/\$PKG_DIR/lib/cmake/avioflow\" && \
             cmake --build \"\$SMOKE_DIR/build\" --config Release -j \$(nproc) && \
-            \"\$SMOKE_DIR/build/avioflow_smoke\" && \
+            LD_LIBRARY_PATH=\"\$(pwd)/\$PKG_DIR/lib:\${LD_LIBRARY_PATH:-}\" \"\$SMOKE_DIR/build/avioflow_smoke\" && \
             tar -czvf \$PKG_DIR.tar.gz \$PKG_DIR
           "
 

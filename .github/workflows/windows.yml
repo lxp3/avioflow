@@ -110,6 +110,7 @@ jobs:
           $PkgDir = "${{ matrix.pkg-dir }}"
           cmake --install build_${{ matrix.package-kind }} --prefix $PkgDir --config Release
           $PkgPath = (Resolve-Path $PkgDir).Path
+          $AvioflowDir = Join-Path $PkgPath "lib/cmake/avioflow"
 
           $SmokeDir = Join-Path $PkgDir ".smoke"
           New-Item -ItemType Directory -Force -Path $SmokeDir | Out-Null
@@ -129,7 +130,7 @@ jobs:
             "}"
           )
 
-          cmake -S $SmokeDir -B (Join-Path $SmokeDir "build") -DCMAKE_PREFIX_PATH=$PkgPath
+          cmake -S $SmokeDir -B (Join-Path $SmokeDir "build") -A "${{ matrix.cmake-platform }}" "-Davioflow_DIR=$AvioflowDir"
           cmake --build (Join-Path $SmokeDir "build") --config Release -j 4
           if ("${{ matrix.run-tests }}" -eq "true") {
             $Env:Path = "$(Join-Path $PkgPath 'bin');$Env:Path"
