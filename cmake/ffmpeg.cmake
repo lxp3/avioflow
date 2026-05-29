@@ -3,16 +3,81 @@ include(FetchContent)
 set(_ffmpeg_release_base "https://github.com/lxp3/ffmpeg-build/releases/download/v0.3.3")
 
 function(_avioflow_normalize_arch out_var)
-    string(TOLOWER "${CMAKE_SYSTEM_PROCESSOR}" _processor)
+    if(WIN32 AND CMAKE_GENERATOR_PLATFORM)
+        string(TOLOWER "${CMAKE_GENERATOR_PLATFORM}" _processor)
+    elseif(WIN32 AND CMAKE_VS_PLATFORM_NAME)
+        string(TOLOWER "${CMAKE_VS_PLATFORM_NAME}" _processor)
+    else()
+        string(TOLOWER "${CMAKE_SYSTEM_PROCESSOR}" _processor)
+    endif()
+
     if(_processor MATCHES "^(x86_64|amd64)$")
         set(${out_var} "x86_64" PARENT_SCOPE)
-    elseif(_processor MATCHES "^(aarch64|arm64|arm64ec)$")
+    elseif(_processor MATCHES "^(aarch64|arm64|arm64ec|arm64.*)$")
         set(${out_var} "aarch64" PARENT_SCOPE)
     else()
         message(FATAL_ERROR
-            "Unsupported FFmpeg architecture: ${CMAKE_SYSTEM_PROCESSOR}. "
+            "Unsupported FFmpeg architecture: ${_processor}. "
             "Supported architectures: x86_64, aarch64."
         )
+    endif()
+endfunction()
+
+function(_avioflow_patch_ffmpeg_imported_targets)
+    set(_ffmpeg_import_targets
+        ffmpeg::ffmpeg
+        ffmpeg::avdevice
+        ffmpeg::avfilter
+        ffmpeg::avformat
+        ffmpeg::avcodec
+        ffmpeg::swscale
+        ffmpeg::swresample
+        ffmpeg::avutil
+    )
+
+    if(WIN32 AND NOT BUILD_SHARED_LIBS)
+        foreach(_ffmpeg_lib avdevice avfilter avformat avcodec swscale swresample avutil)
+            if(TARGET ffmpeg::${_ffmpeg_lib}
+                AND EXISTS "${FFmpeg_LIBRARY_DIR}/lib${_ffmpeg_lib}.lib"
+            )
+                set_target_properties(ffmpeg::${_ffmpeg_lib} PROPERTIES
+                    IMPORTED_LOCATION "${FFmpeg_LIBRARY_DIR}/lib${_ffmpeg_lib}.lib"
+                )
+            endif()
+        endforeach()
+    endif()
+
+    if(APPLE)
+        set(_ffmpeg_frameworks
+            AppKit
+            AudioToolbox
+            AVFoundation
+            CoreAudio
+            CoreFoundation
+            CoreMedia
+            CoreVideo
+            Security
+            VideoToolbox
+        )
+
+        foreach(_ffmpeg_target IN LISTS _ffmpeg_import_targets)
+            if(TARGET ${_ffmpeg_target})
+                get_target_property(_ffmpeg_links ${_ffmpeg_target} INTERFACE_LINK_LIBRARIES)
+                if(_ffmpeg_links)
+                    set(_ffmpeg_patched_links "")
+                    foreach(_ffmpeg_link IN LISTS _ffmpeg_links)
+                        if(_ffmpeg_link IN_LIST _ffmpeg_frameworks)
+                            list(APPEND _ffmpeg_patched_links "-framework ${_ffmpeg_link}")
+                        else()
+                            list(APPEND _ffmpeg_patched_links "${_ffmpeg_link}")
+                        endif()
+                    endforeach()
+                    set_target_properties(${_ffmpeg_target} PROPERTIES
+                        INTERFACE_LINK_LIBRARIES "${_ffmpeg_patched_links}"
+                    )
+                endif()
+            endif()
+        endforeach()
     endif()
 endfunction()
 
@@ -118,6 +183,7 @@ set(FFmpeg_DIR "${FFMPEG_ROOT}/lib/cmake/FFmpeg" CACHE PATH "FFmpeg CMake packag
 
 message(STATUS "FFmpeg Root set to: ${FFMPEG_ROOT}")
 find_package(FFmpeg CONFIG REQUIRED)
+_avioflow_patch_ffmpeg_imported_targets()
 
 set(FFMPEG_INCLUDE_DIRS "${FFmpeg_INCLUDE_DIR}")
 set(FFMPEG_LIB_DIR "${FFmpeg_LIBRARY_DIR}")
