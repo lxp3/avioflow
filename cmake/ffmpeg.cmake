@@ -54,6 +54,11 @@ function(_avioflow_patch_ffmpeg_imported_targets)
                 endforeach()
             endif()
         endforeach()
+        if(TARGET ffmpeg::ffmpeg)
+            set_property(TARGET ffmpeg::ffmpeg APPEND PROPERTY
+                INTERFACE_LINK_LIBRARIES shlwapi vfw32
+            )
+        endif()
     endif()
 
     if(APPLE)
