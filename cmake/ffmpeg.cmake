@@ -37,12 +37,21 @@ function(_avioflow_patch_ffmpeg_imported_targets)
 
     if(WIN32 AND NOT BUILD_SHARED_LIBS)
         foreach(_ffmpeg_lib avdevice avfilter avformat avcodec swscale swresample avutil)
-            if(TARGET ffmpeg::${_ffmpeg_lib}
-                AND EXISTS "${FFmpeg_LIBRARY_DIR}/lib${_ffmpeg_lib}.lib"
-            )
-                set_target_properties(ffmpeg::${_ffmpeg_lib} PROPERTIES
-                    IMPORTED_LOCATION "${FFmpeg_LIBRARY_DIR}/lib${_ffmpeg_lib}.lib"
+            if(TARGET ffmpeg::${_ffmpeg_lib})
+                set(_ffmpeg_windows_lib_candidates
+                    "${FFmpeg_LIBRARY_DIR}/lib${_ffmpeg_lib}.lib"
+                    "${FFmpeg_LIBRARY_DIR}/${_ffmpeg_lib}.lib"
+                    "${FFmpeg_LIBRARY_DIR}/lib${_ffmpeg_lib}.a"
+                    "${FFmpeg_LIBRARY_DIR}/${_ffmpeg_lib}.a"
                 )
+                foreach(_ffmpeg_windows_lib IN LISTS _ffmpeg_windows_lib_candidates)
+                    if(EXISTS "${_ffmpeg_windows_lib}")
+                        set_target_properties(ffmpeg::${_ffmpeg_lib} PROPERTIES
+                            IMPORTED_LOCATION "${_ffmpeg_windows_lib}"
+                        )
+                        break()
+                    endif()
+                endforeach()
             endif()
         endforeach()
     endif()

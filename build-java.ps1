@@ -19,7 +19,6 @@ $Platform = if ($TargetArch -eq "arm64") { "ARM64" } else { "x64" }
 
 cmake -S $RootDir -B $BuildDir `
     -A $Platform `
-    -DCMAKE_BUILD_TYPE=Release `
     -DBUILD_SHARED_LIBS=OFF `
     -DENABLE_WASAPI=ON `
     -DENABLE_PYTHON=OFF `
