@@ -53,33 +53,33 @@ jobs:
         include:
           - classifier: linux-x86_64
             runner: ubuntu-latest
-            shell: bash
-            command: ./build-java.sh linux-x86_64
+            os: unix
+            target_arch: ''
             skip_tests: '0'
           - classifier: linux-aarch64
             runner: ubuntu-24.04-arm
-            shell: bash
-            command: ./build-java.sh linux-aarch64
+            os: unix
+            target_arch: ''
             skip_tests: '0'
           - classifier: macos-x86_64
             runner: macos-15-intel
-            shell: bash
-            command: ./build-java.sh macos-x86_64
+            os: unix
+            target_arch: ''
             skip_tests: '0'
           - classifier: macos-aarch64
             runner: macos-15
-            shell: bash
-            command: ./build-java.sh macos-aarch64
+            os: unix
+            target_arch: ''
             skip_tests: '0'
           - classifier: windows-x86_64
             runner: windows-latest
-            shell: pwsh
-            command: ./build-java.ps1 -Classifier windows-x86_64 -TargetArch x64
+            os: windows
+            target_arch: x64
             skip_tests: '0'
           - classifier: windows-aarch64
             runner: windows-latest
-            shell: pwsh
-            command: ./build-java.ps1 -Classifier windows-aarch64 -TargetArch arm64
+            os: windows
+            target_arch: arm64
             skip_tests: '1'
     runs-on: ${{ matrix.runner }}
     steps:
@@ -98,10 +98,18 @@ jobs:
         run: python3 scripts/sync_version.py
 
       - name: Build native classifier
-        shell: ${{ matrix.shell }}
+        if: matrix.os == 'unix'
+        shell: bash
         env:
           AVIOFLOW_SKIP_TESTS: ${{ matrix.skip_tests }}
-        run: ${{ matrix.command }}
+        run: ./build-java.sh ${{ matrix.classifier }}
+
+      - name: Build native classifier
+        if: matrix.os == 'windows'
+        shell: pwsh
+        env:
+          AVIOFLOW_SKIP_TESTS: ${{ matrix.skip_tests }}
+        run: ./build-java.ps1 -Classifier ${{ matrix.classifier }} -TargetArch ${{ matrix.target_arch }}
 
       - uses: actions/upload-artifact@v4
         with:
