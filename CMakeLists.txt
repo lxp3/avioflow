@@ -269,6 +269,13 @@ if(NOT SKBUILD)
             # Collect all DLLs from FFMPEG_BIN_DIR
             file(GLOB FFMPEG_DLLS "${FFMPEG_BIN_DIR}/*.dll")
             install(FILES ${FFMPEG_DLLS} DESTINATION bin)
+            file(GLOB FFMPEG_IMPLIBS
+                "${FFMPEG_LIB_DIR}/*.dll.a"
+                "${FFMPEG_LIB_DIR}/*.lib"
+            )
+            if(FFMPEG_IMPLIBS)
+                install(FILES ${FFMPEG_IMPLIBS} DESTINATION lib)
+            endif()
         elseif(APPLE)
             # Collect all shared libraries from FFMPEG_LIB_DIR
             file(GLOB FFMPEG_DYLIBS "${FFMPEG_LIB_DIR}/lib*.dylib")
