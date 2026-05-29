@@ -110,7 +110,7 @@ jobs:
           name: macos-python-wheels-${{ matrix.arch }}
           path: ./wheelhouse/*.whl
 
-  # --- Build Python Wheels (Windows, Shared) ---
+  # --- Build Python Wheels (Windows, Static) ---
 
   build-python-windows-x86_64:
     if: inputs.build-python && inputs.python-target == 'all'
@@ -131,7 +131,7 @@ jobs:
           CIBW_ARCHS_WINDOWS: AMD64
           CIBW_BUILD: "cp38-* cp39-* cp310-* cp311-* cp312-* cp313-* cp314-*"
           CIBW_SKIP: "pp* *-win32"
-          CIBW_ENVIRONMENT_WINDOWS: "CMAKE_ARGS=-DBUILD_SHARED_LIBS=ON"
+          CIBW_ENVIRONMENT_WINDOWS: "CMAKE_ARGS=-DBUILD_SHARED_LIBS=OFF"
           CIBW_TEST_REQUIRES: numpy
           CIBW_TEST_COMMAND: "python {project}/python/tests/test_offline_load.py {project}/public/wavs/TownTheme.mp3"
 
@@ -159,7 +159,7 @@ jobs:
           CIBW_ARCHS_WINDOWS: ARM64
           CIBW_BUILD: "cp38-* cp39-* cp310-* cp311-* cp312-* cp313-* cp314-*"
           CIBW_SKIP: "pp* *-win32"
-          CIBW_ENVIRONMENT_WINDOWS: "CMAKE_ARGS=-DBUILD_SHARED_LIBS=ON"
+          CIBW_ENVIRONMENT_WINDOWS: "CMAKE_ARGS=-DBUILD_SHARED_LIBS=OFF"
           CIBW_TEST_SKIP: "*-win_arm64"
 
       - uses: actions/upload-artifact@v4
