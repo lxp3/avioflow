@@ -96,7 +96,26 @@ jobs:
       - name: Build C++ ${{ matrix.package-kind }} Binaries in manylinux2014 (${{ matrix.arch }}, ABI ${{ matrix.cxx11-abi }})
         run: |
           docker run --rm -v $(pwd):/io -w /io ${{ matrix.docker-image }} bash -c "
-            cmake -B build_${{ matrix.package-kind }}_abi${{ matrix.cxx11-abi }} -DCMAKE_BUILD_TYPE=Release -DAVIOFLOW_GLIBCXX_USE_CXX11_ABI=${{ matrix.cxx11-abi }} -DBUILD_SHARED_LIBS=${{ matrix.shared-libs }} -DENABLE_WASAPI=OFF -DENABLE_PYTHON=OFF -DENABLE_NODE_JS=OFF -DENABLE_BINARY=ON && \
+            printf '%s\n' \
+              '#include <string>' \
+              '#ifndef _GLIBCXX_USE_CXX11_ABI' \
+              '#error _GLIBCXX_USE_CXX11_ABI is not defined' \
+              '#endif' \
+              'std::string make_value() { return \"avioflow\"; }' \
+              'int main() {' \
+              '    static_assert(_GLIBCXX_USE_CXX11_ABI == EXPECTED_ABI, \"Unexpected libstdc++ ABI\");' \
+              '    std::string value = make_value();' \
+              '    return value.empty();' \
+              '}' \
+              > /tmp/avioflow_abi_check.cpp && \
+            \${CXX:-c++} -DEXPECTED_ABI=${{ matrix.cxx11-abi }} -D_GLIBCXX_USE_CXX11_ABI=${{ matrix.cxx11-abi }} /tmp/avioflow_abi_check.cpp -o /tmp/avioflow_abi_check && \
+            if [ \"${{ matrix.cxx11-abi }}\" = \"1\" ]; then \
+              nm -C /tmp/avioflow_abi_check | grep 'std::__cxx11::basic_string'; \
+            else \
+              ! nm -C /tmp/avioflow_abi_check | grep 'std::__cxx11::basic_string'; \
+            fi && \
+            /tmp/avioflow_abi_check && \
+            cmake -B build_${{ matrix.package-kind }}_abi${{ matrix.cxx11-abi }} -DCMAKE_BUILD_TYPE=Release -DAVIOFLOW_GLIBCXX_USE_CXX11_ABI=${{ matrix.cxx11-abi }} -DCMAKE_CXX_FLAGS=\"-D_GLIBCXX_USE_CXX11_ABI=${{ matrix.cxx11-abi }}\" -DBUILD_SHARED_LIBS=${{ matrix.shared-libs }} -DENABLE_WASAPI=OFF -DENABLE_PYTHON=OFF -DENABLE_NODE_JS=OFF -DENABLE_BINARY=ON && \
             cmake --build build_${{ matrix.package-kind }}_abi${{ matrix.cxx11-abi }} --config Release -j \$(nproc) && \
             PKG_DIR=\"${{ matrix.pkg-dir }}\" && \
             cmake --install build_${{ matrix.package-kind }}_abi${{ matrix.cxx11-abi }} --prefix \$PKG_DIR && \
