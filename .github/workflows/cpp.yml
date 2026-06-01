@@ -23,14 +23,16 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - arch: x86_64
-            runner: ubuntu-latest
-            docker-image: quay.io/pypa/manylinux2014_x86_64
-            shared-libs: "ON"
-            package-kind: shared
-            cxx11-abi: "1"
-            pkg-dir: avioflow-shared-linux-x64-abi1
-            artifact-name: linux-cpp-binaries-shared-x86_64-abi1
+          # ABI1 is disabled for manylinux2014 because its Red Hat libstdc++
+          # toolchain forces the old GCC-compatible string ABI.
+          # - arch: x86_64
+          #   runner: ubuntu-latest
+          #   docker-image: quay.io/pypa/manylinux2014_x86_64
+          #   shared-libs: "ON"
+          #   package-kind: shared
+          #   cxx11-abi: "1"
+          #   pkg-dir: avioflow-shared-linux-x64-abi1
+          #   artifact-name: linux-cpp-binaries-shared-x86_64-abi1
           - arch: x86_64
             runner: ubuntu-latest
             docker-image: quay.io/pypa/manylinux2014_x86_64
@@ -39,14 +41,14 @@ jobs:
             cxx11-abi: "0"
             pkg-dir: avioflow-shared-linux-x64-abi0
             artifact-name: linux-cpp-binaries-shared-x86_64-abi0
-          - arch: x86_64
-            runner: ubuntu-latest
-            docker-image: quay.io/pypa/manylinux2014_x86_64
-            shared-libs: "OFF"
-            package-kind: static
-            cxx11-abi: "1"
-            pkg-dir: avioflow-static-linux-x64-abi1
-            artifact-name: linux-cpp-binaries-static-x86_64-abi1
+          # - arch: x86_64
+          #   runner: ubuntu-latest
+          #   docker-image: quay.io/pypa/manylinux2014_x86_64
+          #   shared-libs: "OFF"
+          #   package-kind: static
+          #   cxx11-abi: "1"
+          #   pkg-dir: avioflow-static-linux-x64-abi1
+          #   artifact-name: linux-cpp-binaries-static-x86_64-abi1
           - arch: x86_64
             runner: ubuntu-latest
             docker-image: quay.io/pypa/manylinux2014_x86_64
@@ -55,14 +57,14 @@ jobs:
             cxx11-abi: "0"
             pkg-dir: avioflow-static-linux-x64-abi0
             artifact-name: linux-cpp-binaries-static-x86_64-abi0
-          - arch: aarch64
-            runner: ubuntu-24.04-arm
-            docker-image: quay.io/pypa/manylinux2014_aarch64
-            shared-libs: "ON"
-            package-kind: shared
-            cxx11-abi: "1"
-            pkg-dir: avioflow-shared-linux-arm64-abi1
-            artifact-name: linux-cpp-binaries-shared-aarch64-abi1
+          # - arch: aarch64
+          #   runner: ubuntu-24.04-arm
+          #   docker-image: quay.io/pypa/manylinux2014_aarch64
+          #   shared-libs: "ON"
+          #   package-kind: shared
+          #   cxx11-abi: "1"
+          #   pkg-dir: avioflow-shared-linux-arm64-abi1
+          #   artifact-name: linux-cpp-binaries-shared-aarch64-abi1
           - arch: aarch64
             runner: ubuntu-24.04-arm
             docker-image: quay.io/pypa/manylinux2014_aarch64
@@ -71,14 +73,14 @@ jobs:
             cxx11-abi: "0"
             pkg-dir: avioflow-shared-linux-arm64-abi0
             artifact-name: linux-cpp-binaries-shared-aarch64-abi0
-          - arch: aarch64
-            runner: ubuntu-24.04-arm
-            docker-image: quay.io/pypa/manylinux2014_aarch64
-            shared-libs: "OFF"
-            package-kind: static
-            cxx11-abi: "1"
-            pkg-dir: avioflow-static-linux-arm64-abi1
-            artifact-name: linux-cpp-binaries-static-aarch64-abi1
+          # - arch: aarch64
+          #   runner: ubuntu-24.04-arm
+          #   docker-image: quay.io/pypa/manylinux2014_aarch64
+          #   shared-libs: "OFF"
+          #   package-kind: static
+          #   cxx11-abi: "1"
+          #   pkg-dir: avioflow-static-linux-arm64-abi1
+          #   artifact-name: linux-cpp-binaries-static-aarch64-abi1
           - arch: aarch64
             runner: ubuntu-24.04-arm
             docker-image: quay.io/pypa/manylinux2014_aarch64
