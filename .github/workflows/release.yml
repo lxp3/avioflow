@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Release tag or build selector, for example v0.3.4'
+        description: 'Release tag or build selector, for example v0.3.4 or v0.3.4-linux-cpp'
         required: true
         default: 'v0.3.4'
 
@@ -27,6 +27,7 @@ jobs:
       build-vsix: ${{ steps.check.outputs.build-vsix }}
       build-java: ${{ steps.check.outputs.build-java }}
       python-target: ${{ steps.check.outputs.python-target }}
+      cpp-target: ${{ steps.check.outputs.cpp-target }}
       tag-name: ${{ steps.check.outputs.tag-name }}
     steps:
       - name: Check tag format
@@ -49,9 +50,14 @@ jobs:
           BUILD_VSIX="false"
           BUILD_JAVA="false"
           PYTHON_TARGET="all"
+          CPP_TARGET="all"
           
           # Check tag suffix
-          if [[ "$TAG" =~ -cpp$ ]]; then
+          if [[ "$TAG" =~ -linux-cpp$ ]]; then
+            echo "Tag ends with -linux-cpp: Building Linux C++ only"
+            BUILD_CPP="true"
+            CPP_TARGET="linux"
+          elif [[ "$TAG" =~ -cpp$ ]]; then
             echo "Tag ends with -cpp: Building C++ only"
             BUILD_CPP="true"
           elif [[ "$TAG" =~ -py-linux$ ]]; then
@@ -78,7 +84,7 @@ jobs:
             BUILD_JAVA="true"
           else
             echo "Unknown tag format: $TAG"
-            echo "Supported formats: v0.1.5, v0.1.5-cpp, v0.1.5-py, v0.1.5-py-linux, v0.1.5-npm, v0.1.5-vsix, v0.1.5-java"
+            echo "Supported formats: v0.1.5, v0.1.5-cpp, v0.1.5-linux-cpp, v0.1.5-py, v0.1.5-py-linux, v0.1.5-npm, v0.1.5-vsix, v0.1.5-java"
             exit 1
           fi
           
@@ -89,11 +95,13 @@ jobs:
           echo "build-vsix=$BUILD_VSIX" >> $GITHUB_OUTPUT
           echo "build-java=$BUILD_JAVA" >> $GITHUB_OUTPUT
           echo "python-target=$PYTHON_TARGET" >> $GITHUB_OUTPUT
+          echo "cpp-target=$CPP_TARGET" >> $GITHUB_OUTPUT
           
           echo "Build configuration:"
           echo "  C++: $BUILD_CPP"
           echo "  Python: $BUILD_PYTHON"
           echo "  npm: $BUILD_NPM"
+          echo "  C++ target: $CPP_TARGET"
           echo "  Python target: $PYTHON_TARGET"
           echo "  VS Code Extension: $BUILD_VSIX"
           echo "  Java: $BUILD_JAVA"
@@ -104,6 +112,7 @@ jobs:
     uses: ./.github/workflows/cpp.yml
     with:
       build-cpp: ${{ needs.check-tag.outputs.build-cpp == 'true' }}
+      cpp-target: ${{ needs.check-tag.outputs.cpp-target }}
     secrets: inherit
 
   node:
@@ -116,7 +125,7 @@ jobs:
 
   windows:
     needs: check-tag
-    if: needs.check-tag.outputs.build-cpp == 'true' || needs.check-tag.outputs.build-npm == 'true'
+    if: (needs.check-tag.outputs.build-cpp == 'true' && needs.check-tag.outputs.cpp-target == 'all') || needs.check-tag.outputs.build-npm == 'true'
     uses: ./.github/workflows/windows.yml
     with:
       build-cpp: ${{ needs.check-tag.outputs.build-cpp == 'true' }}
@@ -207,21 +216,32 @@ jobs:
 
           # C++ binaries
           if [ "${{ needs.check-tag.outputs.build-cpp }}" == "true" ]; then
-            require_glob "Linux shared x86_64 C++ package" artifacts/linux-cpp-binaries-shared-x86_64/*.tar.gz
-            require_glob "Linux static x86_64 C++ package" artifacts/linux-cpp-binaries-static-x86_64/*.tar.gz
-            require_glob "Linux shared arm64 C++ package" artifacts/linux-cpp-binaries-shared-aarch64/*.tar.gz
-            require_glob "Linux static arm64 C++ package" artifacts/linux-cpp-binaries-static-aarch64/*.tar.gz
-            require_glob "macOS shared x86_64 C++ package" artifacts/macos-cpp-binaries-shared-x86_64/*.tar.gz
-            require_glob "macOS static x86_64 C++ package" artifacts/macos-cpp-binaries-static-x86_64/*.tar.gz
-            require_glob "macOS shared arm64 C++ package" artifacts/macos-cpp-binaries-shared-aarch64/*.tar.gz
-            require_glob "macOS static arm64 C++ package" artifacts/macos-cpp-binaries-static-aarch64/*.tar.gz
-            require_glob "Windows shared x64 C++ package" artifacts/windows-cpp-binaries-shared-x64/*.zip
-            require_glob "Windows static x64 C++ package" artifacts/windows-cpp-binaries-static-x64/*.zip
-            require_glob "Windows shared arm64 C++ package" artifacts/windows-cpp-binaries-shared-arm64/*.zip
-            require_glob "Windows static arm64 C++ package" artifacts/windows-cpp-binaries-static-arm64/*.zip
-            for file in artifacts/linux-cpp-binaries-*/* artifacts/macos-cpp-binaries-*/* artifacts/windows-cpp-binaries-*/*; do
+            require_glob "Linux shared x86_64 C++ ABI 1 package" artifacts/linux-cpp-binaries-shared-x86_64-abi1/*.tar.gz
+            require_glob "Linux shared x86_64 C++ ABI 0 package" artifacts/linux-cpp-binaries-shared-x86_64-abi0/*.tar.gz
+            require_glob "Linux static x86_64 C++ ABI 1 package" artifacts/linux-cpp-binaries-static-x86_64-abi1/*.tar.gz
+            require_glob "Linux static x86_64 C++ ABI 0 package" artifacts/linux-cpp-binaries-static-x86_64-abi0/*.tar.gz
+            require_glob "Linux shared arm64 C++ ABI 1 package" artifacts/linux-cpp-binaries-shared-aarch64-abi1/*.tar.gz
+            require_glob "Linux shared arm64 C++ ABI 0 package" artifacts/linux-cpp-binaries-shared-aarch64-abi0/*.tar.gz
+            require_glob "Linux static arm64 C++ ABI 1 package" artifacts/linux-cpp-binaries-static-aarch64-abi1/*.tar.gz
+            require_glob "Linux static arm64 C++ ABI 0 package" artifacts/linux-cpp-binaries-static-aarch64-abi0/*.tar.gz
+            if [ "${{ needs.check-tag.outputs.cpp-target }}" == "all" ]; then
+              require_glob "macOS shared x86_64 C++ package" artifacts/macos-cpp-binaries-shared-x86_64/*.tar.gz
+              require_glob "macOS static x86_64 C++ package" artifacts/macos-cpp-binaries-static-x86_64/*.tar.gz
+              require_glob "macOS shared arm64 C++ package" artifacts/macos-cpp-binaries-shared-aarch64/*.tar.gz
+              require_glob "macOS static arm64 C++ package" artifacts/macos-cpp-binaries-static-aarch64/*.tar.gz
+              require_glob "Windows shared x64 C++ package" artifacts/windows-cpp-binaries-shared-x64/*.zip
+              require_glob "Windows static x64 C++ package" artifacts/windows-cpp-binaries-static-x64/*.zip
+              require_glob "Windows shared arm64 C++ package" artifacts/windows-cpp-binaries-shared-arm64/*.zip
+              require_glob "Windows static arm64 C++ package" artifacts/windows-cpp-binaries-static-arm64/*.zip
+            fi
+            for file in artifacts/linux-cpp-binaries-*/*; do
               cp "$file" dist/
             done
+            if [ "${{ needs.check-tag.outputs.cpp-target }}" == "all" ]; then
+              for file in artifacts/macos-cpp-binaries-*/* artifacts/windows-cpp-binaries-*/*; do
+                cp "$file" dist/
+              done
+            fi
           fi
 
           # Python wheels

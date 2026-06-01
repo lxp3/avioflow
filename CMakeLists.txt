@@ -14,6 +14,7 @@ option(ENABLE_PYTHON "Enable Python bindings" OFF)
 option(ENABLE_NODE_JS "Enable Node.js bindings" OFF)
 option(ENABLE_JAVA "Enable Java JNI bindings" OFF)
 option(ENABLE_BINARY "Whether to build binaries" OFF)
+set(AVIOFLOW_GLIBCXX_USE_CXX11_ABI "1" CACHE STRING "Set _GLIBCXX_USE_CXX11_ABI for Linux libstdc++ builds")
 
 # Logic to force static build if Node.js is enabled
 if(CMAKE_JS_VERSION)
@@ -151,6 +152,9 @@ if(NOT BUILD_SHARED_LIBS STREQUAL "ON")
 endif()
 if(ENABLE_WASAPI AND WIN32)
     target_compile_definitions(avioflow PRIVATE AVIOFLOW_HAS_WASAPI)
+endif()
+if(UNIX AND NOT APPLE AND NOT AVIOFLOW_GLIBCXX_USE_CXX11_ABI STREQUAL "")
+    target_compile_definitions(avioflow PUBLIC _GLIBCXX_USE_CXX11_ABI=${AVIOFLOW_GLIBCXX_USE_CXX11_ABI})
 endif()
 
 target_include_directories(avioflow PUBLIC 

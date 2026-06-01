@@ -13,13 +13,19 @@ AvioFlow is a high-performance and easy-to-use streaming audio decoding library.
 
 ## Supported language
 
-| C++        |              |                      |     |     |
-| ---------- | ------------ | -------------------- | --- | --- |
-| python     | pybind11     | pip install avioflow |     |     |
-| JavaScript | node-add-api | npm install avioflow |     |     |
-| Java       | JNI          | Gradle/Maven         |     |     |
-|            | wasm         |                      |     |     |
-|            | vsix         |                      |     |     |
+AvioFlow is packaged for several runtime and application environments. The
+native core is shared across bindings, so behavior stays consistent whether you
+embed it in a C++ service, call it from Python or JavaScript, ship it in a JVM
+application, or run it in WebAssembly.
+
+| Language / Runtime | Integration | Install / Consume | Compatibility |
+| ------------------ | ----------- | ----------------- | ------------- |
+| C++                | Native CMake package | `find_package(avioflow CONFIG REQUIRED)` | Shared/static packages for Linux, macOS, and Windows; Linux packages include both libstdc++ ABI 0 and ABI 1 variants |
+| Python             | pybind11 binding | `pip install avioflow` | Wheels for mainstream desktop/server platforms |
+| JavaScript / Node.js | Node-API native addon | `npm install avioflow` | Platform-specific native packages selected by npm |
+| Java               | JNI binding | Gradle / Maven | Runtime classifiers for Linux, macOS, and Windows |
+| WebAssembly        | WASM build | npm package / web bundle | Browser and WASM-capable runtime support |
+| VS Code            | Extension package | `.vsix` / Marketplace release | Editor integration built from the same core APIs |
 
 
 ## Installation
@@ -71,8 +77,10 @@ target_link_libraries(your_target PRIVATE avioflow::avioflow)
 
 Release packages are split by linkage and platform:
 
-- `avioflow-shared-linux-x64`, `avioflow-static-linux-x64`
-- `avioflow-shared-linux-arm64`, `avioflow-static-linux-arm64`
+- `avioflow-shared-linux-x64-abi1`, `avioflow-shared-linux-x64-abi0`
+- `avioflow-static-linux-x64-abi1`, `avioflow-static-linux-x64-abi0`
+- `avioflow-shared-linux-arm64-abi1`, `avioflow-shared-linux-arm64-abi0`
+- `avioflow-static-linux-arm64-abi1`, `avioflow-static-linux-arm64-abi0`
 - `avioflow-shared-macos-x64`, `avioflow-static-macos-x64`
 - `avioflow-shared-macos-arm64`, `avioflow-static-macos-arm64`
 - `avioflow-shared-win-x64`, `avioflow-static-win-x64`
@@ -112,6 +120,7 @@ AudioDecoder decoder(options);
 | Method             | Description                                                      |
 | ------------------ | ---------------------------------------------------------------- |
 | `open(source)`     | Open file path, URL, or device                                   |
+| `open(data, size)` | Open full audio bytes from memory                                |
 | `push(data, size)` | Push raw bytes for streaming decode                              |
 | `read()`           | Decode next frame, returns `FrameData`. (Formerly `decode_next`) |
 | `get_samples()`    | Decode all currently available samples. (Formerly `get_samples`) |
@@ -156,6 +165,25 @@ while (auto frame = decoder.read()) {
     for (int c = 0; c < frame.num_channels; c++) {
         process(frame.data[c], frame.num_samples);
     }
+}
+```
+
+#### Raw PCM Memory Decode
+```cpp
+// Raw PCM bytes have no container/header, so provide the input format details.
+// Use FFmpeg demuxer format names such as "s16le", not codec names like
+// "pcm_s16le".
+AudioStreamOptions opts;
+opts.input_format = "s16le";       // Signed 16-bit little-endian PCM
+opts.input_sample_rate = 8000;     // 8 kHz
+opts.input_channels = 1;           // Mono
+
+AudioDecoder decoder(opts);
+decoder.open(pcm_bytes, pcm_size); // Full PCM buffer in memory
+
+while (auto frame = decoder.read()) {
+    // Output samples are float planar: frame.data[channel][sample]
+    process(frame.data[0], frame.num_samples);
 }
 ```
 
