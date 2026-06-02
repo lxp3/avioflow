@@ -60,6 +60,33 @@ void test_offline_memory() {
   assert(total_samples > 0);
 }
 
+void test_offline_raw_pcm_memory() {
+  std::cout << "\n=== Test: Offline Decode Raw PCM from Memory ===" << std::endl;
+  auto buffer = read_file_bytes("public/wavs/zh.wav");
+  constexpr size_t wav_header_size = 44;
+  assert(buffer.size() > wav_header_size);
+
+  AudioStreamOptions options;
+  options.input_format = "s16le";
+  options.input_sample_rate = 16000;
+  options.input_channels = 1;
+
+  AudioDecoder decoder(options);
+  decoder.open(buffer.data() + wav_header_size, buffer.size() - wav_header_size);
+
+  size_t total_samples = 0;
+  while (!decoder.is_finished()) {
+    auto frame = decoder.read();
+    if (!frame) break;
+    total_samples += frame.num_samples;
+  }
+
+  const size_t expected_samples = (buffer.size() - wav_header_size) / sizeof(int16_t);
+  std::cout << "  Total samples decoded: " << total_samples
+            << ", Expected: " << expected_samples << std::endl;
+  assert(total_samples == expected_samples);
+}
+
 void test_offline_url() {
   std::cout << "\n=== Test: Offline Decode from URL ===" << std::endl;
   AudioDecoder decoder;
@@ -81,6 +108,7 @@ int main() {
   try {
     test_offline_filepath();
     test_offline_memory();
+    test_offline_raw_pcm_memory();
     test_offline_url();
     std::cout << "\nAll offline tests passed!" << std::endl;
   } catch (const std::exception &e) {

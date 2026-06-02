@@ -6,6 +6,24 @@
 
 namespace avioflow
 {
+  namespace
+  {
+    void set_channel_layout_option(AVDictionary **format_opts, int channels)
+    {
+      if (channels <= 0)
+        return;
+
+      AVChannelLayout layout;
+      av_channel_layout_default(&layout, channels);
+
+      char layout_name[128] = {};
+      check_av_error(
+          av_channel_layout_describe(&layout, layout_name, sizeof(layout_name)),
+          "Could not describe channel layout");
+      av_dict_set(format_opts, "ch_layout", layout_name, 0);
+      av_channel_layout_uninit(&layout);
+    }
+  }
 
   AVFormatContext *AvioContextHandler::open_url(const std::string &url)
   {
@@ -74,7 +92,7 @@ namespace avioflow
     }
     if (options.input_channels.has_value())
     {
-      av_dict_set_int(&format_opts, "channels", options.input_channels.value(), 0);
+      set_channel_layout_option(&format_opts, options.input_channels.value());
     }
 
     // Attempt to open input using the custom I/O.
