@@ -6,6 +6,74 @@
 #include <algorithm>
 #include <filesystem>
 
+struct WavPcmInfo {
+    int sample_rate = 0;
+    int channels = 0;
+    int bits_per_sample = 0;
+    size_t data_offset = 0;
+    size_t data_size = 0;
+};
+
+uint16_t read_le16(const uint8_t* data) {
+    return static_cast<uint16_t>(data[0]) |
+           static_cast<uint16_t>(data[1] << 8);
+}
+
+uint32_t read_le32(const uint8_t* data) {
+    return static_cast<uint32_t>(data[0]) |
+           (static_cast<uint32_t>(data[1]) << 8) |
+           (static_cast<uint32_t>(data[2]) << 16) |
+           (static_cast<uint32_t>(data[3]) << 24);
+}
+
+WavPcmInfo parse_wav_pcm_info(const std::vector<uint8_t>& buffer) {
+    if (buffer.size() < 44 ||
+        std::memcmp(buffer.data(), "RIFF", 4) != 0 ||
+        std::memcmp(buffer.data() + 8, "WAVE", 4) != 0) {
+        throw std::runtime_error("Expected a WAV file");
+    }
+
+    WavPcmInfo info;
+    size_t offset = 12;
+    bool found_fmt = false;
+    bool found_data = false;
+
+    while (offset + 8 <= buffer.size()) {
+        const uint8_t* chunk = buffer.data() + offset;
+        const uint32_t chunk_size = read_le32(chunk + 4);
+        const size_t payload_offset = offset + 8;
+        if (payload_offset + chunk_size > buffer.size()) {
+            throw std::runtime_error("Invalid WAV chunk size");
+        }
+
+        if (std::memcmp(chunk, "fmt ", 4) == 0) {
+            if (chunk_size < 16) {
+                throw std::runtime_error("Invalid WAV fmt chunk");
+            }
+            const uint16_t audio_format = read_le16(buffer.data() + payload_offset);
+            if (audio_format != 1) {
+                throw std::runtime_error("Only PCM WAV input is supported by this example");
+            }
+            info.channels = read_le16(buffer.data() + payload_offset + 2);
+            info.sample_rate = static_cast<int>(read_le32(buffer.data() + payload_offset + 4));
+            info.bits_per_sample = read_le16(buffer.data() + payload_offset + 14);
+            found_fmt = true;
+        } else if (std::memcmp(chunk, "data", 4) == 0) {
+            info.data_offset = payload_offset;
+            info.data_size = chunk_size;
+            found_data = true;
+        }
+
+        offset = payload_offset + chunk_size + (chunk_size % 2);
+    }
+
+    if (!found_fmt || !found_data || info.sample_rate <= 0 ||
+        info.channels <= 0 || info.bits_per_sample != 16) {
+        throw std::runtime_error("Expected 16-bit PCM WAV input");
+    }
+    return info;
+}
+
 // Get format from file extension
 std::string get_format_from_path(const std::string& path) {
     std::filesystem::path file_path(path);
@@ -33,18 +101,7 @@ std::string get_format_from_path(const std::string& path) {
 
 void test_online_decode(const std::string& path) {
     try {
-        // Hardcode for zh.wav: 16kHz, Mono, s16le
-        const int SAMPLE_RATE = 16000;
-        const int CHANNELS = 1;
-        const int BYTES_PER_SAMPLE = 2;  // s16le
         const int CHUNK_DURATION_MS = 100;
-        const int WAV_HEADER_SIZE = 44;
-        
-        // Calculate 100ms chunk size: 16000 * 1 * 2 * 0.1 = 3200 bytes
-        const size_t chunk_size = SAMPLE_RATE * CHANNELS * BYTES_PER_SAMPLE * CHUNK_DURATION_MS / 1000;
-        
-        std::cout << "Streaming with PCM format (s16le, " << SAMPLE_RATE << "Hz, " << CHANNELS << " channel)\n";
-        std::cout << "Chunk size: " << chunk_size << " bytes (" << CHUNK_DURATION_MS << "ms per chunk)\n";
         
         // Read file into memory
         std::ifstream file(path, std::ios::binary | std::ios::ate);
@@ -57,47 +114,39 @@ void test_online_decode(const std::string& path) {
         std::vector<uint8_t> buffer(size);
         file.read(reinterpret_cast<char*>(buffer.data()), size);
         file.close();
+
+        const WavPcmInfo wav_info = parse_wav_pcm_info(buffer);
+        const int bytes_per_sample = wav_info.bits_per_sample / 8;
+        const size_t chunk_size =
+            wav_info.sample_rate * wav_info.channels * bytes_per_sample * CHUNK_DURATION_MS / 1000;
         
-        // Skip WAV header (44 bytes), only use raw PCM data
-        if (size <= WAV_HEADER_SIZE) {
-            std::cerr << "File too small to contain valid WAV header\n";
-            return;
-        }
-        const uint8_t* pcm_data = buffer.data() + WAV_HEADER_SIZE;
-        size_t pcm_size = size - WAV_HEADER_SIZE;
+        const uint8_t* pcm_data = buffer.data() + wav_info.data_offset;
+        size_t pcm_size = wav_info.data_size;
         
+        std::cout << "Streaming with PCM format (s16le, " << wav_info.sample_rate
+                  << "Hz, " << wav_info.channels << " channel)\n";
+        std::cout << "Chunk size: " << chunk_size << " bytes (" << CHUNK_DURATION_MS << "ms per chunk)\n";
         std::cout << "File size: " << size << " bytes\n";
-        std::cout << "PCM data size: " << pcm_size << " bytes (after skipping " << WAV_HEADER_SIZE << " byte header)\n";
+        std::cout << "PCM data size: " << pcm_size << " bytes (after WAV header)\n";
         
         // Setup streaming options for raw PCM
         avioflow::AudioStreamOptions options;
         options.input_format = "s16le";           // Raw PCM format
-        options.input_sample_rate = SAMPLE_RATE;  // Must specify for raw PCM
-        options.input_channels = CHANNELS;        // Must specify for raw PCM
+        options.input_sample_rate = wav_info.sample_rate;  // Must specify for raw PCM
+        options.input_channels = wav_info.channels;        // Must specify for raw PCM
         
         avioflow::AudioDecoder decoder(options);
         
-        // Push first chunk to initialize decoder
-        if (pcm_size < chunk_size) {
-            std::cerr << "PCM data too small for even one chunk\n";
+        if (chunk_size == 0) {
+            std::cerr << "Invalid chunk size\n";
             return;
         }
-        decoder.push(pcm_data, chunk_size);
         
-        // Now metadata should be available
-        const auto& meta = decoder.get_metadata();
-        std::cout << "\n--- Initial Metadata (after first push) ---\n";
-        std::cout << "Sample Format: " << meta.sample_format << "\n";
-        std::cout << "Channels: " << meta.num_channels << "\n";
-        std::cout << "Sample Rate: " << meta.sample_rate << " Hz\n";
-        
-        // Continue pushing remaining data in 100ms chunks
-        size_t offset = chunk_size;  // Start from second chunk
-        int chunk_count = 1;  // First chunk already pushed
+        size_t offset = 0;
+        int chunk_count = 0;
         size_t total_samples = 0;
         
         std::cout << "\n--- Starting chunked streaming ---\n";
-        std::cout << "Chunk 1: Pushed " << chunk_size << " bytes (initialization)\n";
         
         while (offset < pcm_size) {
             size_t current_chunk_size = std::min(chunk_size, pcm_size - offset);
@@ -125,6 +174,7 @@ void test_online_decode(const std::string& path) {
         
         // Flush decoder
         std::cout << "\nFlushing decoder...\n";
+        decoder.finish();
         int flush_frames = 0;
         size_t flush_samples = 0;
         while (!decoder.is_finished()) {

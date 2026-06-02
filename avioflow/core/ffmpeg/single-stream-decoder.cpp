@@ -7,6 +7,25 @@
 
 namespace avioflow
 {
+  namespace
+  {
+    bool is_raw_pcm_input_format(const std::optional<std::string> &format)
+    {
+      if (!format.has_value())
+        return false;
+
+      const std::string &value = format.value();
+      return value == "s8" || value == "u8" ||
+             value == "s16le" || value == "s16be" ||
+             value == "u16le" || value == "u16be" ||
+             value == "s24le" || value == "s24be" ||
+             value == "u24le" || value == "u24be" ||
+             value == "s32le" || value == "s32be" ||
+             value == "u32le" || value == "u32be" ||
+             value == "f32le" || value == "f32be" ||
+             value == "f64le" || value == "f64be";
+    }
+  }
 
   SingleStreamDecoder::SingleStreamDecoder(const AudioStreamOptions &options)
       : packet_(av_packet_alloc()), frame_(av_frame_alloc()),
@@ -64,6 +83,10 @@ namespace avioflow
     {
       throw std::runtime_error("Cannot push data: decoder opened in file mode");
     }
+    if (input_finished_)
+    {
+      throw std::runtime_error("Cannot push data: stream input already finished");
+    }
 
     // Add data to buffer
     {
@@ -75,6 +98,23 @@ namespace avioflow
     if (mode_ == Mode::None)
     {
       mode_ = Mode::Stream;
+    }
+  }
+
+  void SingleStreamDecoder::finish()
+  {
+    if (mode_ == Mode::File)
+    {
+      throw std::runtime_error("Cannot finish stream: decoder opened in file mode");
+    }
+
+    {
+      std::lock_guard<std::mutex> lock(buffer_mtx_);
+      input_finished_ = true;
+      if (mode_ == Mode::None)
+      {
+        eof_reached_ = true;
+      }
     }
   }
 
@@ -112,7 +152,7 @@ namespace avioflow
     fmt_ctx_.reset(AvioContextHandler::open_stream([this](uint8_t *buf, int buf_size)
                                                    {
         std::lock_guard<std::mutex> lock(buffer_mtx_);
-        if (push_buffer_.empty()) return -1; // AVERROR(EAGAIN)
+        if (push_buffer_.empty()) return input_finished_ ? 0 : -1;
         int read = std::min(static_cast<int>(push_buffer_.size()), buf_size);
         std::memcpy(buf, push_buffer_.data(), read);
         push_buffer_.erase(push_buffer_.begin(), push_buffer_.begin() + read);
@@ -124,8 +164,11 @@ namespace avioflow
 
   void SingleStreamDecoder::setup_decoder()
   {
-    check_av_error(avformat_find_stream_info(fmt_ctx_.get(), nullptr),
-                   "Could not find stream info");
+    if (!(mode_ == Mode::Stream && is_raw_pcm_input_format(options_.input_format)))
+    {
+      check_av_error(avformat_find_stream_info(fmt_ctx_.get(), nullptr),
+                     "Could not find stream info");
+    }
 
     audio_stream_index_ = av_find_best_stream(fmt_ctx_.get(), AVMEDIA_TYPE_AUDIO,
                                               -1, -1, nullptr, 0);
@@ -273,6 +316,20 @@ namespace avioflow
     }
   }
 
+  void SingleStreamDecoder::update_decoded_metadata(const AVFrame *frame)
+  {
+    if (!frame)
+      return;
+
+    total_samples_decoded_ += frame->nb_samples;
+    metadata_.num_samples = total_samples_decoded_;
+    if (metadata_.sample_rate > 0)
+    {
+      metadata_.duration =
+          static_cast<double>(total_samples_decoded_) / metadata_.sample_rate;
+    }
+  }
+
   AVFrame *SingleStreamDecoder::read()
   {
     // Lazy initialization for stream mode - wait until we have enough data
@@ -283,8 +340,9 @@ namespace avioflow
         std::lock_guard<std::mutex> lock(buffer_mtx_);
         buffer_size = push_buffer_.size();
       }
-      // Need at least 32KB for format probing (matches probesize setting)
-      if (buffer_size < 32 * 1024)
+      const size_t required_buffer_size =
+          is_raw_pcm_input_format(options_.input_format) ? 1 : 32 * 1024;
+      if (buffer_size < required_buffer_size)
       {
         return nullptr; // Not enough data yet, caller should push more
       }
@@ -317,8 +375,7 @@ namespace avioflow
       
       AVFrame* decoded = process_decoded_frame();
       if (decoded) {
-          total_samples_decoded_ += decoded->nb_samples;
-          metadata_.num_samples = total_samples_decoded_;
+          update_decoded_metadata(decoded);
       }
       return decoded;
     }
@@ -331,7 +388,7 @@ namespace avioflow
       {
         AVFrame* decoded = process_decoded_frame();
         if (decoded) {
-            total_samples_decoded_ += decoded->nb_samples;
+            update_decoded_metadata(decoded);
         }
         return decoded;
       }
@@ -361,10 +418,19 @@ namespace avioflow
         ret = avcodec_receive_frame(codec_ctx_.get(), frame_.get());
         if (ret >= 0) {
             AVFrame* decoded = process_decoded_frame();
-            if (decoded) total_samples_decoded_ += decoded->nb_samples;
+            if (decoded) update_decoded_metadata(decoded);
             return decoded;
         }
         return nullptr; // Truly finished
+      }
+
+      if (mode_ == Mode::Stream)
+      {
+        std::lock_guard<std::mutex> lock(buffer_mtx_);
+        if (push_buffer_.empty() && !input_finished_)
+        {
+          return nullptr;
+        }
       }
 
       ret = av_read_frame(fmt_ctx_.get(), packet_.get());

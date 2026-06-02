@@ -31,6 +31,7 @@ namespace avioflow
     // Mode 2: Push-based streaming
     // - Requires input_format to be set in options
     void push(const uint8_t *data, size_t size);
+    void finish();
 
     // === Decoding ===
 
@@ -53,6 +54,7 @@ namespace avioflow
     // Stream mode buffer
     std::vector<uint8_t> push_buffer_;
     std::mutex buffer_mtx_;
+    bool input_finished_ = false;
 
     // Internal helpers
     void init_stream_context();
@@ -60,6 +62,7 @@ namespace avioflow
     void setup_resampler(AVFrame *frame);
     int calculate_output_samples(int src_samples, int src_rate, int dst_rate) const;
     AVFrame *process_decoded_frame();
+    void update_decoded_metadata(const AVFrame *frame);
 
     // Core FFmpeg contexts
     AVFormatContextPtr fmt_ctx_;

@@ -121,6 +121,14 @@ public:
    */
   void push(const uint8_t *data, size_t size);
 
+  /**
+   * @brief Mark push-based streaming input as complete.
+   *
+   * After calling finish(), read() drains buffered/decoder-delayed frames until
+   * is_finished() becomes true. Calling push() after finish() throws.
+   */
+  void finish();
+
   // === Decoding Methods ===
 
   /**

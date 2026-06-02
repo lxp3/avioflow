@@ -48,6 +48,8 @@ void AudioDecoder::push(const uint8_t *data, size_t size) {
   impl_->decoder_.push(data, size);
 }
 
+void AudioDecoder::finish() { impl_->decoder_.finish(); }
+
 // --- Decoding Methods ---
 
 FrameData AudioDecoder::read() {
