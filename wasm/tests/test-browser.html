@@ -246,12 +246,12 @@
                 
                 while (offset < data.length) {
                     const chunk = data.slice(offset, offset + chunkSize);
-                    decoder.push(chunk);
+                    decoder.feed(chunk);
                     offset += chunkSize;
                     
                     // Decode available frames
                     let frame;
-                    while ((frame = decoder.decodeNext()) !== null) {
+                    while ((frame = decoder.getFrame()) !== null) {
                         totalSamples += frame[0]?.length || 0;
                         frameCount++;
                     }
@@ -259,7 +259,7 @@
                 
                 // Drain remaining
                 while (!decoder.isFinished()) {
-                    const frame = decoder.decodeNext();
+                    const frame = decoder.getFrame();
                     if (!frame) break;
                     totalSamples += frame[0]?.length || 0;
                     frameCount++;

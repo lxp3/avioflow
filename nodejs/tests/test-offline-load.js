@@ -15,7 +15,7 @@ function testOfflineFilepath() {
     console.log('\n=== Test: Offline Decode from Filepath ===')
     
     const decoder = new avioflow.AudioDecoder()
-    decoder.open(MP3_PATH)
+    decoder.loadFile(MP3_PATH)
     
     const meta = decoder.getMetadata()
     console.log(`  Codec: ${meta.codec}, Duration: ${meta.duration.toFixed(2)}s`)
@@ -34,7 +34,7 @@ function testOfflineMemory() {
     console.log(`  File size: ${buffer.length} bytes`)
     
     const decoder = new avioflow.AudioDecoder()
-    decoder.open(buffer)
+    decoder.loadBuffer(buffer)
     
     const meta = decoder.getMetadata()
     console.log(`  Codec: ${meta.codec}, Duration: ${meta.duration.toFixed(2)}s`)
@@ -52,7 +52,7 @@ function testOfflineUrl() {
     
     try {
         const decoder = new avioflow.AudioDecoder()
-        decoder.open(MP3_URL)
+        decoder.loadFile(MP3_URL)
         
         const meta = decoder.getMetadata()
         console.log(`  Codec: ${meta.codec}, Sample Rate: ${meta.sampleRate}Hz`)
@@ -60,7 +60,7 @@ function testOfflineUrl() {
         // Only decode a few frames to verify it works
         let frameCount = 0
         while (!decoder.isFinished() && frameCount < 10) {
-            const frame = decoder.read()
+            const frame = decoder.getFrame()
             if (!frame) break
             frameCount++
         }

@@ -135,12 +135,12 @@ const decoder = new avioflow.AudioDecoder({
 });
 
 // Push chunks as they arrive
-decoder.push(chunk1);
-decoder.push(chunk2);
+decoder.feed(chunk1);
+decoder.feed(chunk2);
 
 // Decode available frames
 let frame;
-while ((frame = decoder.decodeNext()) !== null) {
+while ((frame = decoder.getFrame()) !== null) {
     // frame is Float32Array[] (one per channel)
     processAudio(frame);
 }
@@ -181,10 +181,10 @@ class AudioDecoder {
     push(data: Uint8Array): void;
     
     // Decode next available frame
-    decodeNext(): Float32Array[] | null;
+    getFrame(): Float32Array[] | null;
     
     // Decode all remaining samples
-    getAllSamples(): Float32Array[];
+    getSamples(): Float32Array[];
     
     // Get audio metadata
     getMetadata(): Metadata;

@@ -27,6 +27,67 @@ application, or run it in WebAssembly.
 | WebAssembly        | WASM build | npm package / web bundle | Browser and WASM-capable runtime support |
 | VS Code            | Extension package | `.vsix` / Marketplace release | Editor integration built from the same core APIs |
 
+## Decoder API Flow
+
+AvioFlow uses the same pull-style output functions for offline and streaming
+decoding. The difference is only how input bytes enter the decoder.
+
+### Offline Input
+
+```text
++-----------------------+
+| AudioDecoder(options) |
++-----------+-----------+
+            |
+            v
++-----------------------------+
+| load_file(path)             |
+| load_buffer(bytes, size)    |
++-----------+-----------------+
+            |
+            v
++-----------------------------+
+| get_frame()                 |  one decoded frame, zero-copy
+| get_samples()               |  all currently available samples
++-----------+-----------------+
+            |
+            v
++-----------------------------+
+| is_finished()               |
++-----------------------------+
+```
+
+### Streaming Input
+
+```text
++--------------------------------------+
+| AudioDecoder(input_format, rate, ch) |
++-----------+--------------------------+
+            |
+            v
++-----------------------------+
+| feed(chunk)                 |  first feed starts stream mode
++-----------+-----------------+
+            |
+            v
++-----------------------------+
+| get_frame()                 |  returns empty if data is incomplete
+| get_samples()               |  drains currently available samples
++-----------+-----------------+
+            | repeat feed/get_* while streaming
+            v
++-----------------------------+
+| flush()                     |  no more input; drain decoder delay
++-----------+-----------------+
+            |
+            v
++-----------------------------+
+| get_samples() / get_frame() |  drain until is_finished()
++-----------------------------+
+```
+
+`flush()` does not discard data. It marks stream input complete so remaining
+buffered bytes and codec-delayed frames can be drained.
 
 ## Installation
 
@@ -41,8 +102,8 @@ Gradle users need the main Java API jar plus one native classifier for the targe
 
 ```kotlin
 dependencies {
-    implementation("io.github.lxp3:avioflow:0.3.6")
-    runtimeOnly("io.github.lxp3:avioflow:0.3.6:linux-x86_64")
+    implementation("io.github.lxp3:avioflow:0.4.0")
+    runtimeOnly("io.github.lxp3:avioflow:0.4.0:linux-x86_64")
 }
 ```
 
@@ -119,17 +180,18 @@ AudioDecoder decoder(options);
 
 | Method             | Description                                                      |
 | ------------------ | ---------------------------------------------------------------- |
-| `open(source)`     | Open file path, URL, or device                                   |
-| `open(data, size)` | Open full audio bytes from memory                                |
-| `push(data, size)` | Push raw bytes for streaming decode                              |
-| `read()`           | Decode next frame, returns `FrameData`. (Formerly `decode_next`) |
-| `get_samples()`    | Decode all currently available samples. (Formerly `get_samples`) |
+| `load_file(source)` | Load file path, URL, or device and return metadata              |
+| `load_buffer(data, size)` | Load complete audio bytes from memory                    |
+| `feed(data, size)` | Feed stream bytes; first feed starts stream mode                 |
+| `flush()`          | Mark stream input complete and allow draining                    |
+| `get_frame()`      | Decode next frame, returns `FrameData`                           |
+| `get_samples()`    | Drain currently available samples                                |
 | `get_metadata()`   | Get audio metadata                                               |
 | `is_finished()`    | Check if EOF reached                                             |
 
 #### `FrameData`
 
-Zero-copy frame data structure returned by `read()`.
+Zero-copy frame data structure returned by `get_frame()`.
 
 ```cpp
 struct FrameData {
@@ -141,14 +203,14 @@ struct FrameData {
 };
 ```
 
-> ⚠️ **Warning**: `FrameData.data` points to internal buffer, valid only until next `read()` call.
+> ⚠️ **Warning**: `FrameData.data` points to internal buffer, valid only until next `get_frame()` or `get_samples()` call.
 
 ### Examples
 
 #### File Decoding (Offline)
 ```cpp
 AudioDecoder decoder({.output_sample_rate = 16000});
-decoder.open("audio.mp3");
+decoder.load_file("audio.mp3");
 
 auto samples = decoder.get_samples();  // vector<vector<float>>
 std::cout << "Channels: " << samples.size() << std::endl;
@@ -158,9 +220,9 @@ std::cout << "Samples: " << samples[0].size() << std::endl;
 #### Frame-by-Frame Decoding
 ```cpp
 AudioDecoder decoder;
-decoder.open("audio.mp3");
+decoder.load_file("audio.mp3");
 
-while (auto frame = decoder.read()) {
+while (auto frame = decoder.get_frame()) {
     // frame.data[channel][sample]
     for (int c = 0; c < frame.num_channels; c++) {
         process(frame.data[c], frame.num_samples);
@@ -179,9 +241,9 @@ opts.input_sample_rate = 8000;     // 8 kHz
 opts.input_channels = 1;           // Mono
 
 AudioDecoder decoder(opts);
-decoder.open(pcm_bytes, pcm_size); // Full PCM buffer in memory
+decoder.load_buffer(pcm_bytes, pcm_size); // Full PCM buffer in memory
 
-while (auto frame = decoder.read()) {
+while (auto frame = decoder.get_frame()) {
     // Output samples are float planar: frame.data[channel][sample]
     process(frame.data[0], frame.num_samples);
 }
@@ -195,13 +257,14 @@ opts.input_sample_rate = 48000;
 opts.input_channels = 2;
 
 AudioDecoder decoder(opts);
-decoder.push(raw_bytes, size);  // Auto-initializes on first call
+decoder.feed(raw_bytes, size);  // First feed starts stream mode
 
 auto samples = decoder.get_samples(); // Decode all buffered data
 // Or frame-by-frame:
-while (auto frame = decoder.read()) {
+while (auto frame = decoder.get_frame()) {
     // Process decoded audio...
 }
+decoder.flush();
 ```
 
 ---
@@ -226,10 +289,12 @@ decoder = avioflow.AudioDecoder(
 
 | Method | Returns | Description |
 |--------|---------|-------------|
-| `load(source)` | `Metadata` | Load file, URL, `pathlib.Path`, or bytes-like input |
-| `decoder(data)` | `ndarray` | Push bytes-like data and decode (streaming) |
-| `read()` | `ndarray` | Decode next frame |
-| `get_samples()` | `ndarray` | Decode all available samples |
+| `load_file(source)` | `Metadata` | Load file, URL, or `pathlib.Path` |
+| `load_buffer(data)` | `Metadata` | Load complete bytes-like input |
+| `feed(data)` | `None` | Feed streaming bytes |
+| `flush()` | `None` | Mark stream input complete |
+| `get_frame()` | `ndarray \| None` | Decode next frame |
+| `get_samples()` | `ndarray` | Drain currently available samples |
 | `is_finished()` | `bool` | Check if EOF |
 
 #### `Metadata`
@@ -251,7 +316,7 @@ with open("audio.mp3", "rb") as f:
 #### File Decoding
 ```python
 decoder = avioflow.AudioDecoder(output_sample_rate=16000)
-meta = decoder.load("speech.wav")
+meta = decoder.load_file("speech.wav")
 samples = decoder.get_samples()      # numpy array (channels, samples)
 print(f"Shape: {samples.shape}")     # e.g., (1, 160000)
 ```
@@ -266,7 +331,11 @@ decoder = avioflow.AudioDecoder(
 
 while True:
     data = socket.recv(4096)
-    samples = decoder(data)  # Push & get samples in one call
+    if not data:
+        decoder.flush()
+        break
+    decoder.feed(data)
+    samples = decoder.get_samples()
     if samples.size > 0:
         process_audio(samples)
 ```
@@ -331,10 +400,12 @@ const decoder = new avioflow.AudioDecoder({
 
 | Method         | Returns                    | Description                                       |
 | -------------- | -------------------------- | ------------------------------------------------- |
-| `load(source)` | `Metadata`                 | Load file, URL, or device name. Returns metadata. |
-| `push(buffer)` | `void`                     | Push raw encoded bytes for streaming.             |
-| `read()`       | `Float32Array[]` \| `null` | Decode next frame. Returns array of channel data. |
-| `getSamples()` | `Float32Array[]`           | Decode all available samples at once.             |
+| `loadFile(source)` | `Metadata`            | Load file, URL, or device name. Returns metadata. |
+| `loadBuffer(buffer)` | `Metadata`          | Load complete encoded bytes from memory.          |
+| `feed(buffer)` | `void`                     | Feed streaming bytes.                             |
+| `flush()`      | `void`                     | Mark stream input complete.                       |
+| `getFrame()`   | `Float32Array[]` \| `null` | Decode next frame. Returns array of channel data. |
+| `getSamples()` | `Float32Array[]`           | Drain currently available samples.                |
 | `isFinished()` | `boolean`                  | Check if end of stream reached.                   |
 
 ### Examples
@@ -354,7 +425,7 @@ console.log(`Channels: ${samples.length}, Samples: ${samples[0].length}`);
 #### Batch Decoding with Decoder Instance
 ```javascript
 const decoder = new avioflow.AudioDecoder({ outputSampleRate: 44100 });
-const meta = decoder.load("audio.wav");
+const meta = decoder.loadFile("audio.wav");
 
 // Decodes the entire file into memory
 const allSamples = decoder.getSamples();
@@ -370,12 +441,20 @@ const decoder = new avioflow.AudioDecoder({
 });
 
 socket.on('data', (chunk) => {
-    decoder.push(chunk);
+    decoder.feed(chunk);
 
     // Get all samples decoded from this chunk
     const samples = decoder.getSamples();
     if (samples.length > 0) {
         processAudio(samples);
+    }
+});
+
+socket.on('end', () => {
+    decoder.flush();
+    const remaining = decoder.getSamples();
+    if (remaining.length > 0) {
+        processAudio(remaining);
     }
 });
 ```
@@ -400,7 +479,7 @@ import io.github.lxp3.avioflow.AudioStreamOptions;
 
 try (AudioDecoder decoder = new AudioDecoder(
         new AudioStreamOptions().outputSampleRate(16000))) {
-    decoder.open("audio.mp3");
+    decoder.loadFile("audio.mp3");
     float[][] samples = decoder.getSamples();
     System.out.println(samples.length + " channels");
 }

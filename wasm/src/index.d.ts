@@ -37,20 +37,23 @@ export interface LoadResult {
 export declare class AudioDecoder {
     constructor(options?: StreamOptions);
     
-    /** Open audio from URL */
-    open(url: string): void;
+    /** Load audio from URL */
+    loadFile(url: string): Metadata;
     
-    /** Open audio from buffer */
-    openBuffer(buffer: ArrayBuffer | Uint8Array): void;
+    /** Load complete audio bytes from buffer */
+    loadBuffer(buffer: ArrayBuffer | Uint8Array): Metadata;
     
-    /** Push data for streaming decode */
-    push(data: Uint8Array): void;
+    /** Feed data for streaming decode */
+    feed(data: Uint8Array): void;
+
+    /** Mark stream input complete */
+    flush(): void;
     
     /** Decode next frame */
-    decodeNext(): Float32Array[] | null;
+    getFrame(): Float32Array[] | null;
     
-    /** Decode all remaining samples */
-    getAllSamples(): Float32Array[];
+    /** Drain currently available samples */
+    getSamples(): Float32Array[];
     
     /** Get metadata */
     getMetadata(): Metadata;

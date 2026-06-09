@@ -33,7 +33,7 @@ std::string first_available_name(const std::vector<std::string> &values,
 FixtureData load_fixture_once() {
   const std::filesystem::path input_path = "public/wavs/zh.wav";
   AudioDecoder source_decoder;
-  source_decoder.open(input_path.string());
+  source_decoder.load_file(input_path.string());
 
   FixtureData fixture;
   fixture.meta = source_decoder.get_metadata();
@@ -49,7 +49,7 @@ void assert_roundtrip(const std::filesystem::path &output_path,
   assert(std::filesystem::exists(output_path));
 
   AudioDecoder roundtrip_decoder;
-  roundtrip_decoder.open(output_path.string());
+  roundtrip_decoder.load_file(output_path.string());
   const auto &meta = roundtrip_decoder.get_metadata();
   auto decoded = roundtrip_decoder.get_samples();
 

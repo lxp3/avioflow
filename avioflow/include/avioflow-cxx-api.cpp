@@ -36,24 +36,26 @@ AudioDecoder &AudioDecoder::operator=(AudioDecoder &&) noexcept = default;
 
 // --- Input Methods ---
 
-void AudioDecoder::open(const std::string &source) {
-  impl_->decoder_.open(source);
+Metadata AudioDecoder::load_file(const std::string &source) {
+  impl_->decoder_.load_file(source);
+  return impl_->decoder_.get_metadata();
 }
 
-void AudioDecoder::open(const uint8_t *data, size_t size) {
-  impl_->decoder_.open(data, size);
+Metadata AudioDecoder::load_buffer(const uint8_t *data, size_t size) {
+  impl_->decoder_.load_buffer(data, size);
+  return impl_->decoder_.get_metadata();
 }
 
-void AudioDecoder::push(const uint8_t *data, size_t size) {
-  impl_->decoder_.push(data, size);
+void AudioDecoder::feed(const uint8_t *data, size_t size) {
+  impl_->decoder_.feed(data, size);
 }
 
-void AudioDecoder::finish() { impl_->decoder_.finish(); }
+void AudioDecoder::flush() { impl_->decoder_.flush(); }
 
 // --- Decoding Methods ---
 
-FrameData AudioDecoder::read() {
-  AVFrame *frame = impl_->decoder_.read();
+FrameData AudioDecoder::get_frame() {
+  AVFrame *frame = impl_->decoder_.get_frame();
   if (!frame)
     return {nullptr, 0, 0};
 

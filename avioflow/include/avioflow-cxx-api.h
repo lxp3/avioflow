@@ -58,14 +58,14 @@ struct FrameData {
  * @brief High-performance audio decoder powered by FFmpeg.
  *
  * Supports two modes:
- * - **File mode**: Load from file path, URL, or device via open()
- * - **Stream mode**: Push raw bytes via push() for real-time decoding
+ * - **Offline mode**: Load from file path, URL, memory, or device.
+ * - **Stream mode**: Feed bytes and pull currently available decoded data.
  *
  * Example (File mode):
  * @code
  * AudioDecoder decoder({.output_sample_rate = 44100});
- * decoder.open("audio.mp3");
- * while (auto frame = decoder.decode_next()) {
+ * decoder.load_file("audio.mp3");
+ * while (auto frame = decoder.get_frame()) {
  *   process(frame.data, frame.num_channels, frame.num_samples);
  * }
  * @endcode
@@ -73,8 +73,9 @@ struct FrameData {
  * Example (Stream mode):
  * @code
  * AudioDecoder decoder({.input_format = "s16le", .input_sample_rate = 48000});
- * decoder.push(raw_bytes, size);
- * while (auto frame = decoder.decode_next()) { ... }
+ * decoder.feed(raw_bytes, size);
+ * while (auto frame = decoder.get_frame()) { ... }
+ * decoder.flush();
  * @endcode
  */
 class AVIOFLOW_API AudioDecoder {
@@ -98,7 +99,7 @@ public:
    * "audio=Microphone")
    * @throws std::runtime_error if source cannot be opened
    */
-  void open(const std::string &source);
+  Metadata load_file(const std::string &source);
 
   /**
    * @brief Open audio from memory (full bytes).
@@ -106,7 +107,7 @@ public:
    * @param size Number of bytes
    * @throws std::runtime_error if data cannot be parsed
    */
-  void open(const uint8_t *data, size_t size);
+  Metadata load_buffer(const uint8_t *data, size_t size);
 
   /**
    * @brief Push raw bytes for streaming decode.
@@ -119,15 +120,15 @@ public:
    * @throws std::runtime_error if input_format not specified or decoder in file
    * mode
    */
-  void push(const uint8_t *data, size_t size);
+  void feed(const uint8_t *data, size_t size);
 
   /**
    * @brief Mark push-based streaming input as complete.
    *
-   * After calling finish(), read() drains buffered/decoder-delayed frames until
-   * is_finished() becomes true. Calling push() after finish() throws.
+   * After calling flush(), get_frame()/get_samples() drains buffered and
+   * decoder-delayed frames until is_finished() becomes true.
    */
-  void finish();
+  void flush();
 
   // === Decoding Methods ===
 
@@ -138,9 +139,10 @@ public:
    *
    * @return FrameData with valid pointers, or empty FrameData (bool() == false)
    * on EOF/no data
-   * @warning Returned data is only valid until next read() call!
+   * @warning Returned data is only valid until next get_frame()/get_samples()
+   * call!
    */
-  FrameData read();
+  FrameData get_frame();
 
   /**
    * @brief Decode all currently available samples.

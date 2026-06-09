@@ -9,7 +9,7 @@ void test_file_decode(const std::string &path)
     try
     {
         avioflow::AudioDecoder decoder;
-        decoder.open(path);
+        decoder.load_file(path);
 
         const auto &meta = decoder.get_metadata();
         std::cout << "Successfully opened file: " << path << "\n";

@@ -84,14 +84,15 @@ public:
     /**
      * @brief Open audio from URL (uses Emscripten's fetch)
      */
-    void open(const std::string &source) {
-        decoder_.open(source);
+    val loadFile(const std::string &source) {
+        auto metadata = decoder_.load_file(source);
+        return MetadataToJs(metadata);
     }
 
     /**
      * @brief Open audio from memory buffer (ArrayBuffer/Uint8Array)
      */
-    void openBuffer(val buffer) {
+    val loadBuffer(val buffer) {
         // Convert JS ArrayBuffer/Uint8Array to vector
         std::vector<uint8_t> data;
         
@@ -110,16 +111,17 @@ public:
             }
         } else {
             val::global("console").call<void>("error", std::string("Expected Uint8Array or ArrayBuffer"));
-            return;
+            return val::null();
         }
 
-        decoder_.open(data.data(), data.size());
+        auto metadata = decoder_.load_buffer(data.data(), data.size());
+        return MetadataToJs(metadata);
     }
 
     /**
      * @brief Push data for streaming decode
      */
-    void push(val buffer) {
+    void feed(val buffer) {
         std::vector<uint8_t> data;
         
         if (buffer.instanceof(val::global("Uint8Array"))) {
@@ -133,15 +135,19 @@ public:
             return;
         }
 
-        decoder_.push(data.data(), data.size());
+        decoder_.feed(data.data(), data.size());
+    }
+
+    void flush() {
+        decoder_.flush();
     }
 
     /**
      * @brief Decode next frame
      * @return Float32Array[] or null
      */
-    val decodeNext() {
-        auto frame = decoder_.read();
+    val getFrame() {
+        auto frame = decoder_.get_frame();
         if (!frame) {
             return val::null();
         }
@@ -160,7 +166,7 @@ public:
     /**
      * @brief Decode all samples at once
      */
-    val getAllSamples() {
+    val getSamples() {
         auto samples = decoder_.get_samples();
         return SamplesToJs(samples);
     }
@@ -207,7 +213,7 @@ val load(const std::string &path, val options) {
     }
     
     AudioDecoder decoder(opts);
-    decoder.open(path);
+    decoder.load_file(path);
 
     auto meta = decoder.get_metadata();
     auto samples = decoder.get_samples();
@@ -253,7 +259,7 @@ val loadBuffer(val buffer, val options) {
     }
 
     AudioDecoder decoder(opts);
-    decoder.open(data.data(), data.size());
+    decoder.load_buffer(data.data(), data.size());
 
     auto meta = decoder.get_metadata();
     auto samples = decoder.get_samples();
@@ -276,11 +282,12 @@ EMSCRIPTEN_BINDINGS(avioflow) {
     class_<AudioDecoderWrapper>("AudioDecoder")
         .constructor<>()
         .constructor<val>()
-        .function("open", &AudioDecoderWrapper::open)
-        .function("openBuffer", &AudioDecoderWrapper::openBuffer)
-        .function("push", &AudioDecoderWrapper::push)
-        .function("decodeNext", &AudioDecoderWrapper::decodeNext)
-        .function("getAllSamples", &AudioDecoderWrapper::getAllSamples)
+        .function("loadFile", &AudioDecoderWrapper::loadFile)
+        .function("loadBuffer", &AudioDecoderWrapper::loadBuffer)
+        .function("feed", &AudioDecoderWrapper::feed)
+        .function("flush", &AudioDecoderWrapper::flush)
+        .function("getFrame", &AudioDecoderWrapper::getFrame)
+        .function("getSamples", &AudioDecoderWrapper::getSamples)
         .function("getMetadata", &AudioDecoderWrapper::getMetadata)
         .function("isFinished", &AudioDecoderWrapper::isFinished);
 }

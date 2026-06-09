@@ -153,14 +153,14 @@ void test_online_decode(const std::string& path) {
             chunk_count++;
             
             std::cout << "Chunk " << chunk_count << ": Pushing " << current_chunk_size << " bytes...";
-            decoder.push(pcm_data + offset, current_chunk_size);
+            decoder.feed(pcm_data + offset, current_chunk_size);
             offset += current_chunk_size;
             
             // Decode all available frames after this push
             int frames_in_chunk = 0;
             size_t samples_in_chunk = 0;
             while (true) {
-                auto frame = decoder.read();
+                auto frame = decoder.get_frame();
                 if (!frame)
                     break;
                 total_samples += frame.num_samples;
@@ -174,11 +174,11 @@ void test_online_decode(const std::string& path) {
         
         // Flush decoder
         std::cout << "\nFlushing decoder...\n";
-        decoder.finish();
+        decoder.flush();
         int flush_frames = 0;
         size_t flush_samples = 0;
         while (!decoder.is_finished()) {
-            auto frame = decoder.read();
+            auto frame = decoder.get_frame();
             if (!frame)
                 break;
             total_samples += frame.num_samples;

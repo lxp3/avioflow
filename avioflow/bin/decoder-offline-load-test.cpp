@@ -28,13 +28,13 @@ std::vector<uint8_t> read_file_bytes(const std::string &filepath) {
 void test_offline_filepath() {
   std::cout << "\n=== Test: Offline Decode from Filepath ===" << std::endl;
   AudioDecoder decoder;
-  decoder.open(MP3_PATH);
+  decoder.load_file(MP3_PATH);
   const auto &meta = decoder.get_metadata();
   std::cout << "  Codec: " << meta.codec << ", Duration: " << meta.duration << "s" << std::endl;
 
   size_t total_samples = 0;
   while (!decoder.is_finished()) {
-    auto frame = decoder.read();
+    auto frame = decoder.get_frame();
     if (!frame) break;
     total_samples += frame.num_samples;
   }
@@ -46,13 +46,13 @@ void test_offline_memory() {
   std::cout << "\n=== Test: Offline Decode from Memory (Full Bytes) ===" << std::endl;
   auto buffer = read_file_bytes(MP3_PATH);
   AudioDecoder decoder;
-  decoder.open(buffer.data(), buffer.size());
+  decoder.load_buffer(buffer.data(), buffer.size());
   const auto &meta = decoder.get_metadata();
   std::cout << "  Codec: " << meta.codec << ", Duration: " << meta.duration << "s" << std::endl;
 
   size_t total_samples = 0;
   while (!decoder.is_finished()) {
-    auto frame = decoder.read();
+    auto frame = decoder.get_frame();
     if (!frame) break;
     total_samples += frame.num_samples;
   }
@@ -72,11 +72,11 @@ void test_offline_raw_pcm_memory() {
   options.input_channels = 1;
 
   AudioDecoder decoder(options);
-  decoder.open(buffer.data() + wav_header_size, buffer.size() - wav_header_size);
+  decoder.load_buffer(buffer.data() + wav_header_size, buffer.size() - wav_header_size);
 
   size_t total_samples = 0;
   while (!decoder.is_finished()) {
-    auto frame = decoder.read();
+    auto frame = decoder.get_frame();
     if (!frame) break;
     total_samples += frame.num_samples;
   }
@@ -90,13 +90,13 @@ void test_offline_raw_pcm_memory() {
 void test_offline_url() {
   std::cout << "\n=== Test: Offline Decode from URL ===" << std::endl;
   AudioDecoder decoder;
-  decoder.open(MP3_URL);
+  decoder.load_file(MP3_URL);
   const auto &meta = decoder.get_metadata();
   std::cout << "  Codec: " << meta.codec << ", Sample Rate: " << meta.sample_rate << "Hz" << std::endl;
 
   int frames = 0;
   while (!decoder.is_finished() && frames < 10) {
-    auto frame = decoder.read();
+    auto frame = decoder.get_frame();
     if (!frame) break;
     frames++;
   }

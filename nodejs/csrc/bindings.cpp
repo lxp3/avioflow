@@ -120,7 +120,7 @@ Napi::Value Load(const Napi::CallbackInfo &info) {
 
   try {
     AudioDecoder decoder(opts);
-    decoder.open(path);
+    decoder.load_file(path);
     auto samples = decoder.get_samples();
     auto meta = decoder.get_metadata();
 
@@ -162,7 +162,7 @@ Napi::Value GetWaveform(const Napi::CallbackInfo &info) {
 
   try {
     AudioDecoder decoder(opts);
-    decoder.open(path);
+    decoder.load_file(path);
     auto meta = decoder.get_metadata();
     auto all_samples = decoder.get_samples();
 
@@ -227,10 +227,11 @@ public:
   static Napi::Object Init(Napi::Env env, Napi::Object exports) {
     Napi::Function func = DefineClass(
         env, "AudioDecoder",
-        {InstanceMethod("load", &AudioDecoderAddon::Load),
-         InstanceMethod("open", &AudioDecoderAddon::Open),
-         InstanceMethod("push", &AudioDecoderAddon::Push),
-         InstanceMethod("read", &AudioDecoderAddon::Read),
+        {InstanceMethod("loadFile", &AudioDecoderAddon::LoadFile),
+         InstanceMethod("loadBuffer", &AudioDecoderAddon::LoadBuffer),
+         InstanceMethod("feed", &AudioDecoderAddon::Feed),
+         InstanceMethod("flush", &AudioDecoderAddon::Flush),
+         InstanceMethod("getFrame", &AudioDecoderAddon::GetFrame),
          InstanceMethod("getSamples", &AudioDecoderAddon::GetSamples),
          InstanceMethod("getMetadata", &AudioDecoderAddon::GetMetadata),
          InstanceMethod("isFinished", &AudioDecoderAddon::IsFinished)});
@@ -283,23 +284,14 @@ private:
    * @param source String path or Buffer with full audio bytes
    * @return Metadata object
    */
-  Napi::Value Load(const Napi::CallbackInfo &info) {
-    if (info.Length() < 1) {
-      Napi::TypeError::New(info.Env(), "String or Buffer expected")
+  Napi::Value LoadFile(const Napi::CallbackInfo &info) {
+    if (info.Length() < 1 || !info[0].IsString()) {
+      Napi::TypeError::New(info.Env(), "String expected")
           .ThrowAsJavaScriptException();
       return info.Env().Undefined();
     }
     try {
-      if (info[0].IsString()) {
-        decoder->open(info[0].As<Napi::String>().Utf8Value());
-      } else if (info[0].IsBuffer()) {
-        Napi::Buffer<uint8_t> buf = info[0].As<Napi::Buffer<uint8_t>>();
-        decoder->open(buf.Data(), buf.Length());
-      } else {
-        Napi::TypeError::New(info.Env(), "String or Buffer expected")
-            .ThrowAsJavaScriptException();
-        return info.Env().Undefined();
-      }
+      decoder->load_file(info[0].As<Napi::String>().Utf8Value());
       return MetadataToJs(info.Env(), decoder->get_metadata());
     } catch (const std::exception &e) {
       Napi::Error::New(info.Env(), e.what()).ThrowAsJavaScriptException();
@@ -311,24 +303,19 @@ private:
    * @brief Open audio (alias for load, doesn't return metadata).
    * @param source String path or Buffer with full audio bytes
    */
-  void Open(const Napi::CallbackInfo &info) {
-    if (info.Length() < 1) {
-      Napi::TypeError::New(info.Env(), "String or Buffer expected")
+  Napi::Value LoadBuffer(const Napi::CallbackInfo &info) {
+    if (info.Length() < 1 || !info[0].IsBuffer()) {
+      Napi::TypeError::New(info.Env(), "Buffer expected")
           .ThrowAsJavaScriptException();
-      return;
+      return info.Env().Undefined();
     }
     try {
-      if (info[0].IsString()) {
-        decoder->open(info[0].As<Napi::String>().Utf8Value());
-      } else if (info[0].IsBuffer()) {
-        Napi::Buffer<uint8_t> buf = info[0].As<Napi::Buffer<uint8_t>>();
-        decoder->open(buf.Data(), buf.Length());
-      } else {
-        Napi::TypeError::New(info.Env(), "String or Buffer expected")
-            .ThrowAsJavaScriptException();
-      }
+      Napi::Buffer<uint8_t> buf = info[0].As<Napi::Buffer<uint8_t>>();
+      decoder->load_buffer(buf.Data(), buf.Length());
+      return MetadataToJs(info.Env(), decoder->get_metadata());
     } catch (const std::exception &e) {
       Napi::Error::New(info.Env(), e.what()).ThrowAsJavaScriptException();
+      return info.Env().Undefined();
     }
   }
 
@@ -349,7 +336,7 @@ private:
    * @brief Push raw encoded bytes (streaming mode).
    * @param buffer Node.js Buffer containing encoded data
    */
-  Napi::Value Push(const Napi::CallbackInfo &info) {
+  Napi::Value Feed(const Napi::CallbackInfo &info) {
     if (info.Length() < 1 || !info[0].IsBuffer()) {
       Napi::TypeError::New(info.Env(), "Buffer expected")
           .ThrowAsJavaScriptException();
@@ -357,7 +344,16 @@ private:
     }
     Napi::Buffer<uint8_t> buf = info[0].As<Napi::Buffer<uint8_t>>();
     try {
-      decoder->push(buf.Data(), buf.Length());
+      decoder->feed(buf.Data(), buf.Length());
+    } catch (const std::exception &e) {
+      Napi::Error::New(info.Env(), e.what()).ThrowAsJavaScriptException();
+    }
+    return info.Env().Undefined();
+  }
+
+  Napi::Value Flush(const Napi::CallbackInfo &info) {
+    try {
+      decoder->flush();
     } catch (const std::exception &e) {
       Napi::Error::New(info.Env(), e.what()).ThrowAsJavaScriptException();
     }
@@ -368,9 +364,9 @@ private:
    * @brief Decode next available audio frame.
    * @return Array of Float32Array (channels), or null if EOF/no data
    */
-  Napi::Value Read(const Napi::CallbackInfo &info) {
+  Napi::Value GetFrame(const Napi::CallbackInfo &info) {
     try {
-      auto frame = decoder->read();
+      auto frame = decoder->get_frame();
       if (!frame)
         return info.Env().Null();
 

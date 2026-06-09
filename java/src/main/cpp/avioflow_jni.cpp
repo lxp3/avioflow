@@ -272,24 +272,51 @@ Java_io_github_lxp3_avioflow_AudioDecoder_nativeCreate(JNIEnv *env, jclass, jobj
   }
 }
 
-extern "C" JNIEXPORT void JNICALL
-Java_io_github_lxp3_avioflow_AudioDecoder_nativeOpenPath(JNIEnv *env, jclass, jlong handle, jstring path) {
+extern "C" JNIEXPORT jobject JNICALL
+Java_io_github_lxp3_avioflow_AudioDecoder_nativeLoadFile(JNIEnv *env, jclass, jlong handle, jstring path) {
   try {
-    decoder_from_handle(handle)->open(jstring_to_string(env, path));
+    Metadata metadata = decoder_from_handle(handle)->load_file(jstring_to_string(env, path));
+    return to_metadata(env, metadata);
   } catch (const std::exception &error) {
     throw_avioflow(env, error);
+    return nullptr;
   }
 }
 
-extern "C" JNIEXPORT void JNICALL
-Java_io_github_lxp3_avioflow_AudioDecoder_nativeOpenBytes(JNIEnv *env, jclass, jlong handle, jbyteArray data) {
+extern "C" JNIEXPORT jobject JNICALL
+Java_io_github_lxp3_avioflow_AudioDecoder_nativeLoadBuffer(JNIEnv *env, jclass, jlong handle, jbyteArray data) {
   try {
     jsize size = env->GetArrayLength(data);
     std::vector<uint8_t> bytes(static_cast<size_t>(size));
     if (size > 0) {
       env->GetByteArrayRegion(data, 0, size, reinterpret_cast<jbyte *>(bytes.data()));
     }
-    decoder_from_handle(handle)->open(bytes.data(), bytes.size());
+    Metadata metadata = decoder_from_handle(handle)->load_buffer(bytes.data(), bytes.size());
+    return to_metadata(env, metadata);
+  } catch (const std::exception &error) {
+    throw_avioflow(env, error);
+    return nullptr;
+  }
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_io_github_lxp3_avioflow_AudioDecoder_nativeFeed(JNIEnv *env, jclass, jlong handle, jbyteArray data) {
+  try {
+    jsize size = env->GetArrayLength(data);
+    std::vector<uint8_t> bytes(static_cast<size_t>(size));
+    if (size > 0) {
+      env->GetByteArrayRegion(data, 0, size, reinterpret_cast<jbyte *>(bytes.data()));
+    }
+    decoder_from_handle(handle)->feed(bytes.data(), bytes.size());
+  } catch (const std::exception &error) {
+    throw_avioflow(env, error);
+  }
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_io_github_lxp3_avioflow_AudioDecoder_nativeFlush(JNIEnv *env, jclass, jlong handle) {
+  try {
+    decoder_from_handle(handle)->flush();
   } catch (const std::exception &error) {
     throw_avioflow(env, error);
   }
@@ -353,4 +380,3 @@ extern "C" JNIEXPORT void JNICALL
 Java_io_github_lxp3_avioflow_AudioEncoder_nativeDestroy(JNIEnv *, jclass, jlong handle) {
   delete encoder_from_handle(handle);
 }
-

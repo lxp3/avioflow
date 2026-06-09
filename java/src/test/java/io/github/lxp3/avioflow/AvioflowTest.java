@@ -13,7 +13,7 @@ final class AvioflowTest {
     void decodesAudioFile() {
         String audio = System.getProperty("avioflow.test.audio");
         try (AudioDecoder decoder = new AudioDecoder(new AudioStreamOptions().outputSampleRate(16000))) {
-            decoder.open(audio);
+            decoder.loadFile(audio);
             Metadata metadata = decoder.getMetadata();
             float[][] samples = decoder.getSamples();
 
@@ -28,7 +28,7 @@ final class AvioflowTest {
         String audio = System.getProperty("avioflow.test.audio");
         float[][] samples;
         try (AudioDecoder decoder = new AudioDecoder(new AudioStreamOptions().outputSampleRate(16000))) {
-            decoder.open(audio);
+            decoder.loadFile(audio);
             samples = decoder.getSamples();
         }
 
@@ -40,7 +40,7 @@ final class AvioflowTest {
 
         assertTrue(Files.size(output) > 0);
         try (AudioDecoder decoder = new AudioDecoder()) {
-            decoder.open(output.toString());
+            decoder.loadFile(output.toString());
             assertNotNull(decoder.getMetadata());
             assertTrue(decoder.getSamples()[0].length > 0);
         }

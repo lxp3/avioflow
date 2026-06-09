@@ -41,20 +41,21 @@ function simulateStreaming(testName, filePath, format, sampleRate = 0, channels 
     // Push all data in chunks, decoding after each push
     while (offset < buffer.length) {
         const toPush = Math.min(chunkSize, buffer.length - offset)
-        decoder.push(buffer.slice(offset, offset + toPush))
+        decoder.feed(buffer.slice(offset, offset + toPush))
         offset += toPush
         pushCount++
         
         // Try to decode available frames
         let frame
-        while ((frame = decoder.read()) !== null) {
+        while ((frame = decoder.getFrame()) !== null) {
             totalDecoded += frame[0]?.length || 0
         }
     }
     
+    decoder.flush()
     // Continue decoding until finished
     while (!decoder.isFinished()) {
-        const frame = decoder.read()
+        const frame = decoder.getFrame()
         if (!frame) break
         totalDecoded += frame[0]?.length || 0
     }
@@ -104,13 +105,19 @@ function testOnlinePcmFallback() {
     
     while (offset < buffer.length) {
         const toPush = Math.min(chunkSize, buffer.length - offset)
-        decoder.push(buffer.slice(offset, offset + toPush))
+        decoder.feed(buffer.slice(offset, offset + toPush))
         offset += toPush
         
         let frame
-        while ((frame = decoder.read()) !== null) {
+        while ((frame = decoder.getFrame()) !== null) {
             totalDecoded += frame[0]?.length || 0
         }
+    }
+    decoder.flush()
+    while (!decoder.isFinished()) {
+        const frame = decoder.getFrame()
+        if (!frame) break
+        totalDecoded += frame[0]?.length || 0
     }
     
     const elapsed = Date.now() - startTime
@@ -118,6 +125,44 @@ function testOnlinePcmFallback() {
     console.log(`  Time: ${elapsed}ms`)
     
     if (totalDecoded === 0) throw new Error('PCM fallback test failed: No samples decoded')
+}
+
+function makePcm8k() {
+    const sampleRate = 8000
+    const buffer = Buffer.alloc(sampleRate * 2)
+    for (let i = 0; i < sampleRate; i++) {
+        const value = Math.round(Math.sin(2 * Math.PI * 440 * i / sampleRate) * 12000)
+        buffer.writeInt16LE(value, i * 2)
+    }
+    return buffer
+}
+
+function testOnlinePcm8kSmallChunks() {
+    console.log('\n=== Running Online PCM 8k Small Chunk Test ===')
+    const pcm = makePcm8k()
+    for (const chunkSize of [1, 2, 320, 3200]) {
+        const decoder = new avioflow.AudioDecoder({
+            inputFormat: 's16le',
+            inputSampleRate: 8000,
+            inputChannels: 1
+        })
+        let totalDecoded = 0
+        for (let offset = 0; offset < pcm.length; offset += chunkSize) {
+            decoder.feed(pcm.subarray(offset, Math.min(offset + chunkSize, pcm.length)))
+            const samples = decoder.getSamples()
+            totalDecoded += samples[0]?.length || 0
+        }
+        decoder.flush()
+        while (!decoder.isFinished()) {
+            const samples = decoder.getSamples()
+            if (!samples[0]?.length) break
+            totalDecoded += samples[0].length
+        }
+        console.log(`  Chunk ${chunkSize} bytes: ${totalDecoded} samples`)
+        if (totalDecoded !== 8000) {
+            throw new Error(`PCM 8k chunk ${chunkSize} failed: ${totalDecoded} samples`)
+        }
+    }
 }
 
 // Main
@@ -128,6 +173,7 @@ try {
     testOnlineMp3()
     testOnlineWav()
     testOnlinePcmFallback()
+    testOnlinePcm8kSmallChunks()
     console.log('\nAll online tests passed!')
 } catch (err) {
     console.error(`\nTest failed: ${err.message}`)

@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <cassert>
 #include <chrono>
+#include <cmath>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
@@ -56,19 +57,20 @@ void simulate_streaming(const std::string &test_name, const std::string &file_pa
   // Push all data in chunks, decoding after each push
   while (offset < buffer.size()) {
     size_t to_push = std::min(chunk_size, buffer.size() - offset);
-    decoder.push(buffer.data() + offset, to_push);
+    decoder.feed(buffer.data() + offset, to_push);
     offset += to_push;
     push_count++;
 
     // Try to decode available frames
-    while (auto frame = decoder.read()) {
+    while (auto frame = decoder.get_frame()) {
       total_decoded += frame.num_samples;
     }
   }
 
   // After all data is pushed, continue decoding until finished
+  decoder.flush();
   while (!decoder.is_finished()) {
-    auto frame = decoder.read();
+    auto frame = decoder.get_frame();
     if (!frame) break;
     total_decoded += frame.num_samples;
   }
@@ -111,15 +113,62 @@ void test_online_pcm_fallback() {
 
   while (offset < buffer.size()) {
       size_t to_push = std::min(chunk_size, buffer.size() - offset);
-      decoder.push(buffer.data() + offset, to_push);
+      decoder.feed(buffer.data() + offset, to_push);
       offset += to_push;
 
-      while (auto frame = decoder.read()) {
+      while (auto frame = decoder.get_frame()) {
           total_decoded += frame.num_samples;
       }
   }
+  decoder.flush();
+  while (!decoder.is_finished()) {
+      auto frame = decoder.get_frame();
+      if (!frame) break;
+      total_decoded += frame.num_samples;
+  }
   std::cout << "  Fallback test finished. Total samples: " << total_decoded << std::endl;
   assert(total_decoded > 0);
+}
+
+void test_online_pcm_8k_small_chunks() {
+  std::cout << "\n=== Running Online PCM 8k Small Chunk Tests ===" << std::endl;
+  const int sample_rate = 8000;
+  const int channels = 1;
+  const int seconds = 1;
+  std::vector<uint8_t> pcm(static_cast<size_t>(sample_rate * channels * seconds * 2));
+  for (int i = 0; i < sample_rate * seconds; ++i) {
+    const double phase = 2.0 * 3.14159265358979323846 * 440.0 * i / sample_rate;
+    int16_t sample = static_cast<int16_t>(std::sin(phase) * 12000.0);
+    pcm[static_cast<size_t>(i * 2)] = static_cast<uint8_t>(sample & 0xff);
+    pcm[static_cast<size_t>(i * 2 + 1)] = static_cast<uint8_t>((sample >> 8) & 0xff);
+  }
+
+  for (size_t chunk_size : {size_t{1}, size_t{2}, size_t{320}, size_t{3200}}) {
+    AudioStreamOptions options;
+    options.input_format = "s16le";
+    options.input_sample_rate = sample_rate;
+    options.input_channels = channels;
+    AudioDecoder decoder(options);
+
+    size_t total_decoded = 0;
+    for (size_t offset = 0; offset < pcm.size(); offset += chunk_size) {
+      size_t to_push = std::min(chunk_size, pcm.size() - offset);
+      decoder.feed(pcm.data() + offset, to_push);
+      auto samples = decoder.get_samples();
+      if (!samples.empty()) {
+        total_decoded += samples[0].size();
+      }
+    }
+    decoder.flush();
+    while (!decoder.is_finished()) {
+      auto samples = decoder.get_samples();
+      if (samples.empty()) break;
+      total_decoded += samples[0].size();
+    }
+
+    std::cout << "  Chunk " << chunk_size << " bytes: " << total_decoded << " samples" << std::endl;
+    assert(total_decoded == static_cast<size_t>(sample_rate * seconds));
+  }
 }
 
 int main() {
@@ -127,6 +176,7 @@ int main() {
     test_online_mp3();
     test_online_wav();
     test_online_pcm_fallback();
+    test_online_pcm_8k_small_chunks();
     std::cout << "\nAll online tests passed!" << std::endl;
   } catch (const std::exception &e) {
     std::cerr << "Test failed: " << e.what() << std::endl;

@@ -22,7 +22,7 @@ This extension uses a high-performance **WebAssembly (WASM)** core built from C+
 
 ### VSIX Structure
 ```text
-avioflow-0.3.6.vsix
+avioflow-0.4.0.vsix
 |- extension/
 |  |- package.json
 |  |- README.md
@@ -36,7 +36,7 @@ avioflow-0.3.6.vsix
 
 ## Installation
 ```bash
-code --install-extension avioflow-0.3.6.vsix
+code --install-extension avioflow-0.4.0.vsix
 ```
 
 ## Getting Started

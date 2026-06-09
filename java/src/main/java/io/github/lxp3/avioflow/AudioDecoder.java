@@ -14,14 +14,24 @@ public final class AudioDecoder implements AutoCloseable {
         this.handle = nativeCreate(Avioflow.streamOptionsOrDefault(options));
     }
 
-    public void open(String path) {
+    public Metadata loadFile(String path) {
         ensureOpen();
-        nativeOpenPath(handle, Objects.requireNonNull(path, "path"));
+        return nativeLoadFile(handle, Objects.requireNonNull(path, "path"));
     }
 
-    public void open(byte[] data) {
+    public Metadata loadBuffer(byte[] data) {
         ensureOpen();
-        nativeOpenBytes(handle, Objects.requireNonNull(data, "data"));
+        return nativeLoadBuffer(handle, Objects.requireNonNull(data, "data"));
+    }
+
+    public void feed(byte[] data) {
+        ensureOpen();
+        nativeFeed(handle, Objects.requireNonNull(data, "data"));
+    }
+
+    public void flush() {
+        ensureOpen();
+        nativeFlush(handle);
     }
 
     public float[][] getSamples() {
@@ -56,9 +66,13 @@ public final class AudioDecoder implements AutoCloseable {
 
     private static native long nativeCreate(AudioStreamOptions options);
 
-    private static native void nativeOpenPath(long handle, String path);
+    private static native Metadata nativeLoadFile(long handle, String path);
 
-    private static native void nativeOpenBytes(long handle, byte[] data);
+    private static native Metadata nativeLoadBuffer(long handle, byte[] data);
+
+    private static native void nativeFeed(long handle, byte[] data);
+
+    private static native void nativeFlush(long handle);
 
     private static native float[][] nativeGetSamples(long handle);
 

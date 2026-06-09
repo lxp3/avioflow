@@ -21,7 +21,7 @@ def get_sample_count(samples):
 def decode_available_samples(decoder):
     total_decoded = 0
     while True:
-        frame = decoder.read()
+        frame = decoder.get_frame()
         if frame is None:
             break
         total_decoded += get_sample_count(frame)
@@ -74,13 +74,14 @@ def simulate_streaming(test_name: str, file_path: str, format: str,
     # Push all data in chunks, decoding after each push
     while offset < len(buffer):
         to_push = min(chunk_size, len(buffer) - offset)
-        decoder.push(buffer[offset:offset + to_push])
+        decoder.feed(buffer[offset:offset + to_push])
         offset += to_push
         push_count += 1
         
         # Try to decode available frames
         total_decoded += decode_available_samples(decoder)
     
+    decoder.flush()
     # Continue decoding until finished
     while not decoder.is_finished():
         decoded = decode_available_samples(decoder)
@@ -141,10 +142,16 @@ def test_online_pcm_fallback():
     
     while offset < len(buffer):
         to_push = min(chunk_size, len(buffer) - offset)
-        decoder.push(buffer[offset:offset + to_push])
+        decoder.feed(buffer[offset:offset + to_push])
         offset += to_push
         
         total_decoded += decode_available_samples(decoder)
+    decoder.flush()
+    while not decoder.is_finished():
+        decoded = decode_available_samples(decoder)
+        if decoded == 0:
+            break
+        total_decoded += decoded
     
     elapsed = (time.time() - start_time) * 1000
     print(f"  Total samples: {total_decoded}")
@@ -153,8 +160,8 @@ def test_online_pcm_fallback():
     assert total_decoded > 0, "PCM fallback test failed: No samples decoded"
 
 
-def test_push_with_buffer_inputs():
-    """Test: push/__call__ accept bytes-like inputs."""
+def test_feed_with_buffer_inputs():
+    """Test: feed accepts bytes-like inputs."""
     print("\n=== Running Streaming Buffer Input Test ===")
 
     if not os.path.exists(MP3_PATH):
@@ -173,13 +180,43 @@ def test_push_with_buffer_inputs():
     decoder = avioflow.AudioDecoder(input_format="mp3", input_sample_rate=44100, input_channels=2)
 
     for name, chunk in chunks:
-        decoder.push(chunk)
+        decoder.feed(chunk)
         print(f"  pushed {name}: {len(bytes(chunk.getbuffer())) if hasattr(chunk, 'getbuffer') else len(chunk)} bytes")
 
-    samples = decoder(raw[36864:40960])
-    total_decoded = get_sample_count(samples) + decode_available_samples(decoder)
+    decoder.feed(raw[36864:40960])
+    decoder.flush()
+    total_decoded = decode_available_samples(decoder)
     print(f"  Total decoded samples after mixed inputs: {total_decoded}")
     assert total_decoded > 0, "Mixed buffer inputs produced no decoded samples"
+
+
+def test_online_pcm_8k_small_chunks():
+    """Test raw PCM streaming with very small chunks."""
+    print("\n=== Running Online PCM 8k Small Chunk Test ===")
+    sample_rate = 8000
+    t = np.arange(sample_rate)
+    waveform = (np.sin(2 * np.pi * 440 * t / sample_rate) * 12000).astype("<i2")
+    raw = waveform.tobytes()
+
+    for chunk_size in (1, 2, 320, 3200):
+        decoder = avioflow.AudioDecoder(
+            input_format="s16le",
+            input_sample_rate=8000,
+            input_channels=1,
+        )
+        total_decoded = 0
+        for offset in range(0, len(raw), chunk_size):
+            decoder.feed(raw[offset:offset + chunk_size])
+            total_decoded += get_sample_count(decoder.get_samples())
+        decoder.flush()
+        while not decoder.is_finished():
+            samples = decoder.get_samples()
+            decoded = get_sample_count(samples)
+            if decoded == 0:
+                break
+            total_decoded += decoded
+        print(f"  Chunk {chunk_size} bytes: {total_decoded} samples")
+        assert total_decoded == sample_rate, f"Chunk {chunk_size} decoded {total_decoded} samples"
 
 
 def main():
@@ -190,7 +227,8 @@ def main():
         test_online_mp3()
         test_online_wav()
         test_online_pcm_fallback()
-        test_push_with_buffer_inputs()
+        test_feed_with_buffer_inputs()
+        test_online_pcm_8k_small_chunks()
         print("\nAll online tests passed!")
     except AssertionError as e:
         print(f"\nTest failed: {e}")

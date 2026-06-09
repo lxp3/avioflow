@@ -78,22 +78,22 @@ export interface WaveformResult {
  * High-performance audio decoder with file and streaming support.
  * 
  * Two operation modes:
- * - **File Mode**: Load from file path, URL, or device via load()
- * - **Stream Mode**: Push raw bytes via push() for real-time decoding
+ * - **File Mode**: Load from file path, URL, or device via loadFile()
+ * - **Stream Mode**: Feed bytes via feed() and drain output with getFrame()/getSamples()
  * 
  * @example File Mode
  * ```typescript
  * const decoder = new AudioDecoder({ outputSampleRate: 44100 });
- * const meta = decoder.load("audio.mp3");
- * const samples = decoder.getAllSamples();
+ * const meta = decoder.loadFile("audio.mp3");
+ * const samples = decoder.getSamples();
  * ```
  * 
  * @example Stream Mode
  * ```typescript
  * const decoder = new AudioDecoder({ inputFormat: "s16le", inputSampleRate: 48000, inputChannels: 2 });
- * decoder.push(rawBuffer);
+ * decoder.feed(rawBuffer);
  * let frame;
- * while ((frame = decoder.decodeNext()) !== null) {
+ * while ((frame = decoder.getFrame()) !== null) {
  *     processAudio(frame);
  * }
  * ```
@@ -102,19 +102,20 @@ export class AudioDecoder {
     constructor(options?: AudioDecoderOptions);
 
     /**
-     * Load audio from file path, URL, device, or Buffer.
-     * @param source File path, URL, device identifier, or Buffer with full audio bytes
+     * Load audio from file path, URL, or device.
+     * @param source File path, URL, or device identifier
      * @returns Metadata object with audio stream information
      * @throws Error if source cannot be opened or decoded
      */
-    load(source: string | Buffer): Metadata;
+    loadFile(source: string): Metadata;
 
     /**
-     * Open audio from file path, URL, device, or Buffer (doesn't return metadata).
-     * @param source File path, URL, device identifier, or Buffer with full audio bytes
+     * Load complete encoded audio bytes from memory.
+     * @param source Buffer with full audio bytes
+     * @returns Metadata object with audio stream information
      * @throws Error if source cannot be opened
      */
-    open(source: string | Buffer): void;
+    loadBuffer(source: Buffer): Metadata;
 
     /**
      * Get current audio stream metadata.
@@ -123,24 +124,29 @@ export class AudioDecoder {
     getMetadata(): Metadata;
 
     /**
-     * Push raw encoded bytes for streaming decode.
-     * First call auto-initializes the streaming context using constructor options.
+     * Feed raw encoded bytes for streaming decode.
+     * First call starts streaming mode using constructor options.
      * @param buffer Raw encoded audio bytes
      * @throws Error if inputFormat was not specified in constructor
      */
-    push(buffer: Buffer): void;
+    feed(buffer: Buffer): void;
+
+    /**
+     * Mark stream input complete and allow delayed frames to drain.
+     */
+    flush(): void;
 
     /**
      * Decode next available audio frame.
      * @returns Array of Float32Array (one per channel), or null if EOF/no data
      */
-    decodeNext(): Float32Array[] | null;
+    getFrame(): Float32Array[] | null;
 
     /**
-     * Decode all remaining samples at once.
+     * Drain currently available samples.
      * @returns Array of Float32Array (one per channel)
      */
-    getAllSamples(): Float32Array[];
+    getSamples(): Float32Array[];
 
     /**
      * Check if end of stream has been reached.

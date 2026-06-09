@@ -46,7 +46,7 @@ void test_resample_8000()
     constexpr int TARGET_RATE = 8000;
 
     AudioDecoder decoder({TARGET_RATE});
-    decoder.open(TEST_FILE_PATH);
+    decoder.load_file(TEST_FILE_PATH);
 
     // Verify source metadata unchanged
     const auto &meta = decoder.get_metadata();
@@ -72,7 +72,7 @@ void test_resample_16000()
     constexpr int TARGET_RATE = 16000;
 
     AudioDecoder decoder({TARGET_RATE});
-    decoder.open(TEST_FILE_PATH);
+    decoder.load_file(TEST_FILE_PATH);
     const auto &meta = decoder.get_metadata();
 
     auto samples = decoder.get_samples();
@@ -93,7 +93,7 @@ void test_resample_32000()
     constexpr int TARGET_RATE = 32000;
 
     AudioDecoder decoder({TARGET_RATE});
-    decoder.open(TEST_FILE_PATH);
+    decoder.load_file(TEST_FILE_PATH);
     const auto &meta = decoder.get_metadata();
 
     auto samples = decoder.get_samples();
@@ -114,7 +114,7 @@ void test_resample_44100()
     constexpr int TARGET_RATE = 44100;
 
     AudioDecoder decoder({TARGET_RATE});
-    decoder.open(TEST_FILE_PATH);
+    decoder.load_file(TEST_FILE_PATH);
     const auto &meta = decoder.get_metadata();
 
     auto samples = decoder.get_samples();
@@ -135,7 +135,7 @@ void test_resample_48000()
     constexpr int TARGET_RATE = 48000;
 
     AudioDecoder decoder({TARGET_RATE});
-    decoder.open(TEST_FILE_PATH);
+    decoder.load_file(TEST_FILE_PATH);
     const auto &meta = decoder.get_metadata();
 
     auto samples = decoder.get_samples();
@@ -156,7 +156,7 @@ void test_resample_audio_quality()
     constexpr int TARGET_RATE = 16000;
 
     AudioDecoder decoder({TARGET_RATE});
-    decoder.open(TEST_FILE_PATH);
+    decoder.load_file(TEST_FILE_PATH);
 
     auto samples = decoder.get_samples();
     size_t num_samples = samples.empty() ? 0 : samples[0].size();

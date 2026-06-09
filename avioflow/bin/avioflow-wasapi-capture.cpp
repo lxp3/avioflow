@@ -10,7 +10,7 @@ int main() {
 
         avioflow::AudioDecoder decoder;
         try {
-            decoder.open("wasapi_loopback");
+            decoder.load_file("wasapi_loopback");
         } catch (const std::exception& e) {
             std::cerr << "Could not open WASAPI loopback (maybe not on Windows or disabled): " << e.what() << std::endl;
             return 0; // Exit gracefully if not supported/available
@@ -28,7 +28,7 @@ int main() {
         int frame_count = 0;
 
         while (std::chrono::steady_clock::now() - start < std::chrono::seconds(3)) {
-            auto frame = decoder.read();
+            auto frame = decoder.get_frame();
             if (frame) {
                 total_samples += frame.num_samples;
                 frame_count++;

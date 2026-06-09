@@ -88,6 +88,16 @@ SourceInput parse_source_input(const py::object& source) {
     throw py::type_error(source_type_error_message());
 }
 
+std::string parse_path_input(const py::object& source) {
+    if (py::isinstance<py::str>(source)) {
+        return py::cast<std::string>(source);
+    }
+    if (py::hasattr(source, "__fspath__")) {
+        return py::cast<std::string>(source.attr("__fspath__")());
+    }
+    throw py::type_error("source must be str or PathLike");
+}
+
 SourceInput parse_data_input(const py::object& data) {
     SourceInput input = parse_source_input(data);
     if (input.kind != SourceInput::Kind::Bytes) {
@@ -100,9 +110,9 @@ void open_decoder_source(AudioDecoder& decoder, const py::object& source) {
     SourceInput input = parse_source_input(source);
     py::gil_scoped_release release;
     if (input.kind == SourceInput::Kind::Path) {
-        decoder.open(input.path);
+        decoder.load_file(input.path);
     } else {
-        decoder.open(input.data, input.size);
+        decoder.load_buffer(input.data, input.size);
     }
 }
 
@@ -110,7 +120,7 @@ void push_decoder_data(AudioDecoder& decoder, const py::object& data) {
     SourceInput input = parse_data_input(data);
     if (input.size > 0) {
         py::gil_scoped_release release;
-        decoder.push(input.data, input.size);
+        decoder.feed(input.data, input.size);
     }
 }
 
@@ -121,7 +131,7 @@ std::vector<std::vector<float>> get_decoder_samples(AudioDecoder& decoder) {
 
 FrameData read_decoder_frame(AudioDecoder& decoder) {
     py::gil_scoped_release release;
-    return decoder.read();
+    return decoder.get_frame();
 }
 
 py::array_t<float> samples_to_array(const std::vector<std::vector<float>>& samples) {
@@ -178,7 +188,7 @@ PYBIND11_MODULE(_avioflow, m) {
         Example:
             >>> import avioflow
             >>> decoder = avioflow.AudioDecoder(output_sample_rate=44100)
-            >>> meta = decoder.load("audio.mp3")
+            >>> meta = decoder.load_file("audio.mp3")
             >>> samples = decoder.get_samples()  # shape: (channels, samples)
     )pbdoc";
 
@@ -345,12 +355,13 @@ PYBIND11_MODULE(_avioflow, m) {
         
         **File Mode** - Load complete audio files:
             >>> decoder = AudioDecoder(output_sample_rate=44100)
-            >>> meta = decoder.load("audio.mp3")
+            >>> meta = decoder.load_file("audio.mp3")
             >>> samples = decoder.get_samples()  # numpy array (channels, samples)
         
         **Stream Mode** - Decode real-time byte streams:
             >>> decoder = AudioDecoder(input_format="s16le", input_sample_rate=48000, input_channels=2)
-            >>> samples = decoder(raw_bytes)  # Returns decoded numpy array
+            >>> decoder.feed(raw_bytes)
+            >>> samples = decoder.get_samples()
         
         Args:
             output_sample_rate (int, optional): Target output sample rate in Hz.
@@ -385,8 +396,10 @@ PYBIND11_MODULE(_avioflow, m) {
         py::arg("input_channels") = py::none(),
         py::arg("input_format") = py::none())
         
-        .def("load", [](AudioDecoder& self, py::object source) -> const Metadata& {
-            open_decoder_source(self, source);
+        .def("load_file", [](AudioDecoder& self, py::object source) -> const Metadata& {
+            std::string path = parse_path_input(source);
+            py::gil_scoped_release release;
+            self.load_file(path);
             return self.get_metadata();
         }, 
         py::arg("source"), 
@@ -412,60 +425,20 @@ PYBIND11_MODULE(_avioflow, m) {
             
             Example:
                 >>> decoder = AudioDecoder()
-                >>> meta = decoder.load("song.mp3")
+                >>> meta = decoder.load_file("song.mp3")
                 >>> print(f"Duration: {meta.duration}s, Sample rate: {meta.sample_rate}Hz")
         )pbdoc")
         
-        .def("open", [](AudioDecoder& self, py::object source) {
-            open_decoder_source(self, source);
-        }, 
-        py::arg("source"),
-        R"pbdoc(
-            Open audio from file path, URL, bytes, or device.
-            
-            Args:
-                source: Audio source, one of:
-                    - str: File path or URL
-                    - bytes/bytearray/memoryview: Full audio file bytes in memory
-                    - io.BytesIO: In-memory encoded audio bytes
-                    - pathlib.Path: File path object
-            
-            Raises:
-                RuntimeError: If source cannot be opened.
-                TypeError: If source type is not supported.
-        )pbdoc")
-        
-        .def("__call__", [](AudioDecoder& self, py::object data) -> py::array_t<float> {
-            push_decoder_data(self, data);
-            return samples_to_array(get_decoder_samples(self));
+        .def("load_buffer", [](AudioDecoder& self, py::object source) -> const Metadata& {
+            SourceInput input = parse_data_input(source);
+            py::gil_scoped_release release;
+            self.load_buffer(input.data, input.size);
+            return self.get_metadata();
         },
-        py::arg("data"),
+        py::arg("source"),
+        py::return_value_policy::reference_internal,
         R"pbdoc(
-            Push raw bytes and decode immediately (streaming mode).
-
-            This method enables push-based streaming: feed raw encoded bytes
-            and receive decoded audio samples.
-
-            Args:
-                data (bytes/bytearray/memoryview or io.BytesIO): Raw encoded
-                    audio bytes. Format must match the input_format specified
-                    in constructor.
-
-            Returns:
-                numpy.ndarray: Decoded audio samples with shape (channels, samples).
-                    dtype is float32, values in range [-1.0, 1.0].
-                    Returns empty array if no complete frames decoded yet.
-
-            Raises:
-                RuntimeError: If input_format was not specified in constructor.
-
-            Example:
-                >>> decoder = AudioDecoder(input_format="s16le", input_sample_rate=48000, input_channels=2)
-                >>> while True:
-                ...     raw_data = network_stream.read(4096)
-                ...     samples = decoder(raw_data)
-                ...     if samples.size > 0:
-                ...         process_audio(samples)
+            Load a complete encoded audio buffer and return metadata.
         )pbdoc")
 
         .def("get_samples", [](AudioDecoder& self) -> py::array_t<float> {
@@ -482,16 +455,16 @@ PYBIND11_MODULE(_avioflow, m) {
                     dtype is float32, values in range [-1.0, 1.0].
 
             Note:
-                For large files, consider using frame-by-frame decoding (read())
+                For large files, consider using frame-by-frame decoding (get_frame())
                 to manage memory usage.
 
             Example:
                 >>> decoder = AudioDecoder(output_sample_rate=16000)
-                >>> decoder.load("speech.wav")
+                >>> decoder.load_file("speech.wav")
                 >>> samples = decoder.get_samples()
         )pbdoc")
 
-        .def("push", [](AudioDecoder& self, py::object data) {
+        .def("feed", [](AudioDecoder& self, py::object data) {
             push_decoder_data(self, data);
         },
         py::arg("data"),
@@ -503,17 +476,25 @@ PYBIND11_MODULE(_avioflow, m) {
 
             Note:
                 This method initializes the decoder on first call when enough data is buffered.
-                Use read() or __call__() to retrieve decoded frames.
+                Use get_frame() or get_samples() to retrieve decoded output.
 
             Example:
                 >>> decoder = AudioDecoder(input_format="s16le", input_sample_rate=16000, input_channels=1)
                 >>> with open("audio.raw", "rb") as f:
                 ...     chunk = f.read(3200)  # 100ms @ 16kHz mono
-                ...     decoder.push(chunk)
-                ...     samples = decoder.read()
+                ...     decoder.feed(chunk)
+                ...     samples = decoder.get_frame()
         )pbdoc")
 
-        .def("read", [](AudioDecoder& self) -> py::object {
+        .def("flush", [](AudioDecoder& self) {
+            py::gil_scoped_release release;
+            self.flush();
+        },
+        R"pbdoc(
+            Mark stream input as complete and allow decoder-delayed frames to drain.
+        )pbdoc")
+
+        .def("get_frame", [](AudioDecoder& self) -> py::object {
             FrameData frame = read_decoder_frame(self);
             if (!frame) {
                 return py::none();
@@ -537,7 +518,7 @@ PYBIND11_MODULE(_avioflow, m) {
 
             Example:
                 >>> while not decoder.is_finished():
-                ...     frame = decoder.read()
+                ...     frame = decoder.get_frame()
                 ...     if frame is not None:
                 ...         process(frame)
         )pbdoc")
@@ -559,7 +540,7 @@ PYBIND11_MODULE(_avioflow, m) {
                 Metadata: Audio stream metadata object.
             
             Note:
-                For stream mode, metadata is only available after first push().
+                For stream mode, metadata is only available after first feed().
         )pbdoc");
 
     // --- AudioWriteOptions ---

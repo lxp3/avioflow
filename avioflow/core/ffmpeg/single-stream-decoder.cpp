@@ -4,6 +4,7 @@
 #include <mutex>
 #include <functional>
 #include <cstring>
+#include <cmath>
 
 namespace avioflow
 {
@@ -25,13 +26,81 @@ namespace avioflow
              value == "f32le" || value == "f32be" ||
              value == "f64le" || value == "f64be";
     }
+
+    int raw_pcm_bytes_per_sample(const std::string &format)
+    {
+      if (format == "s8" || format == "u8")
+        return 1;
+      if (format == "s16le" || format == "s16be" ||
+          format == "u16le" || format == "u16be")
+        return 2;
+      if (format == "s24le" || format == "s24be" ||
+          format == "u24le" || format == "u24be")
+        return 3;
+      if (format == "s32le" || format == "s32be" ||
+          format == "u32le" || format == "u32be" ||
+          format == "f32le" || format == "f32be")
+        return 4;
+      if (format == "f64le" || format == "f64be")
+        return 8;
+      return 0;
+    }
+
+    uint64_t read_uint(const uint8_t *data, int bytes, bool big_endian)
+    {
+      uint64_t value = 0;
+      for (int i = 0; i < bytes; ++i)
+      {
+        int idx = big_endian ? i : bytes - 1 - i;
+        value = (value << 8) | data[idx];
+      }
+      return value;
+    }
+
+    int64_t sign_extend(uint64_t value, int bits)
+    {
+      const uint64_t sign_bit = 1ULL << (bits - 1);
+      return static_cast<int64_t>((value ^ sign_bit) - sign_bit);
+    }
+
+    float raw_pcm_to_float(const uint8_t *data, const std::string &format)
+    {
+      const bool big = format.size() >= 2 && format.substr(format.size() - 2) == "be";
+      if (format == "s8")
+        return std::max(-1.0f, static_cast<int8_t>(data[0]) / 128.0f);
+      if (format == "u8")
+        return (static_cast<int>(data[0]) - 128) / 128.0f;
+      if (format.rfind("f32", 0) == 0)
+      {
+        uint32_t bits = static_cast<uint32_t>(read_uint(data, 4, big));
+        float value;
+        std::memcpy(&value, &bits, sizeof(value));
+        return value;
+      }
+      if (format.rfind("f64", 0) == 0)
+      {
+        uint64_t bits = read_uint(data, 8, big);
+        double value;
+        std::memcpy(&value, &bits, sizeof(value));
+        return static_cast<float>(value);
+      }
+
+      const bool is_unsigned = !format.empty() && format[0] == 'u';
+      const int bytes = raw_pcm_bytes_per_sample(format);
+      const int bits = bytes * 8;
+      uint64_t raw = read_uint(data, bytes, big);
+      int64_t signed_value = is_unsigned
+                                 ? static_cast<int64_t>(raw) - static_cast<int64_t>(1ULL << (bits - 1))
+                                 : sign_extend(raw, bits);
+      return static_cast<float>(signed_value) / static_cast<float>(1ULL << (bits - 1));
+    }
   }
 
   SingleStreamDecoder::SingleStreamDecoder(const AudioStreamOptions &options)
       : packet_(av_packet_alloc()), frame_(av_frame_alloc()),
         converted_frame_(av_frame_alloc()), options_(options) {}
 
-  void SingleStreamDecoder::open(const std::string &source)
+  void SingleStreamDecoder::load_file(const std::string &source)
   {
     if (mode_ != Mode::None)
       throw std::runtime_error("Decoder already initialized");
@@ -67,7 +136,7 @@ namespace avioflow
     setup_decoder();
   }
 
-  void SingleStreamDecoder::open(const uint8_t *data, size_t size)
+  void SingleStreamDecoder::load_buffer(const uint8_t *data, size_t size)
   {
     if (mode_ != Mode::None)
       throw std::runtime_error("Decoder already initialized");
@@ -77,15 +146,15 @@ namespace avioflow
     setup_decoder();
   }
 
-  void SingleStreamDecoder::push(const uint8_t *data, size_t size)
+  void SingleStreamDecoder::feed(const uint8_t *data, size_t size)
   {
     if (mode_ == Mode::File)
     {
-      throw std::runtime_error("Cannot push data: decoder opened in file mode");
+      throw std::runtime_error("Cannot feed data: decoder loaded in offline mode");
     }
     if (input_finished_)
     {
-      throw std::runtime_error("Cannot push data: stream input already finished");
+      throw std::runtime_error("Cannot feed data: stream input already flushed");
     }
 
     // Add data to buffer
@@ -101,11 +170,11 @@ namespace avioflow
     }
   }
 
-  void SingleStreamDecoder::finish()
+  void SingleStreamDecoder::flush()
   {
     if (mode_ == Mode::File)
     {
-      throw std::runtime_error("Cannot finish stream: decoder opened in file mode");
+      throw std::runtime_error("Cannot flush stream: decoder loaded in offline mode");
     }
 
     {
@@ -149,17 +218,34 @@ namespace avioflow
     // Create AVIO context that reads from our internal push_buffer_
     // Note: open_stream internally calls avformat_open_input with options_.input_format
     // probesize/max_analyze_duration are set in create_avio_context before avformat_open_input
-    fmt_ctx_.reset(AvioContextHandler::open_stream([this](uint8_t *buf, int buf_size)
-                                                   {
+    try
+    {
+      fmt_ctx_.reset(AvioContextHandler::open_stream([this](uint8_t *buf, int buf_size)
+                                                     {
         std::lock_guard<std::mutex> lock(buffer_mtx_);
-        if (push_buffer_.empty()) return input_finished_ ? 0 : -1;
-        int read = std::min(static_cast<int>(push_buffer_.size()), buf_size);
-        std::memcpy(buf, push_buffer_.data(), read);
-        push_buffer_.erase(push_buffer_.begin(), push_buffer_.begin() + read);
+        if (stream_read_offset_ >= push_buffer_.size()) return input_finished_ ? 0 : -1;
+        int read = std::min(static_cast<int>(push_buffer_.size() - stream_read_offset_), buf_size);
+        std::memcpy(buf, push_buffer_.data() + stream_read_offset_, read);
+        stream_read_offset_ += static_cast<size_t>(read);
         return read; },
-                                                   options_));
+                                                     options_));
+    }
+    catch (...)
+    {
+      std::lock_guard<std::mutex> lock(buffer_mtx_);
+      stream_read_offset_ = 0;
+      throw;
+    }
 
     setup_decoder();
+    {
+      std::lock_guard<std::mutex> lock(buffer_mtx_);
+      if (stream_read_offset_ > 0)
+      {
+        push_buffer_.erase(push_buffer_.begin(), push_buffer_.begin() + static_cast<std::ptrdiff_t>(stream_read_offset_));
+        stream_read_offset_ = 0;
+      }
+    }
   }
 
   void SingleStreamDecoder::setup_decoder()
@@ -330,8 +416,76 @@ namespace avioflow
     }
   }
 
-  AVFrame *SingleStreamDecoder::read()
+  AVFrame *SingleStreamDecoder::read_raw_pcm_frame()
   {
+    if (!options_.input_format.has_value() ||
+        !options_.input_sample_rate.has_value() ||
+        !options_.input_channels.has_value())
+    {
+      throw std::runtime_error("input_format, input_sample_rate, and input_channels are required for raw PCM streaming");
+    }
+
+    const std::string format = options_.input_format.value();
+    const int bytes_per_sample = raw_pcm_bytes_per_sample(format);
+    const int channels = options_.input_channels.value();
+    if (bytes_per_sample <= 0 || channels <= 0 || options_.input_sample_rate.value() <= 0)
+      throw std::runtime_error("Invalid raw PCM stream options");
+
+    std::vector<uint8_t> chunk;
+    int samples = 0;
+    {
+      std::lock_guard<std::mutex> lock(buffer_mtx_);
+      const size_t bytes_per_frame = static_cast<size_t>(bytes_per_sample * channels);
+      samples = static_cast<int>(push_buffer_.size() / bytes_per_frame);
+      if (samples <= 0)
+      {
+        if (input_finished_)
+        {
+          push_buffer_.clear();
+          eof_reached_ = true;
+        }
+        return nullptr;
+      }
+
+      const size_t bytes_to_read = static_cast<size_t>(samples) * bytes_per_frame;
+      chunk.assign(push_buffer_.begin(), push_buffer_.begin() + static_cast<std::ptrdiff_t>(bytes_to_read));
+      push_buffer_.erase(push_buffer_.begin(), push_buffer_.begin() + static_cast<std::ptrdiff_t>(bytes_to_read));
+    }
+
+    av_frame_unref(frame_.get());
+    frame_->format = AV_SAMPLE_FMT_FLTP;
+    frame_->sample_rate = options_.input_sample_rate.value();
+    av_channel_layout_default(&frame_->ch_layout, channels);
+    frame_->nb_samples = samples;
+    check_av_error(av_frame_get_buffer(frame_.get(), 0), "Could not allocate raw PCM frame buffer");
+
+    const size_t bytes_per_frame = static_cast<size_t>(bytes_per_sample * channels);
+    for (int i = 0; i < samples; ++i)
+    {
+      const uint8_t *base = chunk.data() + static_cast<size_t>(i) * bytes_per_frame;
+      for (int c = 0; c < channels; ++c)
+      {
+        reinterpret_cast<float *>(frame_->data[c])[i] =
+            raw_pcm_to_float(base + static_cast<size_t>(c * bytes_per_sample), format);
+      }
+    }
+
+    metadata_.codec = "pcm_" + format;
+    metadata_.container = format;
+    metadata_.sample_format = "fltp";
+    AVFrame *decoded = process_decoded_frame();
+    if (decoded)
+      update_decoded_metadata(decoded);
+    return decoded;
+  }
+
+  AVFrame *SingleStreamDecoder::get_frame()
+  {
+    if (mode_ == Mode::Stream && is_raw_pcm_input_format(options_.input_format))
+    {
+      return read_raw_pcm_frame();
+    }
+
     // Lazy initialization for stream mode - wait until we have enough data
     if (mode_ == Mode::Stream && !fmt_ctx_)
     {
@@ -342,11 +496,28 @@ namespace avioflow
       }
       const size_t required_buffer_size =
           is_raw_pcm_input_format(options_.input_format) ? 1 : 32 * 1024;
-      if (buffer_size < required_buffer_size)
+      bool input_finished;
+      {
+        std::lock_guard<std::mutex> lock(buffer_mtx_);
+        input_finished = input_finished_;
+      }
+      if (buffer_size < required_buffer_size && !input_finished)
       {
         return nullptr; // Not enough data yet, caller should push more
       }
-      init_stream_context();
+      try
+      {
+        init_stream_context();
+      }
+      catch (const std::runtime_error &)
+      {
+        if (!input_finished)
+        {
+          stream_read_offset_ = 0;
+          return nullptr;
+        }
+        throw;
+      }
     }
 
 #ifdef AVIOFLOW_HAS_WASAPI
@@ -434,6 +605,15 @@ namespace avioflow
       }
 
       ret = av_read_frame(fmt_ctx_.get(), packet_.get());
+      if (mode_ == Mode::Stream && stream_read_offset_ > 0)
+      {
+        std::lock_guard<std::mutex> lock(buffer_mtx_);
+        if (stream_read_offset_ > 0)
+        {
+          push_buffer_.erase(push_buffer_.begin(), push_buffer_.begin() + static_cast<std::ptrdiff_t>(stream_read_offset_));
+          stream_read_offset_ = 0;
+        }
+      }
       if (ret < 0)
       {
         if (ret == AVERROR(EAGAIN))
@@ -471,7 +651,7 @@ namespace avioflow
     std::vector<std::vector<float>> result;
     while (true)
     {
-      auto *f = read();
+      auto *f = get_frame();
       if (!f)
         break;
 

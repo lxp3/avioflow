@@ -89,11 +89,11 @@ async function main() {
         
         while (offset < mp3Data.length) {
             const chunk = mp3Data.slice(offset, offset + chunkSize);
-            decoder.push(new Uint8Array(chunk));
+            decoder.feed(new Uint8Array(chunk));
             offset += chunkSize;
             
             let frame;
-            while ((frame = decoder.decodeNext()) !== null) {
+            while ((frame = decoder.getFrame()) !== null) {
                 totalSamples += frame[0]?.length || 0;
                 frameCount++;
             }
@@ -101,7 +101,7 @@ async function main() {
         
         // Drain
         while (!decoder.isFinished()) {
-            const frame = decoder.decodeNext();
+            const frame = decoder.getFrame();
             if (!frame) break;
             totalSamples += frame[0]?.length || 0;
             frameCount++;

@@ -60,7 +60,7 @@ int main() {
         // 3. Initialize decoder
         avioflow::AudioDecoder decoder;
         try {
-            decoder.open(source);
+            decoder.load_file(source);
         } catch (const std::exception& e) {
             std::cerr << "Failed to open device: " << e.what() << std::endl;
             return 1;
@@ -79,7 +79,7 @@ int main() {
         int frame_count = 0;
         
         while (std::chrono::steady_clock::now() - start < std::chrono::seconds(5)) {
-            auto frame = decoder.read();
+            auto frame = decoder.get_frame();
             if (frame) {
                 total_samples += frame.num_samples;
                 frame_count++;

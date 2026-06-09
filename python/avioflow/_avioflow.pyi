@@ -4,6 +4,7 @@ import os
 import io
 
 ReadableBuffer = Union[bytes, bytearray, memoryview, io.BytesIO]
+PathInput = Union[str, os.PathLike]
 SourceInput = Union[str, os.PathLike, ReadableBuffer]
 
 def set_log_level(level: str = "error") -> None:
@@ -146,12 +147,13 @@ class AudioDecoder:
 
     **File Mode** - Load complete audio files:
         >>> decoder = AudioDecoder(output_sample_rate=44100)
-        >>> meta = decoder.load("audio.mp3")
+        >>> meta = decoder.load_file("audio.mp3")
         >>> samples = decoder.get_samples()  # numpy array (channels, samples)
 
     **Stream Mode** - Decode real-time byte streams:
         >>> decoder = AudioDecoder(input_format="s16le", input_sample_rate=48000, input_channels=2)
-        >>> samples = decoder(raw_bytes)  # Returns decoded numpy array
+        >>> decoder.feed(raw_bytes)
+            >>> samples = decoder.get_samples()
 
     Attributes:
         All audio data is returned as float32 in range [-1.0, 1.0].
@@ -183,7 +185,7 @@ class AudioDecoder:
         """
         ...
 
-    def load(self, source: SourceInput) -> Metadata:
+    def load_file(self, source: PathInput) -> Metadata:
         """
         Load audio from file path, URL, or device.
 
@@ -205,55 +207,13 @@ class AudioDecoder:
 
         Example:
             >>> decoder = AudioDecoder()
-            >>> meta = decoder.load("song.mp3")
+            >>> meta = decoder.load_file("song.mp3")
             >>> print(f"Duration: {meta.duration}s, Sample rate: {meta.sample_rate}Hz")
         """
         ...
 
-    def open(self, source: SourceInput) -> None:
-        """
-        Open audio from file path, URL, bytes, or device.
-
-        Args:
-            source: Audio source, one of:
-                - str: File path or URL
-                - bytes/bytearray/memoryview: Full audio file bytes in memory
-                - io.BytesIO: In-memory encoded audio bytes
-                - pathlib.Path: File path object
-
-        Raises:
-            RuntimeError: If source cannot be opened.
-            TypeError: If source type is not supported.
-        """
-        ...
-
-    def __call__(self, data: ReadableBuffer) -> np.ndarray:
-        """
-        Push raw bytes and decode immediately (streaming mode).
-
-        This method enables push-based streaming: feed raw encoded bytes
-        and receive decoded audio samples.
-
-        Args:
-            data (bytes-like or BytesIO): Raw encoded audio bytes. Format must match
-            the input_format specified in constructor.
-
-        Returns:
-            numpy.ndarray: Decoded audio samples with shape (channels, samples).
-                dtype is float32, values in range [-1.0, 1.0].
-                Returns empty array if no complete frames decoded yet.
-
-        Raises:
-            RuntimeError: If input_format was not specified in constructor.
-
-        Example:
-            >>> decoder = AudioDecoder(input_format="s16le", input_sample_rate=48000, input_channels=2)
-            >>> while True:
-            ...     raw_data = network_stream.read(4096)
-            ...     samples = decoder(raw_data)
-            ...     if samples.size > 0:
-            ...         process_audio(samples)
-        """
+    def load_buffer(self, source: ReadableBuffer) -> Metadata:
+        """Load complete encoded audio bytes and return metadata."""
         ...
 
     def get_samples(self) -> np.ndarray:
@@ -268,18 +228,18 @@ class AudioDecoder:
                 dtype is float32, values in range [-1.0, 1.0].
 
         Note:
-            For large files, consider using frame-by-frame decoding (read())
+            For large files, consider using frame-by-frame decoding (get_frame())
             to manage memory usage.
 
         Example:
             >>> decoder = AudioDecoder(output_sample_rate=16000)
-            >>> decoder.load("speech.wav")
+            >>> decoder.load_file("speech.wav")
             >>> samples = decoder.get_samples()
             >>> print(f"Shape: {samples.shape}")  # e.g., (1, 160000) for 10s mono
         """
         ...
 
-    def push(self, data: ReadableBuffer) -> None:
+    def feed(self, data: ReadableBuffer) -> None:
         """
         Push raw audio data bytes to the decoder (stream mode only).
 
@@ -287,19 +247,23 @@ class AudioDecoder:
             data (bytes-like or BytesIO): Raw audio data bytes
 
         Note:
-            This method initializes the decoder on first call when enough data is buffered.
-            Use read() or __call__() to retrieve decoded frames.
+            First feed starts stream mode. Use get_frame() or get_samples()
+            to retrieve decoded output.
 
         Example:
             >>> decoder = AudioDecoder(input_format="s16le", input_sample_rate=16000, input_channels=1)
             >>> with open("audio.raw", "rb") as f:
             ...     chunk = f.read(3200)  # 100ms @ 16kHz mono
-            ...     decoder.push(chunk)
-            ...     samples = decoder.read()
+            ...     decoder.feed(chunk)
+            ...     samples = decoder.get_samples()
         """
         ...
 
-    def read(self) -> Optional[np.ndarray]:
+    def flush(self) -> None:
+        """Mark stream input as complete and allow delayed frames to drain."""
+        ...
+
+    def get_frame(self) -> Optional[np.ndarray]:
         """
         Decode next audio frame.
 
@@ -309,7 +273,7 @@ class AudioDecoder:
 
         Example:
             >>> while not decoder.is_finished():
-            ...     frame = decoder.read()
+            ...     frame = decoder.get_frame()
             ...     if frame is not None:
             ...         process(frame)
         """
@@ -332,7 +296,7 @@ class AudioDecoder:
             Metadata: Audio stream metadata object.
 
         Note:
-            For stream mode, metadata is only available after first push().
+            For stream mode, metadata is only available after first feed().
         """
         ...
 

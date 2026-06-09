@@ -40,7 +40,7 @@ def test_offline_filepath():
     
     start = time.time()
     decoder = avioflow.AudioDecoder()
-    decoder.open(MP3_PATH)
+    decoder.load_file(MP3_PATH)
     
     meta = decoder.get_metadata()
     print(f"  Codec: {meta.codec}, Duration: {meta.duration:.2f}s")
@@ -70,7 +70,7 @@ def test_offline_memory():
     print(f"  File size: {len(file_bytes)} bytes")
     
     decoder = avioflow.AudioDecoder()
-    decoder.open(file_bytes)
+    decoder.load_buffer(file_bytes)
     
     meta = decoder.get_metadata()
     print(f"  Codec: {meta.codec}, Duration: {meta.duration:.2f}s")
@@ -138,9 +138,9 @@ def test_info_with_buffer_inputs():
         assert abs(meta.duration - expected.duration) < 1e-3, f"{name}: duration mismatch"
 
 
-def test_decoder_load_with_buffer_inputs():
-    """Test: AudioDecoder.load() accepts bytes-like inputs."""
-    print("\n=== Test: AudioDecoder.load() with bytes-like inputs ===")
+def test_decoder_load_buffer_with_inputs():
+    """Test: AudioDecoder.load_buffer() accepts bytes-like inputs."""
+    print("\n=== Test: AudioDecoder.load_buffer() with bytes-like inputs ===")
 
     if not os.path.exists(WAV_PATH):
         print(f"  Skip: File not found at {WAV_PATH}")
@@ -150,7 +150,7 @@ def test_decoder_load_with_buffer_inputs():
 
     for name, source in get_test_buffers(WAV_PATH).items():
         decoder = avioflow.AudioDecoder()
-        meta = decoder.load(source)
+        meta = decoder.load_buffer(source)
         samples = decoder.get_samples()
         print(f"  {name}: shape={samples.shape}, codec={meta.codec}")
         assert samples.shape == expected_samples.shape, f"{name}: sample shape mismatch"
@@ -258,7 +258,7 @@ def test_offline_url():
     
     try:
         decoder = avioflow.AudioDecoder()
-        decoder.open(MP3_URL)
+        decoder.load_file(MP3_URL)
         
         meta = decoder.get_metadata()
         print(f"  Codec: {meta.codec}, Sample Rate: {meta.sample_rate}Hz")
@@ -318,7 +318,7 @@ def test_get_samples_offline():
         return
 
     decoder = avioflow.AudioDecoder()
-    decoder.open(MP3_PATH)
+    decoder.load_file(MP3_PATH)
 
     # Test new method name
     samples = decoder.get_samples()
