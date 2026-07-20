@@ -24,7 +24,6 @@ jobs:
       build-python: ${{ steps.check.outputs.build-python }}
       build-npm: ${{ steps.check.outputs.build-npm }}
       build-wasm: ${{ steps.check.outputs.build-wasm }}
-      build-vsix: ${{ steps.check.outputs.build-vsix }}
       build-java: ${{ steps.check.outputs.build-java }}
       python-target: ${{ steps.check.outputs.python-target }}
       cpp-target: ${{ steps.check.outputs.cpp-target }}
@@ -47,7 +46,6 @@ jobs:
           BUILD_PYTHON="false"
           BUILD_NPM="false"
           BUILD_WASM="false"
-          BUILD_VSIX="false"
           BUILD_JAVA="false"
           PYTHON_TARGET="all"
           CPP_TARGET="all"
@@ -70,9 +68,9 @@ jobs:
           elif [[ "$TAG" =~ -npm$ ]]; then
             echo "Tag ends with -npm: Building npm only"
             BUILD_NPM="true"
-          elif [[ "$TAG" =~ -vsix$ ]]; then
-            echo "Tag ends with -vsix: Building VS Code extension only"
-            BUILD_VSIX="true"
+          elif [[ "$TAG" =~ -wasm$ ]]; then
+            echo "Tag ends with -wasm: Building WASM only"
+            BUILD_WASM="true"
           elif [[ "$TAG" =~ -java$ ]]; then
             echo "Tag ends with -java: Building Java only"
             BUILD_JAVA="true"
@@ -84,7 +82,7 @@ jobs:
             BUILD_JAVA="true"
           else
             echo "Unknown tag format: $TAG"
-            echo "Supported formats: v0.1.5, v0.1.5-cpp, v0.1.5-linux-cpp, v0.1.5-py, v0.1.5-py-linux, v0.1.5-npm, v0.1.5-vsix, v0.1.5-java"
+            echo "Supported formats: v0.1.5, v0.1.5-cpp, v0.1.5-linux-cpp, v0.1.5-py, v0.1.5-py-linux, v0.1.5-npm, v0.1.5-wasm, v0.1.5-java"
             exit 1
           fi
           
@@ -92,7 +90,6 @@ jobs:
           echo "build-python=$BUILD_PYTHON" >> $GITHUB_OUTPUT
           echo "build-npm=$BUILD_NPM" >> $GITHUB_OUTPUT
           echo "build-wasm=$BUILD_WASM" >> $GITHUB_OUTPUT
-          echo "build-vsix=$BUILD_VSIX" >> $GITHUB_OUTPUT
           echo "build-java=$BUILD_JAVA" >> $GITHUB_OUTPUT
           echo "python-target=$PYTHON_TARGET" >> $GITHUB_OUTPUT
           echo "cpp-target=$CPP_TARGET" >> $GITHUB_OUTPUT
@@ -103,7 +100,7 @@ jobs:
           echo "  npm: $BUILD_NPM"
           echo "  C++ target: $CPP_TARGET"
           echo "  Python target: $PYTHON_TARGET"
-          echo "  VS Code Extension: $BUILD_VSIX"
+          echo "  WASM: $BUILD_WASM"
           echo "  Java: $BUILD_JAVA"
 
   cpp:
@@ -153,19 +150,10 @@ jobs:
     uses: ./.github/workflows/wasm.yml
     with:
       build-wasm: ${{ needs.check-tag.outputs.build-wasm == 'true' }}
-      tag-name: ${{ needs.check-tag.outputs.tag-name }}
-    secrets: inherit
-
-  vsix:
-    needs: check-tag
-    if: needs.check-tag.outputs.build-vsix == 'true'
-    uses: ./.github/workflows/vsix.yml
-    with:
-      build-vsix: ${{ needs.check-tag.outputs.build-vsix == 'true' }}
     secrets: inherit
 
   publish:
-    needs: [check-tag, cpp, node, windows, python, java, wasm, vsix]
+    needs: [check-tag, cpp, node, windows, python, java, wasm]
     runs-on: ubuntu-latest
     if: |
       always() &&
@@ -176,19 +164,18 @@ jobs:
       (needs.windows.result == 'success' || needs.windows.result == 'skipped') &&
       (needs.python.result == 'success' || needs.python.result == 'skipped') &&
       (needs.java.result == 'success' || needs.java.result == 'skipped') &&
-      (needs.wasm.result == 'success' || needs.wasm.result == 'skipped') &&
-      (needs.vsix.result == 'success' || needs.vsix.result == 'skipped')
+      (needs.wasm.result == 'success' || needs.wasm.result == 'skipped')
     steps:
       - uses: actions/checkout@v4
 
       - name: Setup pnpm
-        if: needs.check-tag.outputs.build-npm == 'true' || needs.check-tag.outputs.build-vsix == 'true'
+        if: needs.check-tag.outputs.build-npm == 'true'
         uses: pnpm/action-setup@v4
         with:
           version: 9
 
       - name: Setup Node.js
-        if: needs.check-tag.outputs.build-npm == 'true' || needs.check-tag.outputs.build-vsix == 'true'
+        if: needs.check-tag.outputs.build-npm == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: '20'
@@ -203,7 +190,7 @@ jobs:
       - name: Prepare release files
         run: |
           shopt -s nullglob
-          mkdir -p dist pypi_dist vsix_dist
+          mkdir -p dist pypi_dist
           require_glob() {
             local description="$1"
             shift
@@ -274,22 +261,15 @@ jobs:
 
           # WASM Engine
           if [ "${{ needs.check-tag.outputs.build-wasm }}" == "true" ]; then
-             require_glob "WASM engine" artifacts/wasm-engine/avioflow-*.wasm
-             require_glob "WASM JavaScript loader" artifacts/wasm-engine/avioflow-*.js
-             cp artifacts/wasm-engine/avioflow-*.wasm dist/
-             cp artifacts/wasm-engine/avioflow-*.js dist/
-          fi
-
-          # VS Code extension
-          if [ "${{ needs.check-tag.outputs.build-vsix }}" == "true" ]; then
-            require_glob "VS Code extension package" artifacts/vscode-extension/*.vsix
-            cp artifacts/vscode-extension/*.vsix vsix_dist/
-            cp artifacts/vscode-extension/*.vsix dist/
+             require_glob "WASM engine" artifacts/wasm-engine/avioflow.wasm
+             require_glob "WASM JavaScript loader" artifacts/wasm-engine/avioflow.js
+             cp artifacts/wasm-engine/avioflow.wasm dist/
+             cp artifacts/wasm-engine/avioflow.js dist/
           fi
 
       # Upload to GitHub Release
       - name: Upload to GitHub Release
-        if: needs.check-tag.outputs.build-cpp == 'true' || needs.check-tag.outputs.build-python == 'true' || needs.check-tag.outputs.build-vsix == 'true'
+        if: needs.check-tag.outputs.build-cpp == 'true' || needs.check-tag.outputs.build-python == 'true' || needs.check-tag.outputs.build-wasm == 'true'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.check-tag.outputs.tag-name }}
@@ -307,20 +287,6 @@ jobs:
           packages-dir: pypi_dist/
           password: ${{ secrets.PYPI_API_TOKEN }}
           skip-existing: true
-
-      # Publish VS Code extension to Open VSX
-      - name: Publish to Open VSX
-        if: needs.check-tag.outputs.build-vsix == 'true'
-        working-directory: vsix_dist
-        run: |
-          VSIX_FILE=$(find . -maxdepth 1 -name '*.vsix' | head -n 1)
-          if [ -z "$VSIX_FILE" ]; then
-            echo "No VSIX file found to publish"
-            exit 1
-          fi
-          npx ovsx publish "$VSIX_FILE" -p "${{ secrets.OPENVSX_TOKEN }}"
-        env:
-          OPENVSX_TOKEN: ${{ secrets.OPENVSX_TOKEN }}
 
       # Publish the main npm package only. The platform-specific native packages
       # are included in the release artifacts and are not published to npm here.
@@ -340,16 +306,3 @@ jobs:
           fi
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      # Publish to VS Code Marketplace (all platform-specific .vsix files)
-      - name: Publish to VS Code Marketplace
-        if: needs.check-tag.outputs.build-vsix == 'true'
-        run: |
-          echo "Publishing all .vsix files to VS Code Marketplace..."
-          for VSIX_FILE in vsix_dist/*.vsix; do
-            echo "Publishing $VSIX_FILE..."
-            npx -y @vscode/vsce publish --packagePath "$VSIX_FILE"
-          done
-          echo "All platforms published!"
-        env:
-          VSCE_PAT: ${{ secrets.VSCE_PAT }}

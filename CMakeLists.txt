@@ -86,6 +86,7 @@ else()
     # Emscripten (WASM) uses wasm-ld which doesn't support --exclude-libs
     if(NOT EMSCRIPTEN)
         add_link_options(
+            LINKER:--as-needed      # Only link libraries that satisfy unresolved symbols
             -Wl,--gc-sections       # Remove unused sections
             -Wl,--exclude-libs,ALL  # Prevent library symbols from being exported
         )

@@ -136,25 +136,12 @@ def sync_java() -> None:
     )
 
 
-def sync_vscode() -> None:
-    update_json(
-        ROOT / "vscode-extension" / "package.json",
-        lambda data: data.__setitem__("version", VERSION),
-    )
-    update_regex(
-        ROOT / "vscode-extension" / "README.md",
-        r"avioflow-\d+\.\d+\.\d+\.vsix",
-        f"avioflow-{VERSION}.vsix",
-    )
-
-
 def main() -> None:
     sync_cmake()
     sync_python()
     sync_node_package()
     sync_wasm()
     sync_java()
-    sync_vscode()
     print(f"Synchronized repository version to {VERSION}")
 
 

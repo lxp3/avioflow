@@ -6,9 +6,6 @@ on:
       build-wasm:
         required: true
         type: boolean
-      tag-name:
-        required: true
-        type: string
 
 permissions:
   contents: read
@@ -32,17 +29,14 @@ jobs:
       - name: Prepare WASM Artifact
         shell: pwsh
         run: |
-          $TAG = "${{ inputs.tag-name }}"
-          $VERSION = $TAG.TrimStart('v').Replace('-vsix', '')
-          Copy-Item "wasm/dist/avioflow.wasm" "avioflow-$VERSION.wasm"
-          Copy-Item "wasm/dist/avioflow.js" "avioflow-$VERSION.js"
+          Copy-Item "wasm/dist/avioflow.wasm" "avioflow.wasm"
+          Copy-Item "wasm/dist/avioflow.js" "avioflow.js"
 
       - name: Upload WASM Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: wasm-engine
           path: |
-            avioflow-*.wasm
-            avioflow-*.js
+            avioflow.wasm
+            avioflow.js
             wasm/dist/
-

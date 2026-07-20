@@ -33,8 +33,7 @@
     "realtime",
     "native",
     "napi",
-    "electron",
-    "vscode"
+    "electron"
   ],
   "engines": {
     "node": ">=16"

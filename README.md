@@ -25,7 +25,6 @@ application, or run it in WebAssembly.
 | JavaScript / Node.js | Node-API native addon | `npm install avioflow` | Platform-specific native packages selected by npm |
 | Java               | JNI binding | Gradle / Maven | Runtime classifiers for Linux, macOS, and Windows |
 | WebAssembly        | WASM build | npm package / web bundle | Browser and WASM-capable runtime support |
-| VS Code            | Extension package | `.vsix` / Marketplace release | Editor integration built from the same core APIs |
 
 ## Decoder API Flow
 
