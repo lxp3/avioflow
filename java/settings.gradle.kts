@@ -12,5 +12,4 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "avioflow-java"
-
+rootProject.name = "avioflow"
