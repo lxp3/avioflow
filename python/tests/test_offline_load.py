@@ -113,7 +113,7 @@ def test_load_from_bytes():
     assert meta1.duration == meta2.duration, "Duration mismatch"
     assert meta1.sample_rate == meta2.sample_rate, "Sample rate mismatch"
     
-    print(f"  ✓ Bytes and filepath produce identical results")
+    print("  PASS: Bytes and filepath produce identical results")
     print(f"  Time: {(time.time() - start) * 1000:.1f}ms")
 
 
@@ -222,7 +222,7 @@ def test_load_with_resampling():
     print(f"  Expected ~{expected_samples} samples, got {actual_samples} (diff: {sample_diff})")
     assert sample_diff < 1000, f"Sample count mismatch too large: {sample_diff}"
     
-    print(f"  ✓ Resampling works correctly with bytes input")
+    print("  PASS: Resampling works correctly with bytes input")
     print(f"  Time: {(time.time() - start) * 1000:.1f}ms")
 
 
@@ -278,7 +278,7 @@ def test_info_metadata():
     assert meta.num_channels > 0, "Invalid channel count"
     assert meta.duration > 0, "Invalid duration"
 
-    print("  ✓ info() successfully retrieved metadata")
+    print("  PASS: info() successfully retrieved metadata")
 
 
 def test_get_samples_offline():
@@ -299,7 +299,7 @@ def test_get_samples_offline():
     print(f"  Total samples decoded: {total_samples}")
 
     assert total_samples > 0, "No samples decoded using get_samples()"
-    print("  ✓ get_samples() works correctly for file input")
+    print("  PASS: get_samples() works correctly for file input")
 
 
 def main():
