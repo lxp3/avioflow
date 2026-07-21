@@ -1,6 +1,6 @@
 {
   "name": "@lxp3/darwin-arm64",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "description": "macOS ARM64 native bindings for avioflow",
   "os": [
     "darwin"
