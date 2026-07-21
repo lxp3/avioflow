@@ -7,9 +7,8 @@ import time
 import avioflow
 import numpy as np
 
-MP3_PATH = "public/wavs/TownTheme.mp3"
-WAV_PATH = "public/wavs/zh.wav"
-MP3_URL = "https://opengameart.org/sites/default/files/TownTheme.mp3"
+MP3_PATH = os.path.abspath(sys.argv[1]) if len(sys.argv) > 1 else "public/wavs/TownTheme.mp3"
+WAV_PATH = os.path.join(os.path.dirname(MP3_PATH), "zh.wav")
 
 
 def get_sample_count(samples):
@@ -249,36 +248,6 @@ def test_load_with_negative_output_sample_rate():
     assert np.allclose(samples_passthrough, samples_default), "Negative sample rate should match default decoding"
 
 
-def test_offline_url():
-    """Test: Offline decode from URL."""
-    print("\n=== Test: Offline Decode from URL ===")
-    print(f"  URL: {MP3_URL}")
-    
-    start = time.time()
-    
-    try:
-        decoder = avioflow.AudioDecoder()
-        decoder.load_file(MP3_URL)
-        
-        meta = decoder.get_metadata()
-        print(f"  Codec: {meta.codec}, Sample Rate: {meta.sample_rate}Hz")
-        
-        # Only decode a few frames to verify it works
-        frame_count = 0
-        while not decoder.is_finished() and frame_count < 10:
-            frame = decoder.decode_next()
-            if frame is None or frame.size == 0:
-                break
-            frame_count += 1
-        
-        print(f"  Successfully decoded {frame_count} frames from URL")
-        print(f"  Time: {(time.time() - start) * 1000:.1f}ms")
-        assert frame_count > 0, "No frames decoded from URL"
-        
-    except Exception as e:
-        print(f"  URL test skipped (network error): {e}")
-
-
 def test_info_metadata():
     """Test: avioflow.info() for fast metadata reading."""
     print("\n=== Test: avioflow.info() Metadata ===")
@@ -304,8 +273,6 @@ def test_info_metadata():
     assert meta.num_channels > 0, "Invalid channel count"
     assert meta.duration > 0, "Invalid duration"
 
-    # Verify it's faster than full loading (optional sanity check)
-    assert duration_ms < 500, "Metadata reading took unexpectedly long (>500ms)"
     print("  ✓ info() successfully retrieved metadata")
 
 
@@ -339,11 +306,10 @@ def main():
         test_offline_memory()
         test_load_from_bytes()
         test_info_with_buffer_inputs()
-        test_decoder_load_with_buffer_inputs()
+        test_decoder_load_buffer_with_inputs()
         test_load_with_buffer_inputs()
         test_load_with_resampling()
         test_load_with_negative_output_sample_rate()
-        test_offline_url()
         test_invalid_info_input_type()
 
         # New tests

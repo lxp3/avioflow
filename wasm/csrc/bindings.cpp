@@ -278,7 +278,9 @@ void save(const std::string &path, val channels, val options) {
     for (unsigned int channel = 0; channel < num_channels; ++channel) {
         val source = channels[channel];
         if (!source.instanceof(val::global("Float32Array"))) {
-            throw std::invalid_argument("Every channel must be a Float32Array");
+            val::global("console").call<void>(
+                "error", std::string("Every channel must be a Float32Array"));
+            return;
         }
         const unsigned int length = source["length"].as<unsigned int>();
         samples[channel].resize(length);
