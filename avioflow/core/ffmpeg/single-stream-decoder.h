@@ -48,7 +48,7 @@ namespace avioflow
     const Metadata &get_metadata() const { return metadata_; }
 
   private:
-    enum class Mode { None, File, Stream };
+    enum class Mode { None, Offline, Stream };
     Mode mode_ = Mode::None;
 
     // Stream mode buffer
@@ -64,6 +64,7 @@ namespace avioflow
     int calculate_output_samples(int src_samples, int src_rate, int dst_rate) const;
     AVFrame *process_decoded_frame();
     void update_decoded_metadata(const AVFrame *frame);
+    static void validate_options(const AudioStreamOptions &options);
 
     // Core FFmpeg contexts
     AVFormatContextPtr fmt_ctx_;

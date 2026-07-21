@@ -10,6 +10,11 @@ on:
         description: 'Release tag or build selector, for example v0.3.4 or v0.3.4-linux-cpp'
         required: true
         default: 'v0.3.4'
+      publish:
+        description: 'Publish Release, PyPI, npm and Maven artifacts'
+        required: true
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -80,6 +85,7 @@ jobs:
             BUILD_PYTHON="true"
             BUILD_NPM="true"
             BUILD_JAVA="true"
+            BUILD_WASM="true"
           else
             echo "Unknown tag format: $TAG"
             echo "Supported formats: v0.1.5, v0.1.5-cpp, v0.1.5-linux-cpp, v0.1.5-py, v0.1.5-py-linux, v0.1.5-npm, v0.1.5-wasm, v0.1.5-java"
@@ -157,7 +163,7 @@ jobs:
     runs-on: ubuntu-latest
     if: |
       always() &&
-      (startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch') &&
+      (startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && inputs.publish)) &&
       (needs.check-tag.result == 'success') &&
       (needs.cpp.result == 'success' || needs.cpp.result == 'skipped') &&
       (needs.node.result == 'success' || needs.node.result == 'skipped') &&
@@ -168,18 +174,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup pnpm
-        if: needs.check-tag.outputs.build-npm == 'true'
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9
-
       - name: Setup Node.js
         if: needs.check-tag.outputs.build-npm == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           registry-url: 'https://registry.npmjs.org'
+          cache: npm
+          cache-dependency-path: nodejs/package-lock.json
 
       # Download all artifacts
       - uses: actions/download-artifact@v4
@@ -203,10 +205,7 @@ jobs:
 
           # C++ binaries
           if [ "${{ needs.check-tag.outputs.build-cpp }}" == "true" ]; then
-            require_glob "Linux shared x86_64 C++ ABI 0 package" artifacts/linux-cpp-binaries-shared-x86_64-abi0/*.tar.gz
-            require_glob "Linux static x86_64 C++ ABI 0 package" artifacts/linux-cpp-binaries-static-x86_64-abi0/*.tar.gz
-            require_glob "Linux shared arm64 C++ ABI 0 package" artifacts/linux-cpp-binaries-shared-aarch64-abi0/*.tar.gz
-            require_glob "Linux static arm64 C++ ABI 0 package" artifacts/linux-cpp-binaries-static-aarch64-abi0/*.tar.gz
+            for kind in shared static; do for arch in x86_64 aarch64; do for abi in 0 1; do require_glob "Linux $kind $arch ABI $abi C++ package" artifacts/linux-cpp-binaries-$kind-$arch-abi$abi/*.tar.gz; done; done; done
             if [ "${{ needs.check-tag.outputs.cpp-target }}" == "all" ]; then
               require_glob "macOS shared x86_64 C++ package" artifacts/macos-cpp-binaries-shared-x86_64/*.tar.gz
               require_glob "macOS static x86_64 C++ package" artifacts/macos-cpp-binaries-static-x86_64/*.tar.gz
@@ -267,6 +266,8 @@ jobs:
              cp artifacts/wasm-engine/avioflow.js dist/
           fi
 
+          if compgen -G 'dist/*' > /dev/null; then (cd dist && sha256sum * > SHA256SUMS); fi
+
       # Upload to GitHub Release
       - name: Upload to GitHub Release
         if: needs.check-tag.outputs.build-cpp == 'true' || needs.check-tag.outputs.build-python == 'true' || needs.check-tag.outputs.build-wasm == 'true'
@@ -299,7 +300,7 @@ jobs:
           if npm view "$PACKAGE_NAME@$PACKAGE_VERSION" version > /dev/null 2>&1; then
             echo "Version $PACKAGE_VERSION of $PACKAGE_NAME already exists. Skipping."
           else
-            pnpm publish --no-git-checks --access public --provenance || {
+            npm publish --access public --provenance || {
               echo "::warning::Failed to publish $PACKAGE_NAME@$PACKAGE_VERSION to npm. Skipping npm publish."
               exit 0
             }

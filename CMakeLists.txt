@@ -3,6 +3,7 @@ file(READ "${CMAKE_CURRENT_SOURCE_DIR}/version.txt" AVIOFLOW_VERSION_RAW)
 string(STRIP "${AVIOFLOW_VERSION_RAW}" AVIOFLOW_VERSION)
 project(avioflow VERSION ${AVIOFLOW_VERSION} LANGUAGES CXX)
 include(CMakePackageConfigHelpers)
+include(CTest)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -197,7 +198,7 @@ if(WIN32)
 endif()
 
 # Binaries
-if(ENABLE_BINARY)
+if(ENABLE_BINARY OR BUILD_TESTS)
     add_subdirectory(avioflow/bin)
 endif()
 

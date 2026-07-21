@@ -21,6 +21,10 @@ extern "C" {
 
 namespace avioflow {
 
+struct AVIOOpaqueContext {
+  virtual ~AVIOOpaqueContext() = default;
+};
+
 // Global FFmpeg log control
 void internal_set_log_level(const char *level);
 
@@ -41,7 +45,22 @@ inline void check_av_error(int err, const std::string &msg) {
 
 // RAII Deleters for FFmpeg structures
 struct AVFormatContextDeleter {
-  void operator()(AVFormatContext *p) { avformat_close_input(&p); }
+  void operator()(AVFormatContext *p) {
+    if (!p) {
+      return;
+    }
+    AVIOContext *custom_io =
+        (p->flags & AVFMT_FLAG_CUSTOM_IO) != 0 ? p->pb : nullptr;
+    AVIOOpaqueContext *opaque = custom_io
+                                    ? static_cast<AVIOOpaqueContext *>(custom_io->opaque)
+                                    : nullptr;
+    avformat_close_input(&p);
+    if (custom_io) {
+      av_freep(&custom_io->buffer);
+      avio_context_free(&custom_io);
+      delete opaque;
+    }
+  }
 };
 struct AVCodecContextDeleter {
   void operator()(AVCodecContext *p) { avcodec_free_context(&p); }

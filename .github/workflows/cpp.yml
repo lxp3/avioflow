@@ -23,67 +23,65 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # ABI1 is disabled for manylinux2014 because its Red Hat libstdc++
-          # toolchain forces the old GCC-compatible string ABI.
-          # - arch: x86_64
-          #   runner: ubuntu-latest
-          #   docker-image: quay.io/pypa/manylinux2014_x86_64
-          #   shared-libs: "ON"
-          #   package-kind: shared
-          #   cxx11-abi: "1"
-          #   pkg-dir: avioflow-shared-linux-x64-abi1
-          #   artifact-name: linux-cpp-binaries-shared-x86_64-abi1
           - arch: x86_64
             runner: ubuntu-latest
-            docker-image: quay.io/pypa/manylinux2014_x86_64
+            docker-image: quay.io/pypa/manylinux_2_28_x86_64
+            shared-libs: "ON"
+            package-kind: shared
+            cxx11-abi: "1"
+            pkg-dir: avioflow-shared-linux-x64-abi1
+            artifact-name: linux-cpp-binaries-shared-x86_64-abi1
+          - arch: x86_64
+            runner: ubuntu-latest
+            docker-image: quay.io/pypa/manylinux_2_28_x86_64
             shared-libs: "ON"
             package-kind: shared
             cxx11-abi: "0"
             pkg-dir: avioflow-shared-linux-x64-abi0
             artifact-name: linux-cpp-binaries-shared-x86_64-abi0
-          # - arch: x86_64
-          #   runner: ubuntu-latest
-          #   docker-image: quay.io/pypa/manylinux2014_x86_64
-          #   shared-libs: "OFF"
-          #   package-kind: static
-          #   cxx11-abi: "1"
-          #   pkg-dir: avioflow-static-linux-x64-abi1
-          #   artifact-name: linux-cpp-binaries-static-x86_64-abi1
           - arch: x86_64
             runner: ubuntu-latest
-            docker-image: quay.io/pypa/manylinux2014_x86_64
+            docker-image: quay.io/pypa/manylinux_2_28_x86_64
+            shared-libs: "OFF"
+            package-kind: static
+            cxx11-abi: "1"
+            pkg-dir: avioflow-static-linux-x64-abi1
+            artifact-name: linux-cpp-binaries-static-x86_64-abi1
+          - arch: x86_64
+            runner: ubuntu-latest
+            docker-image: quay.io/pypa/manylinux_2_28_x86_64
             shared-libs: "OFF"
             package-kind: static
             cxx11-abi: "0"
             pkg-dir: avioflow-static-linux-x64-abi0
             artifact-name: linux-cpp-binaries-static-x86_64-abi0
-          # - arch: aarch64
-          #   runner: ubuntu-24.04-arm
-          #   docker-image: quay.io/pypa/manylinux2014_aarch64
-          #   shared-libs: "ON"
-          #   package-kind: shared
-          #   cxx11-abi: "1"
-          #   pkg-dir: avioflow-shared-linux-arm64-abi1
-          #   artifact-name: linux-cpp-binaries-shared-aarch64-abi1
           - arch: aarch64
             runner: ubuntu-24.04-arm
-            docker-image: quay.io/pypa/manylinux2014_aarch64
+            docker-image: quay.io/pypa/manylinux_2_28_aarch64
+            shared-libs: "ON"
+            package-kind: shared
+            cxx11-abi: "1"
+            pkg-dir: avioflow-shared-linux-arm64-abi1
+            artifact-name: linux-cpp-binaries-shared-aarch64-abi1
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+            docker-image: quay.io/pypa/manylinux_2_28_aarch64
             shared-libs: "ON"
             package-kind: shared
             cxx11-abi: "0"
             pkg-dir: avioflow-shared-linux-arm64-abi0
             artifact-name: linux-cpp-binaries-shared-aarch64-abi0
-          # - arch: aarch64
-          #   runner: ubuntu-24.04-arm
-          #   docker-image: quay.io/pypa/manylinux2014_aarch64
-          #   shared-libs: "OFF"
-          #   package-kind: static
-          #   cxx11-abi: "1"
-          #   pkg-dir: avioflow-static-linux-arm64-abi1
-          #   artifact-name: linux-cpp-binaries-static-aarch64-abi1
           - arch: aarch64
             runner: ubuntu-24.04-arm
-            docker-image: quay.io/pypa/manylinux2014_aarch64
+            docker-image: quay.io/pypa/manylinux_2_28_aarch64
+            shared-libs: "OFF"
+            package-kind: static
+            cxx11-abi: "1"
+            pkg-dir: avioflow-static-linux-arm64-abi1
+            artifact-name: linux-cpp-binaries-static-aarch64-abi1
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+            docker-image: quay.io/pypa/manylinux_2_28_aarch64
             shared-libs: "OFF"
             package-kind: static
             cxx11-abi: "0"
@@ -95,7 +93,7 @@ jobs:
       - name: Sync version metadata
         run: python3 scripts/sync_version.py
 
-      - name: Build C++ ${{ matrix.package-kind }} Binaries in manylinux2014 (${{ matrix.arch }}, ABI ${{ matrix.cxx11-abi }})
+      - name: Build C++ ${{ matrix.package-kind }} binaries in manylinux_2_28 (${{ matrix.arch }}, ABI ${{ matrix.cxx11-abi }})
         run: |
           docker run --rm -v $(pwd):/io -w /io ${{ matrix.docker-image }} bash -c "
             printf '%s\n' \
@@ -117,11 +115,17 @@ jobs:
               ! nm -C /tmp/avioflow_abi_check | grep 'std::__cxx11::basic_string'; \
             fi && \
             /tmp/avioflow_abi_check && \
-            cmake -B build_${{ matrix.package-kind }}_abi${{ matrix.cxx11-abi }} -DCMAKE_BUILD_TYPE=Release -DAVIOFLOW_GLIBCXX_USE_CXX11_ABI=${{ matrix.cxx11-abi }} -DCMAKE_CXX_FLAGS=\"-D_GLIBCXX_USE_CXX11_ABI=${{ matrix.cxx11-abi }}\" -DBUILD_SHARED_LIBS=${{ matrix.shared-libs }} -DENABLE_WASAPI=OFF -DENABLE_PYTHON=OFF -DENABLE_NODE_JS=OFF -DENABLE_BINARY=ON && \
+            cmake -B build_${{ matrix.package-kind }}_abi${{ matrix.cxx11-abi }} -DCMAKE_BUILD_TYPE=Release -DAVIOFLOW_GLIBCXX_USE_CXX11_ABI=${{ matrix.cxx11-abi }} -DBUILD_SHARED_LIBS=${{ matrix.shared-libs }} -DBUILD_TESTING=ON -DENABLE_WASAPI=OFF -DENABLE_PYTHON=OFF -DENABLE_NODE_JS=OFF -DENABLE_BINARY=ON && \
             cmake --build build_${{ matrix.package-kind }}_abi${{ matrix.cxx11-abi }} --config Release -j \$(nproc) && \
+            ctest --test-dir build_${{ matrix.package-kind }}_abi${{ matrix.cxx11-abi }} --output-on-failure && \
+            LIB=\$(find build_${{ matrix.package-kind }}_abi${{ matrix.cxx11-abi }} -type f \( -name 'libavioflow.so*' -o -name 'libavioflow.a' \) | head -n1) && \
+            test -n \"\$LIB\" && \
+            if [ \"${{ matrix.package-kind }}\" = static ]; then if [ \"${{ matrix.cxx11-abi }}\" = 1 ]; then nm -C \"\$LIB\" | grep -q 'std::__cxx11'; else ! nm -C \"\$LIB\" | grep 'std::__cxx11'; fi; fi && \
+            if [ \"${{ matrix.package-kind }}\" = shared ]; then scripts/check_glibc_version.sh \"\$LIB\"; fi && \
             PKG_DIR=\"${{ matrix.pkg-dir }}\" && \
             cmake --install build_${{ matrix.package-kind }}_abi${{ matrix.cxx11-abi }} --prefix \$PKG_DIR && \
-            SMOKE_DIR=\"\$PKG_DIR/.smoke\" && \
+            SMOKE_DIR=\"/tmp/avioflow-smoke-${{ matrix.package-kind }}-abi${{ matrix.cxx11-abi }}\" && \
+            rm -rf \"\$SMOKE_DIR\" && \
             mkdir -p \"\$SMOKE_DIR\" && \
             printf '%s\n' \
               'cmake_minimum_required(VERSION 3.20)' \
@@ -133,14 +137,15 @@ jobs:
             printf '%s\n' \
               '#include \"avioflow-cxx-api.h\"' \
               'int main() {' \
-              '    avioflow::AudioStreamOptions options{};' \
-              '    (void)options;' \
-              '    return 0;' \
+              '    avioflow::AudioDecoder decoder;' \
+              '    decoder.load_file(\"/io/public/wavs/TownTheme.mp3\");' \
+              '    return decoder.get_samples().empty();' \
               '}' \
               > \"\$SMOKE_DIR/main.cpp\" && \
             cmake -S \"\$SMOKE_DIR\" -B \"\$SMOKE_DIR/build\" -Davioflow_DIR=\"\$(pwd)/\$PKG_DIR/lib/cmake/avioflow\" && \
             cmake --build \"\$SMOKE_DIR/build\" --config Release -j \$(nproc) && \
             LD_LIBRARY_PATH=\"\$(pwd)/\$PKG_DIR/lib:\${LD_LIBRARY_PATH:-}\" \"\$SMOKE_DIR/build/avioflow_smoke\" && \
+            ! find \"\$PKG_DIR\" \( -name .smoke -o -name CMakeCache.txt -o -name CMakeLists.txt -o -name main.cpp \) | grep . && \
             tar -czvf \$PKG_DIR.tar.gz \$PKG_DIR
           "
 

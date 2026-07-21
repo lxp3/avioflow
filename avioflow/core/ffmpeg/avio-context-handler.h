@@ -35,14 +35,24 @@ namespace avioflow
                                         const AudioStreamOptions &options);
 
   private:
-    struct MemoryContext
+    struct MemoryContext : AVIOOpaqueContext
     {
+      MemoryContext(const uint8_t *source, size_t size)
+      {
+        if (size != 0) {
+          data.assign(source, source + size);
+        }
+      }
+
       std::vector<uint8_t> data;  // Owns the data copy
-      size_t pos;
+      size_t pos = 0;
     };
 
-    struct StreamContext
+    struct StreamContext : AVIOOpaqueContext
     {
+      explicit StreamContext(AVIOReadCallback callback)
+          : avio_read_callback(std::move(callback)) {}
+
       AVIOReadCallback avio_read_callback;
     };
 

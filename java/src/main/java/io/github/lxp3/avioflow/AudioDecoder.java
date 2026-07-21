@@ -14,43 +14,48 @@ public final class AudioDecoder implements AutoCloseable {
         this.handle = nativeCreate(Avioflow.streamOptionsOrDefault(options));
     }
 
-    public Metadata loadFile(String path) {
+    public synchronized Metadata loadFile(String path) {
         ensureOpen();
         return nativeLoadFile(handle, Objects.requireNonNull(path, "path"));
     }
 
-    public Metadata loadBuffer(byte[] data) {
+    public synchronized Metadata loadBuffer(byte[] data) {
         ensureOpen();
         return nativeLoadBuffer(handle, Objects.requireNonNull(data, "data"));
     }
 
-    public void feed(byte[] data) {
+    public synchronized void feed(byte[] data) {
         ensureOpen();
         nativeFeed(handle, Objects.requireNonNull(data, "data"));
     }
 
-    public void flush() {
+    public synchronized void flush() {
         ensureOpen();
         nativeFlush(handle);
     }
 
-    public float[][] getSamples() {
+    public synchronized float[][] getSamples() {
         ensureOpen();
         return nativeGetSamples(handle);
     }
 
-    public Metadata getMetadata() {
+    public synchronized float[][] getFrame() {
+        ensureOpen();
+        return nativeGetFrame(handle);
+    }
+
+    public synchronized Metadata getMetadata() {
         ensureOpen();
         return nativeGetMetadata(handle);
     }
 
-    public boolean isFinished() {
+    public synchronized boolean isFinished() {
         ensureOpen();
         return nativeIsFinished(handle);
     }
 
     @Override
-    public void close() {
+    public synchronized void close() {
         long current = handle;
         if (current != 0) {
             handle = 0;
@@ -75,6 +80,8 @@ public final class AudioDecoder implements AutoCloseable {
     private static native void nativeFlush(long handle);
 
     private static native float[][] nativeGetSamples(long handle);
+
+    private static native float[][] nativeGetFrame(long handle);
 
     private static native Metadata nativeGetMetadata(long handle);
 

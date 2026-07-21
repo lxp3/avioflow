@@ -110,6 +110,19 @@ def sync_node_package() -> None:
         root_pkg = data.get("packages", {}).get("")
         if isinstance(root_pkg, dict):
             root_pkg["version"] = VERSION
+            optional_deps = root_pkg.setdefault("optionalDependencies", {})
+            for package_name in node_platform_packages:
+                optional_deps[package_name] = VERSION
+
+        for package in data.get("packages", {}).values():
+            if not isinstance(package, dict):
+                continue
+            resolved = package.get("resolved")
+            if isinstance(resolved, str):
+                package["resolved"] = resolved.replace(
+                    "https://registry.npmmirror.com/",
+                    "https://registry.npmjs.org/",
+                )
 
     update_json(ROOT / "nodejs" / "package-lock.json", update_package_lock)
 

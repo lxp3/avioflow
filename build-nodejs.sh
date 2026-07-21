@@ -8,14 +8,10 @@ NODEJS_DIR="$ROOT_DIR/nodejs"
 echo "=== Building Node.js Binding (from Root) ==="
 cd "$ROOT_DIR"
 
-# 1. Install dependencies if missing
-if [ ! -d "nodejs/node_modules" ]; then
+# 1. Install dependencies unless the caller already did so.
+if [ "${AVIOFLOW_SKIP_NPM_INSTALL:-0}" != "1" ]; then
     echo "Installing Node.js dependencies..."
-    if command -v pnpm &> /dev/null; then
-        (cd nodejs && pnpm install --no-frozen-lockfile)
-    else
-        (cd nodejs && npm install)
-    fi
+    (cd nodejs && npm ci)
 fi
 
 # 2. Compile using cmake-js from Root

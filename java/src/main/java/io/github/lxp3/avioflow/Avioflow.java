@@ -31,6 +31,11 @@ public final class Avioflow {
         return nativeGetSupportedOutputFormats();
     }
 
+    public static DeviceInfo[] listAudioDevices() {
+        NativeLibraryLoader.load();
+        return nativeListAudioDevices();
+    }
+
     static AudioStreamOptions streamOptionsOrDefault(AudioStreamOptions options) {
         return options == null ? new AudioStreamOptions() : options;
     }
@@ -48,4 +53,6 @@ public final class Avioflow {
     private static native String[] nativeGetSupportedInputFormats();
 
     private static native String[] nativeGetSupportedOutputFormats();
+
+    private static native DeviceInfo[] nativeListAudioDevices();
 }

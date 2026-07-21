@@ -129,11 +129,6 @@ std::vector<std::vector<float>> get_decoder_samples(AudioDecoder& decoder) {
     return decoder.get_samples();
 }
 
-FrameData read_decoder_frame(AudioDecoder& decoder) {
-    py::gil_scoped_release release;
-    return decoder.get_frame();
-}
-
 py::array_t<float> samples_to_array(const std::vector<std::vector<float>>& samples) {
     if (samples.empty()) {
         return py::array_t<float>(std::vector<size_t>{0, 0});
@@ -365,7 +360,9 @@ PYBIND11_MODULE(_avioflow, m) {
         
         Args:
             output_sample_rate (int, optional): Target output sample rate in Hz.
-                If not specified or negative, uses source sample rate.
+                If not specified, uses source sample rate. Must be positive.
+            output_num_channels (int, optional): Target output channel count.
+                If not specified, uses source channel count. Must be positive.
             input_sample_rate (int, optional): Source sample rate for raw PCM streaming.
                 Required for stream mode with raw PCM formats.
             input_channels (int, optional): Source channel count for raw PCM streaming.
@@ -381,17 +378,20 @@ PYBIND11_MODULE(_avioflow, m) {
             All audio data is returned as float32 in range [-1.0, 1.0].
     )pbdoc")
         .def(py::init([](std::optional<int> output_sample_rate,
+                        std::optional<int> output_num_channels,
                         std::optional<int> input_sample_rate,
                         std::optional<int> input_channels,
                         std::optional<std::string> input_format) {
             AudioStreamOptions options;
             options.output_sample_rate = output_sample_rate;
+            options.output_num_channels = output_num_channels;
             options.input_sample_rate = input_sample_rate;
             options.input_channels = input_channels;
             options.input_format = input_format;
             return new AudioDecoder(options);
         }),
         py::arg("output_sample_rate") = py::none(),
+        py::arg("output_num_channels") = py::none(),
         py::arg("input_sample_rate") = py::none(),
         py::arg("input_channels") = py::none(),
         py::arg("input_format") = py::none())
@@ -405,7 +405,7 @@ PYBIND11_MODULE(_avioflow, m) {
         py::arg("source"), 
         py::return_value_policy::reference_internal,
         R"pbdoc(
-            Load audio from file path, URL, bytes-like input, or device.
+            Load audio from file path, URL, or device.
             
             Args:
                 source: Audio source, one of:
@@ -495,7 +495,8 @@ PYBIND11_MODULE(_avioflow, m) {
         )pbdoc")
 
         .def("get_frame", [](AudioDecoder& self) -> py::object {
-            FrameData frame = read_decoder_frame(self);
+            // Keep the GIL until the internal zero-copy frame has been copied.
+            FrameData frame = self.get_frame();
             if (!frame) {
                 return py::none();
             }
@@ -573,7 +574,9 @@ PYBIND11_MODULE(_avioflow, m) {
         .def_readwrite("sample_format", &AudioWriteOptions::sample_format)
         .def_readwrite("overwrite", &AudioWriteOptions::overwrite);
 
-    m.def("save", [](const std::string& path, py::array_t<float> samples, py::object options_obj) {
+    m.def("save", [](const std::string& path,
+                     py::array_t<float, py::array::c_style | py::array::forcecast> samples,
+                     py::object options_obj) {
         py::buffer_info buf = samples.request();
         if (buf.ndim != 2) {
             throw std::runtime_error("samples must be 2D array with shape (channels, samples)");

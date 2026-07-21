@@ -14,6 +14,7 @@ void throw_exception(JNIEnv *env, const char *class_name, const std::string &mes
   jclass cls = env->FindClass(class_name);
   if (cls) {
     env->ThrowNew(cls, message.c_str());
+    env->DeleteLocalRef(cls);
   }
 }
 
@@ -34,31 +35,41 @@ std::string jstring_to_string(JNIEnv *env, jstring value) {
 jstring optional_string_field(JNIEnv *env, jobject object, const char *field_name) {
   jclass cls = env->GetObjectClass(object);
   jfieldID field = env->GetFieldID(cls, field_name, "Ljava/lang/String;");
-  return field ? static_cast<jstring>(env->GetObjectField(object, field)) : nullptr;
+  jstring result = field ? static_cast<jstring>(env->GetObjectField(object, field)) : nullptr;
+  env->DeleteLocalRef(cls);
+  return result;
 }
 
 jobject object_field(JNIEnv *env, jobject object, const char *field_name, const char *signature) {
   jclass cls = env->GetObjectClass(object);
   jfieldID field = env->GetFieldID(cls, field_name, signature);
-  return field ? env->GetObjectField(object, field) : nullptr;
+  jobject result = field ? env->GetObjectField(object, field) : nullptr;
+  env->DeleteLocalRef(cls);
+  return result;
 }
 
 bool boolean_field(JNIEnv *env, jobject object, const char *field_name, bool default_value) {
   jclass cls = env->GetObjectClass(object);
   jfieldID field = env->GetFieldID(cls, field_name, "Z");
-  return field ? env->GetBooleanField(object, field) == JNI_TRUE : default_value;
+  bool result = field ? env->GetBooleanField(object, field) == JNI_TRUE : default_value;
+  env->DeleteLocalRef(cls);
+  return result;
 }
 
 int integer_value(JNIEnv *env, jobject value) {
   jclass cls = env->FindClass("java/lang/Integer");
   jmethodID method = env->GetMethodID(cls, "intValue", "()I");
-  return env->CallIntMethod(value, method);
+  int result = env->CallIntMethod(value, method);
+  env->DeleteLocalRef(cls);
+  return result;
 }
 
 int64_t long_value(JNIEnv *env, jobject value) {
   jclass cls = env->FindClass("java/lang/Long");
   jmethodID method = env->GetMethodID(cls, "longValue", "()J");
-  return env->CallLongMethod(value, method);
+  int64_t result = env->CallLongMethod(value, method);
+  env->DeleteLocalRef(cls);
+  return result;
 }
 
 AudioStreamOptions to_stream_options(JNIEnv *env, jobject options) {
@@ -70,21 +81,31 @@ AudioStreamOptions to_stream_options(JNIEnv *env, jobject options) {
   jobject output_sample_rate = object_field(env, options, "outputSampleRate", "Ljava/lang/Integer;");
   if (output_sample_rate) {
     result.output_sample_rate = integer_value(env, output_sample_rate);
+    env->DeleteLocalRef(output_sample_rate);
+  }
+
+  jobject output_num_channels = object_field(env, options, "outputNumChannels", "Ljava/lang/Integer;");
+  if (output_num_channels) {
+    result.output_num_channels = integer_value(env, output_num_channels);
+    env->DeleteLocalRef(output_num_channels);
   }
 
   jobject input_sample_rate = object_field(env, options, "inputSampleRate", "Ljava/lang/Integer;");
   if (input_sample_rate) {
     result.input_sample_rate = integer_value(env, input_sample_rate);
+    env->DeleteLocalRef(input_sample_rate);
   }
 
   jobject input_channels = object_field(env, options, "inputChannels", "Ljava/lang/Integer;");
   if (input_channels) {
     result.input_channels = integer_value(env, input_channels);
+    env->DeleteLocalRef(input_channels);
   }
 
   jstring input_format = optional_string_field(env, options, "inputFormat");
   if (input_format) {
     result.input_format = jstring_to_string(env, input_format);
+    env->DeleteLocalRef(input_format);
   }
 
   return result;
@@ -99,31 +120,37 @@ AudioWriteOptions to_write_options(JNIEnv *env, jobject options) {
   jstring codec_name = optional_string_field(env, options, "codecName");
   if (codec_name) {
     result.codec_name = jstring_to_string(env, codec_name);
+    env->DeleteLocalRef(codec_name);
   }
 
   jstring container_format = optional_string_field(env, options, "containerFormat");
   if (container_format) {
     result.container_format = jstring_to_string(env, container_format);
+    env->DeleteLocalRef(container_format);
   }
 
   jobject sample_rate = object_field(env, options, "sampleRate", "Ljava/lang/Integer;");
   if (sample_rate) {
     result.sample_rate = integer_value(env, sample_rate);
+    env->DeleteLocalRef(sample_rate);
   }
 
   jobject num_channels = object_field(env, options, "numChannels", "Ljava/lang/Integer;");
   if (num_channels) {
     result.num_channels = integer_value(env, num_channels);
+    env->DeleteLocalRef(num_channels);
   }
 
   jobject bit_rate = object_field(env, options, "bitRate", "Ljava/lang/Long;");
   if (bit_rate) {
     result.bit_rate = long_value(env, bit_rate);
+    env->DeleteLocalRef(bit_rate);
   }
 
   jstring sample_format = optional_string_field(env, options, "sampleFormat");
   if (sample_format) {
     result.sample_format = jstring_to_string(env, sample_format);
+    env->DeleteLocalRef(sample_format);
   }
 
   result.overwrite = boolean_field(env, options, "overwrite", true);
@@ -136,25 +163,36 @@ jobject to_metadata(JNIEnv *env, const Metadata &metadata) {
       cls,
       "<init>",
       "(DJIILjava/lang/String;Ljava/lang/String;JLjava/lang/String;)V");
-  return env->NewObject(
+  jstring sample_format = env->NewStringUTF(metadata.sample_format.c_str());
+  jstring codec = env->NewStringUTF(metadata.codec.c_str());
+  jstring container = env->NewStringUTF(metadata.container.c_str());
+  jobject result = env->NewObject(
       cls,
       constructor,
       metadata.duration,
       static_cast<jlong>(metadata.num_samples),
       metadata.sample_rate,
       metadata.num_channels,
-      env->NewStringUTF(metadata.sample_format.c_str()),
-      env->NewStringUTF(metadata.codec.c_str()),
+      sample_format,
+      codec,
       static_cast<jlong>(metadata.bit_rate),
-      env->NewStringUTF(metadata.container.c_str()));
+      container);
+  env->DeleteLocalRef(sample_format);
+  env->DeleteLocalRef(codec);
+  env->DeleteLocalRef(container);
+  env->DeleteLocalRef(cls);
+  return result;
 }
 
 jobjectArray to_string_array(JNIEnv *env, const std::vector<std::string> &values) {
   jclass string_cls = env->FindClass("java/lang/String");
   auto result = env->NewObjectArray(static_cast<jsize>(values.size()), string_cls, nullptr);
   for (jsize i = 0; i < static_cast<jsize>(values.size()); ++i) {
-    env->SetObjectArrayElement(result, i, env->NewStringUTF(values[static_cast<size_t>(i)].c_str()));
+    jstring value = env->NewStringUTF(values[static_cast<size_t>(i)].c_str());
+    env->SetObjectArrayElement(result, i, value);
+    env->DeleteLocalRef(value);
   }
+  env->DeleteLocalRef(string_cls);
   return result;
 }
 
@@ -174,6 +212,44 @@ jobjectArray to_float_2d_array(JNIEnv *env, const std::vector<std::vector<float>
     env->SetObjectArrayElement(result, channel, row);
     env->DeleteLocalRef(row);
   }
+  env->DeleteLocalRef(float_array_cls);
+  return result;
+}
+
+jobjectArray to_float_2d_array(JNIEnv *env, const FrameData &frame) {
+  if (!frame) {
+    return nullptr;
+  }
+  jclass float_array_cls = env->FindClass("[F");
+  jobjectArray result = env->NewObjectArray(frame.num_channels, float_array_cls, nullptr);
+  for (int channel = 0; channel < frame.num_channels; ++channel) {
+    jfloatArray row = env->NewFloatArray(frame.num_samples);
+    env->SetFloatArrayRegion(row, 0, frame.num_samples, frame.data[channel]);
+    env->SetObjectArrayElement(result, channel, row);
+    env->DeleteLocalRef(row);
+  }
+  env->DeleteLocalRef(float_array_cls);
+  return result;
+}
+
+jobjectArray to_device_array(JNIEnv *env, const std::vector<DeviceInfo> &devices) {
+  jclass cls = env->FindClass("io/github/lxp3/avioflow/DeviceInfo");
+  jmethodID constructor = env->GetMethodID(
+      cls, "<init>", "(Ljava/lang/String;Ljava/lang/String;Z)V");
+  jobjectArray result = env->NewObjectArray(
+      static_cast<jsize>(devices.size()), cls, nullptr);
+  for (jsize i = 0; i < static_cast<jsize>(devices.size()); ++i) {
+    const DeviceInfo &device = devices[static_cast<size_t>(i)];
+    jstring name = env->NewStringUTF(device.name.c_str());
+    jstring description = env->NewStringUTF(device.description.c_str());
+    jobject value = env->NewObject(cls, constructor, name, description,
+                                   device.is_output ? JNI_TRUE : JNI_FALSE);
+    env->SetObjectArrayElement(result, i, value);
+    env->DeleteLocalRef(value);
+    env->DeleteLocalRef(description);
+    env->DeleteLocalRef(name);
+  }
+  env->DeleteLocalRef(cls);
   return result;
 }
 
@@ -262,6 +338,16 @@ Java_io_github_lxp3_avioflow_Avioflow_nativeGetSupportedOutputFormats(JNIEnv *en
   }
 }
 
+extern "C" JNIEXPORT jobjectArray JNICALL
+Java_io_github_lxp3_avioflow_Avioflow_nativeListAudioDevices(JNIEnv *env, jclass) {
+  try {
+    return to_device_array(env, DeviceManager::list_audio_devices());
+  } catch (const std::exception &error) {
+    throw_avioflow(env, error);
+    return nullptr;
+  }
+}
+
 extern "C" JNIEXPORT jlong JNICALL
 Java_io_github_lxp3_avioflow_AudioDecoder_nativeCreate(JNIEnv *env, jclass, jobject options) {
   try {
@@ -326,6 +412,16 @@ extern "C" JNIEXPORT jobjectArray JNICALL
 Java_io_github_lxp3_avioflow_AudioDecoder_nativeGetSamples(JNIEnv *env, jclass, jlong handle) {
   try {
     return to_float_2d_array(env, decoder_from_handle(handle)->get_samples());
+  } catch (const std::exception &error) {
+    throw_avioflow(env, error);
+    return nullptr;
+  }
+}
+
+extern "C" JNIEXPORT jobjectArray JNICALL
+Java_io_github_lxp3_avioflow_AudioDecoder_nativeGetFrame(JNIEnv *env, jclass, jlong handle) {
+  try {
+    return to_float_2d_array(env, decoder_from_handle(handle)->get_frame());
   } catch (const std::exception &error) {
     throw_avioflow(env, error);
     return nullptr;

@@ -12,6 +12,7 @@
 #include <vector>
 #include <string>
 #include <memory>
+#include <stdexcept>
 
 using namespace emscripten;
 using namespace avioflow;
@@ -34,6 +35,19 @@ val MetadataToJs(const Metadata &meta) {
     return obj;
 }
 
+val StringsToJs(const std::vector<std::string> &values) {
+    val result = val::array();
+    for (size_t i = 0; i < values.size(); ++i) {
+        result.set(i, values[i]);
+    }
+    return result;
+}
+
+val getSupportedDecoders() { return StringsToJs(get_supported_decoders()); }
+val getSupportedEncoders() { return StringsToJs(get_supported_encoders()); }
+val getSupportedInputFormats() { return StringsToJs(get_supported_input_formats()); }
+val getSupportedOutputFormats() { return StringsToJs(get_supported_output_formats()); }
+
 /**
  * @brief Convert samples to JS Float32Array per channel
  */
@@ -42,10 +56,8 @@ val SamplesToJs(const std::vector<std::vector<float>> &samples) {
     for (size_t c = 0; c < samples.size(); ++c) {
         // Create typed array view
         val channelData = val::global("Float32Array").new_(samples[c].size());
-        // Copy data
-        for (size_t i = 0; i < samples[c].size(); ++i) {
-            channelData.set(i, samples[c][i]);
-        }
+        channelData.call<void>("set", val(typed_memory_view(
+            samples[c].size(), samples[c].data())));
         result.call<void>("push", channelData);
     }
     return result;
@@ -99,16 +111,12 @@ public:
         if (buffer.instanceof(val::global("Uint8Array"))) {
             unsigned int length = buffer["length"].as<unsigned int>();
             data.resize(length);
-            for (unsigned int i = 0; i < length; ++i) {
-                data[i] = buffer[i].as<uint8_t>();
-            }
+            val(typed_memory_view(data.size(), data.data())).call<void>("set", buffer);
         } else if (buffer.instanceof(val::global("ArrayBuffer"))) {
             val uint8View = val::global("Uint8Array").new_(buffer);
             unsigned int length = uint8View["length"].as<unsigned int>();
             data.resize(length);
-            for (unsigned int i = 0; i < length; ++i) {
-                data[i] = uint8View[i].as<uint8_t>();
-            }
+            val(typed_memory_view(data.size(), data.data())).call<void>("set", uint8View);
         } else {
             val::global("console").call<void>("error", std::string("Expected Uint8Array or ArrayBuffer"));
             return val::null();
@@ -127,9 +135,7 @@ public:
         if (buffer.instanceof(val::global("Uint8Array"))) {
             unsigned int length = buffer["length"].as<unsigned int>();
             data.resize(length);
-            for (unsigned int i = 0; i < length; ++i) {
-                data[i] = buffer[i].as<uint8_t>();
-            }
+            val(typed_memory_view(data.size(), data.data())).call<void>("set", buffer);
         } else {
             val::global("console").call<void>("error", std::string("Expected Uint8Array"));
             return;
@@ -243,16 +249,12 @@ val loadBuffer(val buffer, val options) {
     if (buffer.instanceof(val::global("Uint8Array"))) {
         unsigned int length = buffer["length"].as<unsigned int>();
         data.resize(length);
-        for (unsigned int i = 0; i < length; ++i) {
-            data[i] = buffer[i].as<uint8_t>();
-        }
+        val(typed_memory_view(data.size(), data.data())).call<void>("set", buffer);
     } else if (buffer.instanceof(val::global("ArrayBuffer"))) {
         val uint8View = val::global("Uint8Array").new_(buffer);
         unsigned int length = uint8View["length"].as<unsigned int>();
         data.resize(length);
-        for (unsigned int i = 0; i < length; ++i) {
-            data[i] = uint8View[i].as<uint8_t>();
-        }
+        val(typed_memory_view(data.size(), data.data())).call<void>("set", uint8View);
     } else {
         val::global("console").call<void>("error", std::string("Expected Uint8Array or ArrayBuffer"));
         return val::null();
@@ -270,6 +272,40 @@ val loadBuffer(val buffer, val options) {
     return result;
 }
 
+void save(const std::string &path, val channels, val options) {
+    const unsigned int num_channels = channels["length"].as<unsigned int>();
+    std::vector<std::vector<float>> samples(num_channels);
+    for (unsigned int channel = 0; channel < num_channels; ++channel) {
+        val source = channels[channel];
+        if (!source.instanceof(val::global("Float32Array"))) {
+            throw std::invalid_argument("Every channel must be a Float32Array");
+        }
+        const unsigned int length = source["length"].as<unsigned int>();
+        samples[channel].resize(length);
+        val(typed_memory_view(samples[channel].size(), samples[channel].data()))
+            .call<void>("set", source);
+    }
+
+    AudioWriteOptions write_options;
+    if (!options.isUndefined() && !options.isNull()) {
+        if (options.hasOwnProperty("codecName"))
+            write_options.codec_name = options["codecName"].as<std::string>();
+        if (options.hasOwnProperty("containerFormat"))
+            write_options.container_format = options["containerFormat"].as<std::string>();
+        if (options.hasOwnProperty("sampleRate"))
+            write_options.sample_rate = options["sampleRate"].as<int>();
+        if (options.hasOwnProperty("numChannels"))
+            write_options.num_channels = options["numChannels"].as<int>();
+        if (options.hasOwnProperty("bitRate"))
+            write_options.bit_rate = options["bitRate"].as<int64_t>();
+        if (options.hasOwnProperty("sampleFormat"))
+            write_options.sample_format = options["sampleFormat"].as<std::string>();
+        if (options.hasOwnProperty("overwrite"))
+            write_options.overwrite = options["overwrite"].as<bool>();
+    }
+    save_audio(path, samples, write_options);
+}
+
 // --- Emscripten Bindings ---
 
 EMSCRIPTEN_BINDINGS(avioflow) {
@@ -277,6 +313,11 @@ EMSCRIPTEN_BINDINGS(avioflow) {
     function("setLogLevel", &setLogLevel);
     function("load", &load);
     function("loadBuffer", &loadBuffer);
+    function("getSupportedDecoders", &getSupportedDecoders);
+    function("getSupportedEncoders", &getSupportedEncoders);
+    function("getSupportedInputFormats", &getSupportedInputFormats);
+    function("getSupportedOutputFormats", &getSupportedOutputFormats);
+    function("save", &save);
     
     // AudioDecoder class
     class_<AudioDecoderWrapper>("AudioDecoder")

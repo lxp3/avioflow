@@ -101,8 +101,8 @@ Gradle users need the main Java API jar plus one native classifier for the targe
 
 ```kotlin
 dependencies {
-    implementation("io.github.lxp3:avioflow:0.4.0")
-    runtimeOnly("io.github.lxp3:avioflow:0.4.0:linux-x86_64")
+    implementation("io.github.lxp3:avioflow:0.5.0")
+    runtimeOnly("io.github.lxp3:avioflow:0.5.0:linux-x86_64")
 }
 ```
 
@@ -136,6 +136,10 @@ target_link_libraries(your_target PRIVATE avioflow::avioflow)
 ```
 
 Release packages are split by linkage and platform:
+
+Linux binaries target glibc 2.28 or newer. Select ABI 0 for the legacy
+libstdc++ string ABI or ABI 1 for the C++11 string ABI; the eight Linux C++
+archives use the filenames `avioflow-{shared|static}-linux-{x64|arm64}-abi{0|1}.tar.gz`.
 
 - `avioflow-shared-linux-x64-abi1`, `avioflow-shared-linux-x64-abi0`
 - `avioflow-static-linux-x64-abi1`, `avioflow-static-linux-x64-abi0`

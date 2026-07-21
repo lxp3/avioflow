@@ -68,6 +68,7 @@ jobs:
             target_arch: arm64
             skip_tests: '1'
     runs-on: ${{ matrix.runner }}
+    container: ${{ startsWith(matrix.classifier, 'linux-x86_64') && 'quay.io/pypa/manylinux_2_28_x86_64' || startsWith(matrix.classifier, 'linux-aarch64') && 'quay.io/pypa/manylinux_2_28_aarch64' || '' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -89,6 +90,10 @@ jobs:
         env:
           AVIOFLOW_SKIP_TESTS: ${{ matrix.skip_tests }}
         run: ./build-java.sh ${{ matrix.classifier }}
+
+      - name: Check Linux glibc baseline
+        if: startsWith(matrix.classifier, 'linux-')
+        run: scripts/check_glibc_version.sh java/build/native/${{ matrix.classifier }}/*.so
 
       - name: Build native classifier
         if: matrix.os == 'windows'

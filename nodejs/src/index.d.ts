@@ -56,6 +56,16 @@ export interface AudioDecoderOptions {
     inputFormat?: string;
 }
 
+export interface AudioWriteOptions {
+    codecName?: string;
+    containerFormat?: string;
+    sampleRate?: number;
+    numChannels?: number;
+    bitRate?: number;
+    sampleFormat?: string;
+    overwrite?: boolean;
+}
+
 /** Result from the load() convenience function */
 export interface LoadResult {
     /** Audio stream metadata */
@@ -186,6 +196,14 @@ export function listAudioDevices(): DeviceInfo[];
  */
 export function load(path: string, options?: Pick<AudioDecoderOptions, 'outputSampleRate' | 'outputNumChannels'>): LoadResult;
 
+/** Decode without blocking the Node.js event loop. */
+export function loadAsync(path: string, options?: Pick<AudioDecoderOptions, 'outputSampleRate' | 'outputNumChannels'>): Promise<LoadResult>;
+export function getSupportedDecoders(): string[];
+export function getSupportedEncoders(): string[];
+export function getSupportedInputFormats(): string[];
+export function getSupportedOutputFormats(): string[];
+export function save(path: string, samples: Float32Array[], options?: AudioWriteOptions): void;
+
 /**
  * Get waveform summary for visualization.
  * 
@@ -203,6 +221,12 @@ declare const avioflow: {
     setLogLevel: typeof setLogLevel;
     listAudioDevices: typeof listAudioDevices;
     load: typeof load;
+    loadAsync: typeof loadAsync;
+    getSupportedDecoders: typeof getSupportedDecoders;
+    getSupportedEncoders: typeof getSupportedEncoders;
+    getSupportedInputFormats: typeof getSupportedInputFormats;
+    getSupportedOutputFormats: typeof getSupportedOutputFormats;
+    save: typeof save;
     getWaveform: typeof getWaveform;
 };
 

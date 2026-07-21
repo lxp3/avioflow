@@ -2,12 +2,18 @@ package io.github.lxp3.avioflow;
 
 public final class AudioStreamOptions {
     Integer outputSampleRate;
+    Integer outputNumChannels;
     Integer inputSampleRate;
     Integer inputChannels;
     String inputFormat;
 
     public AudioStreamOptions outputSampleRate(int outputSampleRate) {
         this.outputSampleRate = outputSampleRate;
+        return this;
+    }
+
+    public AudioStreamOptions outputNumChannels(int outputNumChannels) {
+        this.outputNumChannels = outputNumChannels;
         return this;
     }
 
@@ -26,4 +32,3 @@ public final class AudioStreamOptions {
         return this;
     }
 }
-

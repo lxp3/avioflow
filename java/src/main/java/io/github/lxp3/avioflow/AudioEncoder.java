@@ -14,13 +14,13 @@ public final class AudioEncoder implements AutoCloseable {
         this.handle = nativeCreate(Avioflow.writeOptionsOrDefault(options));
     }
 
-    public void save(String path, float[][] samples) {
+    public synchronized void save(String path, float[][] samples) {
         ensureOpen();
         nativeSave(handle, Objects.requireNonNull(path, "path"), Objects.requireNonNull(samples, "samples"));
     }
 
     @Override
-    public void close() {
+    public synchronized void close() {
         long current = handle;
         if (current != 0) {
             handle = 0;

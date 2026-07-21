@@ -47,6 +47,75 @@ Napi::Array SamplesToJs(Napi::Env env,
   return channelsArr;
 }
 
+Napi::Array StringsToJs(Napi::Env env, const std::vector<std::string> &values) {
+  Napi::Array result = Napi::Array::New(env, values.size());
+  for (size_t i = 0; i < values.size(); ++i)
+    result.Set(i, values[i]);
+  return result;
+}
+
+Napi::Value GetSupportedDecoders(const Napi::CallbackInfo &info) {
+  return StringsToJs(info.Env(), get_supported_decoders());
+}
+Napi::Value GetSupportedEncoders(const Napi::CallbackInfo &info) {
+  return StringsToJs(info.Env(), get_supported_encoders());
+}
+Napi::Value GetSupportedInputFormats(const Napi::CallbackInfo &info) {
+  return StringsToJs(info.Env(), get_supported_input_formats());
+}
+Napi::Value GetSupportedOutputFormats(const Napi::CallbackInfo &info) {
+  return StringsToJs(info.Env(), get_supported_output_formats());
+}
+
+Napi::Value Save(const Napi::CallbackInfo &info) {
+  Napi::Env env = info.Env();
+  if (info.Length() < 2 || !info[0].IsString() || !info[1].IsArray()) {
+    Napi::TypeError::New(env, "String path and array of Float32Array expected")
+        .ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
+
+  Napi::Array channels = info[1].As<Napi::Array>();
+  std::vector<std::vector<float>> samples(channels.Length());
+  for (uint32_t channel = 0; channel < channels.Length(); ++channel) {
+    Napi::Value value = channels.Get(channel);
+    if (!value.IsTypedArray() ||
+        value.As<Napi::TypedArray>().TypedArrayType() != napi_float32_array) {
+      Napi::TypeError::New(env, "Every channel must be a Float32Array")
+          .ThrowAsJavaScriptException();
+      return env.Undefined();
+    }
+    Napi::Float32Array data = value.As<Napi::Float32Array>();
+    samples[channel].assign(data.Data(), data.Data() + data.ElementLength());
+  }
+
+  AudioWriteOptions options;
+  if (info.Length() > 2 && info[2].IsObject()) {
+    Napi::Object object = info[2].As<Napi::Object>();
+    if (object.Has("codecName"))
+      options.codec_name = object.Get("codecName").As<Napi::String>().Utf8Value();
+    if (object.Has("containerFormat"))
+      options.container_format = object.Get("containerFormat").As<Napi::String>().Utf8Value();
+    if (object.Has("sampleRate"))
+      options.sample_rate = object.Get("sampleRate").As<Napi::Number>().Int32Value();
+    if (object.Has("numChannels"))
+      options.num_channels = object.Get("numChannels").As<Napi::Number>().Int32Value();
+    if (object.Has("bitRate"))
+      options.bit_rate = object.Get("bitRate").As<Napi::Number>().Int64Value();
+    if (object.Has("sampleFormat"))
+      options.sample_format = object.Get("sampleFormat").As<Napi::String>().Utf8Value();
+    if (object.Has("overwrite"))
+      options.overwrite = object.Get("overwrite").As<Napi::Boolean>().Value();
+  }
+
+  try {
+    save_audio(info[0].As<Napi::String>().Utf8Value(), samples, options);
+  } catch (const std::exception &error) {
+    Napi::Error::New(env, error.what()).ThrowAsJavaScriptException();
+  }
+  return env.Undefined();
+}
+
 // --- Module-level functions ---
 
 /**
@@ -132,6 +201,65 @@ Napi::Value Load(const Napi::CallbackInfo &info) {
     Napi::Error::New(env, e.what()).ThrowAsJavaScriptException();
     return env.Undefined();
   }
+}
+
+class LoadAsyncWorker : public Napi::AsyncWorker {
+public:
+  LoadAsyncWorker(Napi::Env env, std::string path, AudioStreamOptions options)
+      : Napi::AsyncWorker(env), deferred_(Napi::Promise::Deferred::New(env)),
+        path_(std::move(path)), options_(std::move(options)) {}
+
+  Napi::Promise Promise() const { return deferred_.Promise(); }
+
+  void Execute() override {
+    try {
+      AudioDecoder decoder(options_);
+      metadata_ = decoder.load_file(path_);
+      samples_ = decoder.get_samples();
+    } catch (const std::exception &error) {
+      SetError(error.what());
+    }
+  }
+
+  void OnOK() override {
+    Napi::Object result = Napi::Object::New(Env());
+    result.Set("metadata", MetadataToJs(Env(), metadata_));
+    result.Set("samples", SamplesToJs(Env(), samples_));
+    deferred_.Resolve(result);
+  }
+
+  void OnError(const Napi::Error &error) override { deferred_.Reject(error.Value()); }
+
+private:
+  Napi::Promise::Deferred deferred_;
+  std::string path_;
+  AudioStreamOptions options_;
+  Metadata metadata_;
+  std::vector<std::vector<float>> samples_;
+};
+
+Napi::Value LoadAsync(const Napi::CallbackInfo &info) {
+  Napi::Env env = info.Env();
+  if (info.Length() < 1 || !info[0].IsString()) {
+    Napi::TypeError::New(env, "String expected for path")
+        .ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
+
+  AudioStreamOptions options;
+  if (info.Length() > 1 && info[1].IsObject()) {
+    Napi::Object object = info[1].As<Napi::Object>();
+    if (object.Has("outputSampleRate"))
+      options.output_sample_rate = object.Get("outputSampleRate").As<Napi::Number>().Int32Value();
+    if (object.Has("outputNumChannels"))
+      options.output_num_channels = object.Get("outputNumChannels").As<Napi::Number>().Int32Value();
+  }
+
+  auto *worker = new LoadAsyncWorker(
+      env, info[0].As<Napi::String>().Utf8Value(), options);
+  Napi::Promise promise = worker->Promise();
+  worker->Queue();
+  return promise;
 }
 
 /**
@@ -419,6 +547,12 @@ Napi::Object InitAll(Napi::Env env, Napi::Object exports) {
   exports.Set("setLogLevel", Napi::Function::New(env, SetLogLevel));
   exports.Set("listAudioDevices", Napi::Function::New(env, ListAudioDevices));
   exports.Set("load", Napi::Function::New(env, Load));
+  exports.Set("loadAsync", Napi::Function::New(env, LoadAsync));
+  exports.Set("getSupportedDecoders", Napi::Function::New(env, GetSupportedDecoders));
+  exports.Set("getSupportedEncoders", Napi::Function::New(env, GetSupportedEncoders));
+  exports.Set("getSupportedInputFormats", Napi::Function::New(env, GetSupportedInputFormats));
+  exports.Set("getSupportedOutputFormats", Napi::Function::New(env, GetSupportedOutputFormats));
+  exports.Set("save", Napi::Function::New(env, Save));
   exports.Set("getWaveform", Napi::Function::New(env, GetWaveform));
 
   // Classes

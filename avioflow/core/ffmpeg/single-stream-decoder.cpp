@@ -5,6 +5,8 @@
 #include <functional>
 #include <cstring>
 #include <cmath>
+#include <limits>
+#include <new>
 
 namespace avioflow
 {
@@ -98,14 +100,31 @@ namespace avioflow
 
   SingleStreamDecoder::SingleStreamDecoder(const AudioStreamOptions &options)
       : packet_(av_packet_alloc()), frame_(av_frame_alloc()),
-        converted_frame_(av_frame_alloc()), options_(options) {}
+        converted_frame_(av_frame_alloc()), options_(options) {
+    validate_options(options_);
+    if (!packet_ || !frame_ || !converted_frame_) {
+      throw std::bad_alloc();
+    }
+  }
+
+  void SingleStreamDecoder::validate_options(const AudioStreamOptions &options)
+  {
+    if (options.output_sample_rate && *options.output_sample_rate <= 0)
+      throw std::invalid_argument("output_sample_rate must be greater than zero");
+    if (options.output_num_channels && *options.output_num_channels <= 0)
+      throw std::invalid_argument("output_num_channels must be greater than zero");
+    if (options.input_sample_rate && *options.input_sample_rate <= 0)
+      throw std::invalid_argument("input_sample_rate must be greater than zero");
+    if (options.input_channels && *options.input_channels <= 0)
+      throw std::invalid_argument("input_channels must be greater than zero");
+    if (options.input_format && options.input_format->empty())
+      throw std::invalid_argument("input_format must not be empty");
+  }
 
   void SingleStreamDecoder::load_file(const std::string &source)
   {
     if (mode_ != Mode::None)
       throw std::runtime_error("Decoder already initialized");
-    mode_ = Mode::File;
-
 #ifdef AVIOFLOW_HAS_WASAPI
     if (source == "wasapi_loopback")
     {
@@ -121,6 +140,7 @@ namespace avioflow
       metadata_.num_samples = 0;
       
       wasapi_handler_->start_capture();
+      mode_ = Mode::Offline;
       return;
     }
 #endif
@@ -134,21 +154,23 @@ namespace avioflow
       fmt_ctx_.reset(AvioContextHandler::open_url(source));
     }
     setup_decoder();
+    mode_ = Mode::Offline;
   }
 
   void SingleStreamDecoder::load_buffer(const uint8_t *data, size_t size)
   {
     if (mode_ != Mode::None)
       throw std::runtime_error("Decoder already initialized");
-    mode_ = Mode::File;
-
+    if (!data && size != 0)
+      throw std::invalid_argument("Buffer data must not be null when size is non-zero");
     fmt_ctx_.reset(AvioContextHandler::open_memory(data, size, options_));
     setup_decoder();
+    mode_ = Mode::Offline;
   }
 
   void SingleStreamDecoder::feed(const uint8_t *data, size_t size)
   {
-    if (mode_ == Mode::File)
+    if (mode_ == Mode::Offline)
     {
       throw std::runtime_error("Cannot feed data: decoder loaded in offline mode");
     }
@@ -156,6 +178,11 @@ namespace avioflow
     {
       throw std::runtime_error("Cannot feed data: stream input already flushed");
     }
+
+    if (!data && size != 0)
+      throw std::invalid_argument("Feed data must not be null when size is non-zero");
+    if (size == 0)
+      return;
 
     // Add data to buffer
     {
@@ -172,7 +199,7 @@ namespace avioflow
 
   void SingleStreamDecoder::flush()
   {
-    if (mode_ == Mode::File)
+    if (mode_ == Mode::Offline)
     {
       throw std::runtime_error("Cannot flush stream: decoder loaded in offline mode");
     }
@@ -224,9 +251,12 @@ namespace avioflow
                                                      {
         std::lock_guard<std::mutex> lock(buffer_mtx_);
         if (stream_read_offset_ >= push_buffer_.size()) return input_finished_ ? 0 : -1;
-        int read = std::min(static_cast<int>(push_buffer_.size() - stream_read_offset_), buf_size);
-        std::memcpy(buf, push_buffer_.data() + stream_read_offset_, read);
-        stream_read_offset_ += static_cast<size_t>(read);
+        const size_t requested = buf_size > 0 ? static_cast<size_t>(buf_size) : 0;
+        const size_t read_size = std::min(
+            push_buffer_.size() - stream_read_offset_, requested);
+        const int read = static_cast<int>(read_size);
+        std::memcpy(buf, push_buffer_.data() + stream_read_offset_, read_size);
+        stream_read_offset_ += read_size;
         return read; },
                                                      options_));
     }
@@ -303,10 +333,10 @@ namespace avioflow
     AVSampleFormat src_sample_format = static_cast<AVSampleFormat>(frame->format);
     int out_rate = src_sample_rate;
     if (options_.output_sample_rate.has_value() &&
-        options_.output_sample_rate.value() >= 0) {
+        options_.output_sample_rate.value() > 0) {
       out_rate = options_.output_sample_rate.value();
     }
-    AVChannelLayout out_layout;
+    AVChannelLayout out_layout{};
     if (options_.output_num_channels.has_value() &&
         options_.output_num_channels.value() > 0) {
       av_channel_layout_default(&out_layout, options_.output_num_channels.value());
@@ -359,7 +389,7 @@ namespace avioflow
     {
       int out_rate = frame_->sample_rate;
       if (options_.output_sample_rate.has_value() &&
-          options_.output_sample_rate.value() >= 0) {
+          options_.output_sample_rate.value() > 0) {
         out_rate = options_.output_sample_rate.value();
       }
       int out_samples = calculate_output_samples(frame_->nb_samples, frame_->sample_rate, out_rate);
@@ -436,7 +466,9 @@ namespace avioflow
     {
       std::lock_guard<std::mutex> lock(buffer_mtx_);
       const size_t bytes_per_frame = static_cast<size_t>(bytes_per_sample * channels);
-      samples = static_cast<int>(push_buffer_.size() / bytes_per_frame);
+      const size_t available_samples = push_buffer_.size() / bytes_per_frame;
+      samples = static_cast<int>(std::min(
+          available_samples, static_cast<size_t>(std::numeric_limits<int>::max())));
       if (samples <= 0)
       {
         if (input_finished_)
@@ -657,13 +689,14 @@ namespace avioflow
 
       if (result.empty())
       {
-        result.resize(f->ch_layout.nb_channels);
+        result.resize(static_cast<size_t>(f->ch_layout.nb_channels));
       }
 
       for (int c = 0; c < f->ch_layout.nb_channels; ++c)
       {
         const float *channel_data = reinterpret_cast<const float *>(f->data[c]);
-        result[c].insert(result[c].end(), channel_data,
+        const size_t channel = static_cast<size_t>(c);
+        result[channel].insert(result[channel].end(), channel_data,
                               channel_data + f->nb_samples);
       }
     }

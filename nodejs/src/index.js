@@ -130,6 +130,12 @@ if (!addon) {
 export const setLogLevel = addon.setLogLevel;
 export const listAudioDevices = addon.listAudioDevices;
 export const load = addon.load;
+export const loadAsync = addon.loadAsync;
+export const getSupportedDecoders = addon.getSupportedDecoders;
+export const getSupportedEncoders = addon.getSupportedEncoders;
+export const getSupportedInputFormats = addon.getSupportedInputFormats;
+export const getSupportedOutputFormats = addon.getSupportedOutputFormats;
+export const save = addon.save;
 export const getWaveform = addon.getWaveform;
 export const AudioDecoder = addon.AudioDecoder;
 

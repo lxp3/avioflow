@@ -162,6 +162,7 @@ class AudioDecoder:
     def __init__(
         self,
         output_sample_rate: Optional[int] = None,
+        output_num_channels: Optional[int] = None,
         input_sample_rate: Optional[int] = None,
         input_channels: Optional[int] = None,
         input_format: Optional[str] = None
@@ -171,7 +172,9 @@ class AudioDecoder:
 
         Args:
             output_sample_rate (int, optional): Target output sample rate in Hz.
-                If not specified or negative, uses source sample rate.
+                If not specified, uses source sample rate. Must be positive.
+            output_num_channels (int, optional): Target output channel count.
+                If not specified, uses the source channel count. Must be positive.
             input_sample_rate (int, optional): Source sample rate for raw PCM streaming.
                 Required for stream mode with raw PCM formats.
             input_channels (int, optional): Source channel count for raw PCM streaming.
@@ -193,8 +196,6 @@ class AudioDecoder:
             source: Audio source, one of:
                 - str: File path or URL
                 - pathlib.Path: File path object
-                - bytes/bytearray/memoryview: Full encoded audio bytes
-                - io.BytesIO: In-memory encoded audio bytes
                 - "wasapi_loopback": Windows system audio capture
                 - "audio=DeviceName": Microphone/input device
 

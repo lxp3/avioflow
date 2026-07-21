@@ -236,7 +236,7 @@ void SingleStreamEncoder::setup_output(const std::string &path,
 
 void SingleStreamEncoder::setup_resampler() {
   SwrContext *swr = nullptr;
-  AVChannelLayout input_layout;
+  AVChannelLayout input_layout{};
   av_channel_layout_default(&input_layout, input_channels_);
   if (input_layout.nb_channels <= 0) {
     throw std::runtime_error("Could not initialize input channel layout");
@@ -284,8 +284,11 @@ void SingleStreamEncoder::encode_chunk(const std::vector<std::vector<float>> &sa
                  "Could not make source frame writable");
 
   for (int channel = 0; channel < input_channels_; ++channel) {
-    std::copy_n(samples[channel].data() + start_sample, num_samples,
-                reinterpret_cast<float *>(src_frame_->extended_data[channel]));
+    const size_t channel_index = static_cast<size_t>(channel);
+    const size_t start = static_cast<size_t>(start_sample);
+    const size_t count = static_cast<size_t>(num_samples);
+    std::copy_n(samples[channel_index].data() + start, count,
+                reinterpret_cast<float *>(src_frame_->extended_data[channel_index]));
   }
 
   AVFrame *frame_to_send = src_frame_.get();

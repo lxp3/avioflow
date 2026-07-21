@@ -13,7 +13,7 @@ namespace avioflow
       if (channels <= 0)
         return;
 
-      AVChannelLayout layout;
+      AVChannelLayout layout{};
       av_channel_layout_default(&layout, channels);
 
       char layout_name[128] = {};
@@ -66,6 +66,7 @@ namespace avioflow
     avio_ctx->seekable = (seek != nullptr) ? AVIO_SEEKABLE_NORMAL : 0;
 
     fmt_ctx->pb = avio_ctx;
+    fmt_ctx->flags |= AVFMT_FLAG_CUSTOM_IO;
     
     // Set probesize BEFORE avformat_open_input
     // For streaming mode (no seek), use small probesize for low latency
@@ -86,13 +87,23 @@ namespace avioflow
 
     // Set format-specific options if provided (crucial for raw PCM)
     AVDictionary *format_opts = nullptr;
-    if (options.input_sample_rate.has_value())
-    {
-      av_dict_set_int(&format_opts, "sample_rate", options.input_sample_rate.value(), 0);
-    }
-    if (options.input_channels.has_value())
-    {
-      set_channel_layout_option(&format_opts, options.input_channels.value());
+    try {
+      if (options.input_sample_rate.has_value())
+      {
+        check_av_error(av_dict_set_int(&format_opts, "sample_rate",
+                                      options.input_sample_rate.value(), 0),
+                       "Could not set input sample rate");
+      }
+      if (options.input_channels.has_value())
+      {
+        set_channel_layout_option(&format_opts, options.input_channels.value());
+      }
+    } catch (...) {
+      av_dict_free(&format_opts);
+      av_freep(&avio_ctx->buffer);
+      avio_context_free(&avio_ctx);
+      avformat_free_context(fmt_ctx);
+      throw;
     }
 
     // Attempt to open input using the custom I/O.
@@ -122,11 +133,11 @@ namespace avioflow
                                                    size_t size,
                                                    const AudioStreamOptions &options)
   {
+    if (!data && size != 0) {
+      throw std::invalid_argument("Memory input data must not be null when size is non-zero");
+    }
     // Copy data to ensure it outlives the decoder
-    MemoryContext *m_ctx = new MemoryContext{
-        std::vector<uint8_t>(data, data + size),
-        0
-    };
+    MemoryContext *m_ctx = new MemoryContext(data, size);
     try
     {
       return create_avio_context(static_cast<void*>(m_ctx), 
@@ -148,14 +159,16 @@ namespace avioflow
         return AVERROR_EOF;
     }
     
-    size_t available = m_ctx->data.size() - m_ctx->pos;
-    int read = std::min(static_cast<int>(available), buf_size);
+    const size_t available = m_ctx->data.size() - m_ctx->pos;
+    const size_t requested = buf_size > 0 ? static_cast<size_t>(buf_size) : 0;
+    const int read = static_cast<int>(std::min(available, requested));
     
     if (read <= 0)
       return AVERROR_EOF;
 
-    std::memcpy(buf, m_ctx->data.data() + m_ctx->pos, read);
-    m_ctx->pos += read;
+    const size_t read_size = static_cast<size_t>(read);
+    std::memcpy(buf, m_ctx->data.data() + m_ctx->pos, read_size);
+    m_ctx->pos += read_size;
     return read;
   }
 
