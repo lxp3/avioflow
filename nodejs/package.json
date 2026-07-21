@@ -1,6 +1,6 @@
 {
   "name": "avioflow",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "High-performance audio decoding and device discovery library using FFmpeg",
   "author": "lxp3",
   "license": "MIT",
@@ -44,12 +44,12 @@
     "prebuild": "prebuildify --napi --strip --tag-libc"
   },
   "optionalDependencies": {
-    "@lxp3/darwin-arm64": "0.5.1",
-    "@lxp3/darwin-x64": "0.5.1",
-    "@lxp3/linux-arm64": "0.5.1",
-    "@lxp3/linux-x64": "0.5.1",
-    "@lxp3/win32-arm64": "0.5.1",
-    "@lxp3/win32-x64": "0.5.1"
+    "@lxp3/darwin-arm64": "0.5.2",
+    "@lxp3/darwin-x64": "0.5.2",
+    "@lxp3/linux-arm64": "0.5.2",
+    "@lxp3/linux-x64": "0.5.2",
+    "@lxp3/win32-arm64": "0.5.2",
+    "@lxp3/win32-x64": "0.5.2"
   },
   "devDependencies": {
     "cmake-js": "^7.3.0",
