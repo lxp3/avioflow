@@ -40,6 +40,35 @@ int main() {
         },
         "zero output sample rate");
 
+    expect_exception(
+        [] {
+          AudioStreamOptions options;
+          options.output_num_channels = 0;
+          AudioDecoder decoder(options);
+        },
+        "zero output channel count");
+
+    expect_exception(
+        [] {
+          AudioStreamOptions options;
+          options.output_sample_rate = -2;
+          AudioDecoder decoder(options);
+        },
+        "output sample rate below -1");
+
+    expect_exception(
+        [] {
+          AudioStreamOptions options;
+          options.output_num_channels = -2;
+          AudioDecoder decoder(options);
+        },
+        "output channel count below -1");
+
+    AudioStreamOptions passthrough_options;
+    passthrough_options.output_sample_rate = -1;
+    passthrough_options.output_num_channels = -1;
+    AudioDecoder passthrough_decoder(passthrough_options);
+
     AudioDecoder buffer_decoder;
     expect_exception(
         [&] { buffer_decoder.load_buffer(nullptr, 1); },

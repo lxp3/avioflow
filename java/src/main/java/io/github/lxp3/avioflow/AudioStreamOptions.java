@@ -7,11 +7,13 @@ public final class AudioStreamOptions {
     Integer inputChannels;
     String inputFormat;
 
+    /** Sets the target sample rate; -1 preserves the source sample rate. */
     public AudioStreamOptions outputSampleRate(int outputSampleRate) {
         this.outputSampleRate = outputSampleRate;
         return this;
     }
 
+    /** Sets the target channel count; -1 preserves the source channel count. */
     public AudioStreamOptions outputNumChannels(int outputNumChannels) {
         this.outputNumChannels = outputNumChannels;
         return this;

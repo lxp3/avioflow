@@ -252,9 +252,11 @@ PYBIND11_MODULE(_avioflow, m) {
 
     // Quick offline loading helper
     m.def("load", [](py::object source,
-                     std::optional<int> output_sample_rate) {
+                     std::optional<int> output_sample_rate,
+                     std::optional<int> output_num_channels) {
         AudioStreamOptions opts;
         opts.output_sample_rate = output_sample_rate;
+        opts.output_num_channels = output_num_channels;
         
         AudioDecoder decoder(opts);
         
@@ -268,6 +270,7 @@ PYBIND11_MODULE(_avioflow, m) {
     },
     py::arg("source"),
     py::arg("output_sample_rate") = py::none(),
+    py::arg("output_num_channels") = py::none(),
     R"pbdoc(
         Load an audio file and decode all samples in one call.
         
@@ -278,7 +281,9 @@ PYBIND11_MODULE(_avioflow, m) {
         Args:
             source (str or bytes): Path to audio file, URL, or audio file bytes.
             output_sample_rate (int, optional): Target sample rate in Hz.
-                If None or negative, uses source sample rate.
+                Use -1 or None to preserve the source sample rate.
+            output_num_channels (int, optional): Target channel count.
+                Use -1 or None to preserve the source channel count.
         
         Returns:
             tuple[Metadata, numpy.ndarray]: A tuple containing:
@@ -360,9 +365,9 @@ PYBIND11_MODULE(_avioflow, m) {
         
         Args:
             output_sample_rate (int, optional): Target output sample rate in Hz.
-                If not specified, uses source sample rate. Must be positive.
+                Use -1 or None to preserve the source sample rate.
             output_num_channels (int, optional): Target output channel count.
-                If not specified, uses source channel count. Must be positive.
+                Use -1 or None to preserve the source channel count.
             input_sample_rate (int, optional): Source sample rate for raw PCM streaming.
                 Required for stream mode with raw PCM formats.
             input_channels (int, optional): Source channel count for raw PCM streaming.

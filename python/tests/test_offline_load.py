@@ -226,9 +226,9 @@ def test_load_with_resampling():
     print(f"  Time: {(time.time() - start) * 1000:.1f}ms")
 
 
-def test_load_with_negative_output_sample_rate():
-    """Test: output_sample_rate=-1 disables sample-rate resampling."""
-    print("\n=== Test: avioflow.load() with output_sample_rate=-1 ===")
+def test_load_with_passthrough_output_options():
+    """Test: -1 preserves source sample rate and channel count."""
+    print("\n=== Test: avioflow.load() with passthrough output options ===")
 
     if not os.path.exists(WAV_PATH):
         print(f"  Skip: File not found at {WAV_PATH}")
@@ -238,14 +238,19 @@ def test_load_with_negative_output_sample_rate():
         audio_bytes = f.read()
 
     meta_default, samples_default = avioflow.load(audio_bytes)
-    meta_passthrough, samples_passthrough = avioflow.load(audio_bytes, output_sample_rate=-1)
+    meta_passthrough, samples_passthrough = avioflow.load(
+        audio_bytes,
+        output_sample_rate=-1,
+        output_num_channels=-1,
+    )
 
     print(f"  Default shape: {samples_default.shape}")
     print(f"  Passthrough shape: {samples_passthrough.shape}")
 
-    assert meta_passthrough.sample_rate == meta_default.sample_rate, "Metadata sample rate should remain source sample rate"
-    assert samples_passthrough.shape == samples_default.shape, "Negative sample rate should preserve output shape"
-    assert np.allclose(samples_passthrough, samples_default), "Negative sample rate should match default decoding"
+    assert meta_passthrough.sample_rate == meta_default.sample_rate, "-1 should preserve source sample rate"
+    assert meta_passthrough.num_channels == meta_default.num_channels, "-1 should preserve source channel count"
+    assert samples_passthrough.shape == samples_default.shape, "-1 should preserve output shape"
+    assert np.allclose(samples_passthrough, samples_default), "-1 should match default decoding"
 
 
 def test_info_metadata():
@@ -309,7 +314,7 @@ def main():
         test_decoder_load_buffer_with_inputs()
         test_load_with_buffer_inputs()
         test_load_with_resampling()
-        test_load_with_negative_output_sample_rate()
+        test_load_with_passthrough_output_options()
         test_invalid_info_input_type()
 
         # New tests

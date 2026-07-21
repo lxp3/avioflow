@@ -36,9 +36,9 @@ export interface DeviceInfo {
 
 /** Options for AudioDecoder constructor */
 export interface AudioDecoderOptions {
-    /** Target output sample rate in Hz. If not specified, uses source sample rate. */
+    /** Target output sample rate in Hz. Use -1 or omit to preserve the source rate. */
     outputSampleRate?: number;
-    /** Target number of output channels. If not specified, uses source channel count. */
+    /** Target output channels. Use -1 or omit to preserve the source channel count. */
     outputNumChannels?: number;
     /** Source sample rate for raw PCM streaming. Required for stream mode with raw PCM. */
     inputSampleRate?: number;

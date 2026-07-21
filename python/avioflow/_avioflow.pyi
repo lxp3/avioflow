@@ -73,7 +73,8 @@ def info(source: SourceInput) -> "Metadata":
 
 def load(
     source: SourceInput,
-    output_sample_rate: Optional[int] = None
+    output_sample_rate: Optional[int] = None,
+    output_num_channels: Optional[int] = None
 ) -> Tuple["Metadata", np.ndarray]:
     """
     Load an audio file and decode all samples in one call.
@@ -85,7 +86,9 @@ def load(
     Args:
         source (str, PathLike, bytes-like, or BytesIO): Path/URL or encoded audio bytes.
         output_sample_rate (int, optional): Target sample rate in Hz.
-            If None or negative, uses source sample rate.
+            Use -1 or None to preserve the source sample rate.
+        output_num_channels (int, optional): Target channel count.
+            Use -1 or None to preserve the source channel count.
 
     Returns:
         tuple[Metadata, numpy.ndarray]: A tuple containing:
@@ -172,9 +175,9 @@ class AudioDecoder:
 
         Args:
             output_sample_rate (int, optional): Target output sample rate in Hz.
-                If not specified, uses source sample rate. Must be positive.
+                Use -1 or None to preserve the source sample rate.
             output_num_channels (int, optional): Target output channel count.
-                If not specified, uses the source channel count. Must be positive.
+                Use -1 or None to preserve the source channel count.
             input_sample_rate (int, optional): Source sample rate for raw PCM streaming.
                 Required for stream mode with raw PCM formats.
             input_channels (int, optional): Source channel count for raw PCM streaming.

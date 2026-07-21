@@ -16,7 +16,9 @@ export interface Metadata {
 
 /** Decode options */
 export interface DecodeOptions {
+    /** Target output sample rate; -1 or omitted preserves the source rate. */
     outputSampleRate?: number;
+    /** Target output channels; -1 or omitted preserves the source channel count. */
     outputNumChannels?: number;
 }
 

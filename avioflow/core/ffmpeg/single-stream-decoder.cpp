@@ -109,10 +109,14 @@ namespace avioflow
 
   void SingleStreamDecoder::validate_options(const AudioStreamOptions &options)
   {
-    if (options.output_sample_rate && *options.output_sample_rate <= 0)
-      throw std::invalid_argument("output_sample_rate must be greater than zero");
-    if (options.output_num_channels && *options.output_num_channels <= 0)
-      throw std::invalid_argument("output_num_channels must be greater than zero");
+    if (options.output_sample_rate &&
+        (*options.output_sample_rate == 0 || *options.output_sample_rate < -1))
+      throw std::invalid_argument(
+          "output_sample_rate must be -1 or greater than zero");
+    if (options.output_num_channels &&
+        (*options.output_num_channels == 0 || *options.output_num_channels < -1))
+      throw std::invalid_argument(
+          "output_num_channels must be -1 or greater than zero");
     if (options.input_sample_rate && *options.input_sample_rate <= 0)
       throw std::invalid_argument("input_sample_rate must be greater than zero");
     if (options.input_channels && *options.input_channels <= 0)
