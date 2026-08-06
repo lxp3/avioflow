@@ -1,6 +1,7 @@
 #include "avioflow-cxx-api.h"
 #include "metadata.h"
 #include <jni.h>
+#include <cmath>
 #include <cstdint>
 #include <exception>
 #include <string>
@@ -409,9 +410,14 @@ Java_io_github_lxp3_avioflow_AudioDecoder_nativeFlush(JNIEnv *env, jclass, jlong
 }
 
 extern "C" JNIEXPORT jobjectArray JNICALL
-Java_io_github_lxp3_avioflow_AudioDecoder_nativeGetSamples(JNIEnv *env, jclass, jlong handle) {
+Java_io_github_lxp3_avioflow_AudioDecoder_nativeGetSamples(JNIEnv *env, jclass, jlong handle,
+                                                            jdouble start_seconds,
+                                                            jdouble stop_seconds) {
   try {
-    return to_float_2d_array(env, decoder_from_handle(handle)->get_samples());
+    std::optional<double> stop = std::isnan(stop_seconds)
+        ? std::nullopt
+        : std::optional<double>(stop_seconds);
+    return to_float_2d_array(env, decoder_from_handle(handle)->get_samples(start_seconds, stop));
   } catch (const std::exception &error) {
     throw_avioflow(env, error);
     return nullptr;

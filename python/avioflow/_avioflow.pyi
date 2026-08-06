@@ -220,16 +220,29 @@ class AudioDecoder:
         """Load complete encoded audio bytes and return metadata."""
         ...
 
-    def get_samples(self) -> np.ndarray:
+    def get_samples(self, start_seconds: float = 0.0,
+                    stop_seconds: Optional[float] = None) -> np.ndarray:
         """
-        Decode all currently available samples.
+        Decode samples in the half-open range [start_seconds, stop_seconds).
 
-        In File Mode: Decodes from current position to end of stream.
-        In Stream Mode: Decodes all buffered data until more input is required.
+        In File Mode: Decodes the requested range (or until EOF if stop_seconds
+        is None). May be called multiple times on the same decoder to fetch
+        different ranges; each call seeks independently.
+        In Stream Mode: start_seconds/stop_seconds are not supported; decodes
+        all buffered data until more input is required.
+
+        Args:
+            start_seconds: Range start in seconds (offline mode only). Defaults
+                to the beginning.
+            stop_seconds: Range end in seconds, exclusive (offline mode only).
+                Defaults to the end.
 
         Returns:
             numpy.ndarray: Audio samples with shape (channels, samples).
                 dtype is float32, values in range [-1.0, 1.0].
+
+        Raises:
+            ValueError: if start_seconds < 0 or stop_seconds <= start_seconds.
 
         Note:
             For large files, consider using frame-by-frame decoding (get_frame())
@@ -240,6 +253,7 @@ class AudioDecoder:
             >>> decoder.load_file("speech.wav")
             >>> samples = decoder.get_samples()
             >>> print(f"Shape: {samples.shape}")  # e.g., (1, 160000) for 10s mono
+            >>> ranged = decoder.get_samples(10.3, 20.3)
         """
         ...
 

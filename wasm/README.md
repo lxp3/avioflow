@@ -183,8 +183,8 @@ class AudioDecoder {
     // Decode next available frame
     getFrame(): Float32Array[] | null;
     
-    // Decode all remaining samples
-    getSamples(): Float32Array[];
+    // Decode samples in [startSeconds, stopSeconds). Pass -1 for stopSeconds to decode to the end.
+    getSamples(startSeconds?: number, stopSeconds?: number): Float32Array[];
     
     // Get audio metadata
     getMetadata(): Metadata;

@@ -124,9 +124,11 @@ void push_decoder_data(AudioDecoder& decoder, const py::object& data) {
     }
 }
 
-std::vector<std::vector<float>> get_decoder_samples(AudioDecoder& decoder) {
+std::vector<std::vector<float>> get_decoder_samples(AudioDecoder& decoder,
+                                                     double start_seconds,
+                                                     std::optional<double> stop_seconds) {
     py::gil_scoped_release release;
-    return decoder.get_samples();
+    return decoder.get_samples(start_seconds, stop_seconds);
 }
 
 py::array_t<float> samples_to_array(const std::vector<std::vector<float>>& samples) {
@@ -264,7 +266,7 @@ PYBIND11_MODULE(_avioflow, m) {
         open_decoder_source(decoder, source);
         
         Metadata meta = decoder.get_metadata();
-        auto samples = get_decoder_samples(decoder);
+        auto samples = get_decoder_samples(decoder, 0.0, std::nullopt);
 
         return py::make_tuple(meta, samples_to_array(samples));
     },
@@ -446,18 +448,33 @@ PYBIND11_MODULE(_avioflow, m) {
             Load a complete encoded audio buffer and return metadata.
         )pbdoc")
 
-        .def("get_samples", [](AudioDecoder& self) -> py::array_t<float> {
-            return samples_to_array(get_decoder_samples(self));
+        .def("get_samples", [](AudioDecoder& self, double start_seconds,
+                              std::optional<double> stop_seconds) -> py::array_t<float> {
+            return samples_to_array(get_decoder_samples(self, start_seconds, stop_seconds));
         },
+        py::arg("start_seconds") = 0.0,
+        py::arg("stop_seconds") = py::none(),
         R"pbdoc(
-            Decode all currently available samples.
+            Decode samples in the half-open range [start_seconds, stop_seconds).
 
-            In File Mode: Decodes from current position to end of stream.
-            In Stream Mode: Decodes all buffered data until more input is required.
+            In File Mode: Decodes the requested range (or until EOF if stop_seconds
+            is None). May be called multiple times on the same decoder to fetch
+            different ranges; each call seeks independently.
+            In Stream Mode: start_seconds/stop_seconds are not supported; decodes
+            all buffered data until more input is required.
+
+            Args:
+                start_seconds: Range start in seconds (offline mode only). Defaults
+                    to the beginning.
+                stop_seconds: Range end in seconds, exclusive (offline mode only).
+                    Defaults to the end.
 
             Returns:
                 numpy.ndarray: Audio samples with shape (channels, samples).
                     dtype is float32, values in range [-1.0, 1.0].
+
+            Raises:
+                ValueError: if start_seconds < 0 or stop_seconds <= start_seconds.
 
             Note:
                 For large files, consider using frame-by-frame decoding (get_frame())
@@ -467,6 +484,7 @@ PYBIND11_MODULE(_avioflow, m) {
                 >>> decoder = AudioDecoder(output_sample_rate=16000)
                 >>> decoder.load_file("speech.wav")
                 >>> samples = decoder.get_samples()
+                >>> ranged = decoder.get_samples(10.3, 20.3)
         )pbdoc")
 
         .def("feed", [](AudioDecoder& self, py::object data) {

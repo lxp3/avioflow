@@ -54,8 +54,11 @@ export declare class AudioDecoder {
     /** Decode next frame */
     getFrame(): Float32Array[] | null;
     
-    /** Drain currently available samples */
-    getSamples(): Float32Array[];
+    /**
+     * Decode samples in the half-open range [startSeconds, stopSeconds).
+     * Offline mode only. Pass -1 for stopSeconds to decode to the end.
+     */
+    getSamples(startSeconds?: number, stopSeconds?: number): Float32Array[];
     
     /** Get metadata */
     getMetadata(): Metadata;

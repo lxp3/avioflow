@@ -35,8 +35,16 @@ public final class AudioDecoder implements AutoCloseable {
     }
 
     public synchronized float[][] getSamples() {
+        return getSamples(0.0, Double.NaN);
+    }
+
+    /**
+     * Decode samples in the half-open range [startSeconds, stopSeconds).
+     * Offline mode only; pass {@link Double#NaN} for stopSeconds to decode to the end.
+     */
+    public synchronized float[][] getSamples(double startSeconds, double stopSeconds) {
         ensureOpen();
-        return nativeGetSamples(handle);
+        return nativeGetSamples(handle, startSeconds, stopSeconds);
     }
 
     public synchronized float[][] getFrame() {
@@ -79,7 +87,7 @@ public final class AudioDecoder implements AutoCloseable {
 
     private static native void nativeFlush(long handle);
 
-    private static native float[][] nativeGetSamples(long handle);
+    private static native float[][] nativeGetSamples(long handle, double startSeconds, double stopSeconds);
 
     private static native float[][] nativeGetFrame(long handle);
 

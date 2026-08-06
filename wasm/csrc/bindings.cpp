@@ -170,10 +170,14 @@ public:
     }
 
     /**
-     * @brief Decode all samples at once
+     * @brief Decode samples in the half-open range [startSeconds, stopSeconds).
+     * Offline mode only; stopSeconds defaults to the end (pass -1 for "unset").
      */
-    val getSamples() {
-        auto samples = decoder_.get_samples();
+    val getSamples(double startSeconds, double stopSeconds) {
+        std::optional<double> stop = stopSeconds >= 0.0
+            ? std::optional<double>(stopSeconds)
+            : std::nullopt;
+        auto samples = decoder_.get_samples(startSeconds, stop);
         return SamplesToJs(samples);
     }
 

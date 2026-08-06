@@ -520,7 +520,15 @@ private:
    */
   Napi::Value GetSamples(const Napi::CallbackInfo &info) {
     try {
-      auto samples = decoder->get_samples();
+      double start_seconds = 0.0;
+      std::optional<double> stop_seconds = std::nullopt;
+      if (info.Length() > 0 && info[0].IsNumber()) {
+        start_seconds = info[0].As<Napi::Number>().DoubleValue();
+      }
+      if (info.Length() > 1 && info[1].IsNumber()) {
+        stop_seconds = info[1].As<Napi::Number>().DoubleValue();
+      }
+      auto samples = decoder->get_samples(start_seconds, stop_seconds);
       return SamplesToJs(info.Env(), samples);
     } catch (const std::exception &e) {
       Napi::Error::New(info.Env(), e.what()).ThrowAsJavaScriptException();

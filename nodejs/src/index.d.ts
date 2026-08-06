@@ -153,10 +153,13 @@ export class AudioDecoder {
     getFrame(): Float32Array[] | null;
 
     /**
-     * Drain currently available samples.
+     * Decode samples in the half-open range [startSeconds, stopSeconds).
+     * Offline mode only; ignored in stream mode (drains all buffered data).
+     * @param startSeconds Range start in seconds. Defaults to the beginning.
+     * @param stopSeconds Range end in seconds, exclusive. Defaults to the end.
      * @returns Array of Float32Array (one per channel)
      */
-    getSamples(): Float32Array[];
+    getSamples(startSeconds?: number, stopSeconds?: number): Float32Array[];
 
     /**
      * Check if end of stream has been reached.
