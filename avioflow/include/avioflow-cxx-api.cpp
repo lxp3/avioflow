@@ -63,8 +63,9 @@ FrameData AudioDecoder::get_frame() {
           frame->nb_samples};
 }
 
-std::vector<std::vector<float>> AudioDecoder::get_samples() {
-  return impl_->decoder_.get_samples();
+std::vector<std::vector<float>> AudioDecoder::get_samples(
+    double start_seconds, std::optional<double> stop_seconds) {
+  return impl_->decoder_.get_samples(start_seconds, stop_seconds);
 }
 
 // --- Status ---

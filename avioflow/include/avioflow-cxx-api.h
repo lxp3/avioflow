@@ -2,6 +2,7 @@
 
 #include "metadata.h"
 #include <memory>
+#include <optional>
 #include <vector>
 
 namespace avioflow {
@@ -68,6 +69,13 @@ struct FrameData {
  * while (auto frame = decoder.get_frame()) {
  *   process(frame.data, frame.num_channels, frame.num_samples);
  * }
+ * @endcode
+ *
+ * Example (Decode only a time range, e.g. seconds 10.3 to 20.3):
+ * @code
+ * AudioDecoder decoder;
+ * decoder.load_file("audio.mp3");
+ * auto samples = decoder.get_samples(10.3, 20.3); // only the requested range
  * @endcode
  *
  * Example (Stream mode):
@@ -145,14 +153,25 @@ public:
   FrameData get_frame();
 
   /**
-   * @brief Decode all currently available samples.
+   * @brief Decode samples in the half-open range [start_seconds, stop_seconds).
    *
-   * In File Mode: Decodes until EOF.
-   * In Stream Mode: Decodes all buffered data until more input is required.
+   * In File Mode: decodes the requested range (or until EOF if stop_seconds
+   * is unset). May be called multiple times on the same decoder to fetch
+   * different ranges; each call seeks independently.
+   * In Stream Mode: start_seconds/stop_seconds are not supported; decodes all
+   * buffered data until more input is required.
    *
-   * @return All samples as vector[channel][sample]
+   * @param start_seconds Range start in seconds (offline mode only). Defaults
+   * to the beginning.
+   * @param stop_seconds Range end in seconds, exclusive (offline mode only).
+   * Defaults to the end.
+   * @throws std::invalid_argument if start_seconds < 0 or stop_seconds <=
+   * start_seconds
+   * @return Samples in the requested range as vector[channel][sample]
    */
-  std::vector<std::vector<float>> get_samples();
+  std::vector<std::vector<float>> get_samples(
+      double start_seconds = 0.0,
+      std::optional<double> stop_seconds = std::nullopt);
 
   // === Status ===
 

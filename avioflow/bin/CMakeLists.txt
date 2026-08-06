@@ -36,6 +36,9 @@ if(BUILD_TESTS)
     add_executable(ffmpeg-encoder-offline-save-test encoder-offline-save-test.cpp)
     target_link_libraries(ffmpeg-encoder-offline-save-test PRIVATE avioflow)
 
+    add_executable(ffmpeg-decoder-seek-test decoder-seek-test.cpp)
+    target_link_libraries(ffmpeg-decoder-seek-test PRIVATE avioflow)
+
     if(BUILD_TESTING)
         add_executable(ffmpeg-decoder-validation-test decoder-validation-test.cpp)
         target_link_libraries(ffmpeg-decoder-validation-test PRIVATE avioflow)
@@ -43,7 +46,8 @@ if(BUILD_TESTS)
         add_test(NAME decoder-validation COMMAND ffmpeg-decoder-validation-test)
         add_test(NAME decoder-online COMMAND ffmpeg-decoder-online-load-test)
         add_test(NAME decoder-resample COMMAND ffmpeg-decoder-resample-test)
-        set_tests_properties(decoder-online decoder-resample PROPERTIES
+        add_test(NAME decoder-seek COMMAND ffmpeg-decoder-seek-test)
+        set_tests_properties(decoder-online decoder-resample decoder-seek PROPERTIES
             WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}")
     endif()
 endif()

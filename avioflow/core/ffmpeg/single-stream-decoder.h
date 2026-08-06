@@ -39,8 +39,12 @@ namespace avioflow
     // WARNING: Data is only valid until the next read call
     AVFrame *get_frame();
 
-    // Decode all currently available samples
-    std::vector<std::vector<float>> get_samples();
+    // Decode samples in the half-open range [start_seconds, stop_seconds).
+    // Offline mode only. May be called multiple times on the same decoder to
+    // fetch different ranges (each call seeks independently). start_seconds
+    // defaults to the beginning; stop_seconds defaults to the end.
+    std::vector<std::vector<float>> get_samples(double start_seconds = 0.0,
+                                                std::optional<double> stop_seconds = std::nullopt);
 
     // === Status ===
 
@@ -59,6 +63,11 @@ namespace avioflow
     // Internal helpers
     void init_stream_context();
     void setup_decoder();
+    void seek_to(double start_seconds);
+    enum class TrimAction { Keep, Skip, Stop };
+    TrimAction trim_to_range(AVFrame *frame, double start_seconds,
+                             const std::optional<double> &stop_seconds);
+    AVFrame *decode_next_frame();
     AVFrame *read_raw_pcm_frame();
     void setup_resampler(AVFrame *frame);
     int calculate_output_samples(int src_samples, int src_rate, int dst_rate) const;

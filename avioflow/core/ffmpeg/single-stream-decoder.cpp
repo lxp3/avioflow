@@ -331,6 +331,16 @@ namespace avioflow
     resampler_initialized_ = false;
   }
 
+  void SingleStreamDecoder::seek_to(double start_seconds)
+  {
+    if (start_seconds <= 0.0)
+      return;
+    const int64_t ts = static_cast<int64_t>(start_seconds * AV_TIME_BASE);
+    check_av_error(av_seek_frame(fmt_ctx_.get(), -1, ts, AVSEEK_FLAG_BACKWARD),
+                   "Could not seek to start_seconds");
+    avcodec_flush_buffers(codec_ctx_.get());
+  }
+
   void SingleStreamDecoder::setup_resampler(AVFrame *frame)
   {
     int src_sample_rate = frame->sample_rate;
@@ -450,6 +460,51 @@ namespace avioflow
     }
   }
 
+  // Trims `frame` in place to the [start_seconds, stop_seconds) range, at sample
+  // accuracy. Must be called immediately after update_decoded_metadata() so
+  // total_samples_decoded_ reflects samples through the end of `frame`.
+  SingleStreamDecoder::TrimAction SingleStreamDecoder::trim_to_range(
+      AVFrame *frame, double start_seconds, const std::optional<double> &stop_seconds)
+  {
+    if (metadata_.sample_rate <= 0)
+      return TrimAction::Keep;
+
+    const int64_t frame_start = total_samples_decoded_ - frame->nb_samples;
+
+    if (start_seconds > 0.0)
+    {
+      const int64_t skip_until = static_cast<int64_t>(
+          std::llround(start_seconds * metadata_.sample_rate));
+      if (total_samples_decoded_ <= skip_until)
+        return TrimAction::Skip; // frame entirely before start_seconds
+
+      if (frame_start < skip_until)
+      {
+        const int trim = static_cast<int>(skip_until - frame_start);
+        for (int c = 0; c < frame->ch_layout.nb_channels; ++c)
+          frame->data[c] += trim * static_cast<int>(sizeof(float));
+        frame->nb_samples -= trim;
+      }
+    }
+
+    if (stop_seconds)
+    {
+      const int64_t stop_at = static_cast<int64_t>(
+          std::llround(stop_seconds.value() * metadata_.sample_rate));
+      if (frame_start >= stop_at)
+        return TrimAction::Stop; // fully past stop_seconds
+
+      if (total_samples_decoded_ > stop_at)
+      {
+        frame->nb_samples = static_cast<int>(stop_at - frame_start);
+        if (frame->nb_samples <= 0)
+          return TrimAction::Stop;
+      }
+    }
+
+    return TrimAction::Keep;
+  }
+
   AVFrame *SingleStreamDecoder::read_raw_pcm_frame()
   {
     if (!options_.input_format.has_value() ||
@@ -515,7 +570,9 @@ namespace avioflow
     return decoded;
   }
 
-  AVFrame *SingleStreamDecoder::get_frame()
+  AVFrame *SingleStreamDecoder::get_frame() { return decode_next_frame(); }
+
+  AVFrame *SingleStreamDecoder::decode_next_frame()
   {
     if (mode_ == Mode::Stream && is_raw_pcm_input_format(options_.input_format))
     {
@@ -599,7 +656,7 @@ namespace avioflow
         }
         return decoded;
       }
-      
+
       if (ret == AVERROR_EOF)
       {
         metadata_.num_samples = total_samples_decoded_;
@@ -682,14 +739,45 @@ namespace avioflow
     }
   }
 
-  std::vector<std::vector<float>> SingleStreamDecoder::get_samples()
+  std::vector<std::vector<float>> SingleStreamDecoder::get_samples(
+      double start_seconds, std::optional<double> stop_seconds)
   {
+    if (start_seconds < 0.0)
+      throw std::invalid_argument("start_seconds must be >= 0");
+    if (stop_seconds && *stop_seconds <= 0.0)
+      throw std::invalid_argument("stop_seconds must be greater than zero");
+    if (stop_seconds && *stop_seconds <= start_seconds)
+      throw std::invalid_argument("stop_seconds must be greater than start_seconds");
+
+    const bool has_range = start_seconds > 0.0 || stop_seconds.has_value();
+    if (has_range && mode_ != Mode::Offline)
+      throw std::runtime_error("start_seconds/stop_seconds require offline mode");
+
+    if (has_range)
+    {
+      seek_to(start_seconds);
+      total_samples_decoded_ = 0;
+      eof_reached_ = false;
+    }
+
     std::vector<std::vector<float>> result;
     while (true)
     {
-      auto *f = get_frame();
+      AVFrame *f = decode_next_frame();
       if (!f)
         break;
+
+      if (has_range && mode_ == Mode::Offline)
+      {
+        const TrimAction action = trim_to_range(f, start_seconds, stop_seconds);
+        if (action == TrimAction::Skip)
+          continue;
+        if (action == TrimAction::Stop)
+        {
+          eof_reached_ = true;
+          break;
+        }
+      }
 
       if (result.empty())
       {
