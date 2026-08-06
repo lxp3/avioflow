@@ -354,7 +354,7 @@ jobs:
           # sources the build script compiles.
           python3 scripts/vendor_rust_sources.py
 
-          # --allow-dirty is required because rust/native/ is generated and
-          # gitignored, so vendoring always leaves the working tree dirty.
+          # --allow-dirty is required because rust/native/ and rust/LICENSE are
+          # generated and gitignored, so vendoring leaves the tree dirty.
           cargo publish --manifest-path rust/Cargo.toml --allow-dirty --dry-run
           cargo publish --manifest-path rust/Cargo.toml --allow-dirty
