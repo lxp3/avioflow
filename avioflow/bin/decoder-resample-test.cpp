@@ -2,11 +2,23 @@
 // Tests cover: output sample rate conversion to common rates using get_samples()
 
 #include "avioflow-cxx-api.h"
-#include <cassert>
+#include <cstdlib>
+#include <iostream>
 #include <cmath>
 #include <fstream>
 #include <iostream>
 #include <algorithm>
+
+// assert() is compiled out in Release builds (NDEBUG), which would make this
+// test pass unconditionally. CHECK always evaluates and reports.
+#define CHECK(cond)                                                            \
+  do {                                                                         \
+    if (!(cond)) {                                                             \
+      std::cerr << "CHECK failed: " #cond " at " << __FILE__ << ":" << __LINE__ \
+                << std::endl;                                                   \
+      std::exit(1);                                                            \
+    }                                                                          \
+  } while (0)
 
 using namespace avioflow;
 
@@ -25,16 +37,17 @@ constexpr int EXPECTED_SAMPLES_32000 = 3118529;
 constexpr int EXPECTED_SAMPLES_44100 = 4297722;
 constexpr int EXPECTED_SAMPLES_48000 = 4677793;
 
-// Allow 1% tolerance for resampling variations
-constexpr double TOLERANCE = 0.01;
+// Only rounding of the rate ratio may move the count; the resampler tail is
+// drained at EOF, so a larger gap means samples are being dropped.
+constexpr int64_t SAMPLE_COUNT_TOLERANCE = 2;
 
 //=============================================================================
 // Helper: Check if sample count is within tolerance
 //=============================================================================
 bool is_within_tolerance(size_t actual, int expected)
 {
-    double ratio = static_cast<double>(actual) / expected;
-    return ratio > (1.0 - TOLERANCE) && ratio < (1.0 + TOLERANCE);
+    const int64_t diff = static_cast<int64_t>(actual) - expected;
+    return diff >= -SAMPLE_COUNT_TOLERANCE && diff <= SAMPLE_COUNT_TOLERANCE;
 }
 
 //=============================================================================
@@ -50,8 +63,8 @@ void test_resample_8000()
 
     // Verify source metadata unchanged
     const auto &meta = decoder.get_metadata();
-    assert(meta.sample_rate == ORIGINAL_SAMPLE_RATE);
-    assert(meta.num_channels == EXPECTED_NUM_CHANNELS);
+    CHECK(meta.sample_rate == ORIGINAL_SAMPLE_RATE);
+    CHECK(meta.num_channels == EXPECTED_NUM_CHANNELS);
 
     auto samples = decoder.get_samples();
     size_t num_samples = samples.empty() ? 0 : samples[0].size();
@@ -59,8 +72,8 @@ void test_resample_8000()
     std::cout << "sample_rate: " << meta.sample_rate << " -> " << TARGET_RATE 
               << ", num_samples: " << num_samples << ", diff: " << diff << std::endl;
 
-    assert((int)samples.size() == EXPECTED_NUM_CHANNELS);
-    assert(is_within_tolerance(num_samples, EXPECTED_SAMPLES_8000));
+    CHECK((int)samples.size() == EXPECTED_NUM_CHANNELS);
+    CHECK(is_within_tolerance(num_samples, EXPECTED_SAMPLES_8000));
 }
 
 //=============================================================================
@@ -81,7 +94,7 @@ void test_resample_16000()
     std::cout << "sample_rate: " << meta.sample_rate << " -> " << TARGET_RATE 
               << ", num_samples: " << num_samples << ", diff: " << diff << std::endl;
 
-    assert(is_within_tolerance(num_samples, EXPECTED_SAMPLES_16000));
+    CHECK(is_within_tolerance(num_samples, EXPECTED_SAMPLES_16000));
 }
 
 //=============================================================================
@@ -102,7 +115,7 @@ void test_resample_32000()
     std::cout << "sample_rate: " << meta.sample_rate << " -> " << TARGET_RATE 
               << ", num_samples: " << num_samples << ", diff: " << diff << std::endl;
 
-    assert(is_within_tolerance(num_samples, EXPECTED_SAMPLES_32000));
+    CHECK(is_within_tolerance(num_samples, EXPECTED_SAMPLES_32000));
 }
 
 //=============================================================================
@@ -123,7 +136,7 @@ void test_resample_44100()
     std::cout << "sample_rate: " << meta.sample_rate << " -> " << TARGET_RATE 
               << ", num_samples: " << num_samples << ", diff: " << diff << std::endl;
 
-    assert((int)num_samples == EXPECTED_SAMPLES_44100);
+    CHECK((int)num_samples == EXPECTED_SAMPLES_44100);
 }
 
 //=============================================================================
@@ -144,7 +157,7 @@ void test_resample_48000()
     std::cout << "sample_rate: " << meta.sample_rate << " -> " << TARGET_RATE 
               << ", num_samples: " << num_samples << ", diff: " << diff << std::endl;
 
-    assert(is_within_tolerance(num_samples, EXPECTED_SAMPLES_48000));
+    CHECK(is_within_tolerance(num_samples, EXPECTED_SAMPLES_48000));
 }
 
 //=============================================================================
@@ -161,8 +174,8 @@ void test_resample_audio_quality()
     auto samples = decoder.get_samples();
     size_t num_samples = samples.empty() ? 0 : samples[0].size();
 
-    assert((int)samples.size() == EXPECTED_NUM_CHANNELS);
-    assert(num_samples > 0);
+    CHECK((int)samples.size() == EXPECTED_NUM_CHANNELS);
+    CHECK(num_samples > 0);
 
     // Check first 1000 samples of each channel
     for (size_t c = 0; c < samples.size(); ++c)
@@ -171,9 +184,9 @@ void test_resample_audio_quality()
         {
             float sample = samples[c][i];
             (void)sample;
-            assert(!std::isnan(sample));
-            assert(!std::isinf(sample));
-            assert(sample >= -2.0f && sample <= 2.0f);
+            CHECK(!std::isnan(sample));
+            CHECK(!std::isinf(sample));
+            CHECK(sample >= -2.0f && sample <= 2.0f);
         }
     }
 }

@@ -72,6 +72,7 @@ namespace avioflow
     void setup_resampler(AVFrame *frame);
     int calculate_output_samples(int src_samples, int src_rate, int dst_rate) const;
     AVFrame *process_decoded_frame();
+    AVFrame *drain_resampler();
     void update_decoded_metadata(const AVFrame *frame);
     static void validate_options(const AudioStreamOptions &options);
 
@@ -91,6 +92,7 @@ namespace avioflow
     size_t stream_read_offset_ = 0;
     bool needs_resample_ = true;
     bool resampler_initialized_ = false;
+    bool resampler_drained_ = false;
     int64_t total_samples_decoded_ = 0;
 
 #ifdef AVIOFLOW_HAS_WASAPI

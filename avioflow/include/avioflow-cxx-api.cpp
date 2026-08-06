@@ -1,6 +1,7 @@
 #include "avioflow-cxx-api.h"
 #include "../core/ffmpeg/device-handler.h"
 #include "../core/ffmpeg/ffmpeg-common.h"
+#include "../core/ffmpeg/audio-resampler.h"
 #include "../core/ffmpeg/single-stream-decoder.h"
 #include "../core/ffmpeg/single-stream-encoder.h"
 
@@ -19,6 +20,13 @@ public:
   explicit Impl(const AudioWriteOptions &options) : encoder_(options) {}
 
   SingleStreamEncoder encoder_;
+};
+
+class AudioResampler::Impl {
+public:
+  explicit Impl(const AudioResampleOptions &options) : resampler_(options) {}
+
+  SingleStreamResampler resampler_;
 };
 
 // Constructor
@@ -148,6 +156,55 @@ void save_audio(const std::string &path,
                 const AudioWriteOptions &options) {
   AudioEncoder encoder(options);
   encoder.save(path, samples);
+}
+
+// --- AudioResampler ---
+
+AudioResampler::AudioResampler(const AudioResampleOptions &options)
+    : impl_(std::make_unique<Impl>(options)) {}
+
+AudioResampler::~AudioResampler() = default;
+
+AudioResampler::AudioResampler(AudioResampler &&) noexcept = default;
+
+AudioResampler &AudioResampler::operator=(AudioResampler &&) noexcept = default;
+
+std::vector<std::vector<float>>
+AudioResampler::process(const std::vector<std::vector<float>> &samples) {
+  return impl_->resampler_.process(samples);
+}
+
+std::vector<std::vector<float>> AudioResampler::flush() {
+  return impl_->resampler_.flush();
+}
+
+int AudioResampler::output_sample_rate() const {
+  return impl_->resampler_.output_sample_rate();
+}
+
+int AudioResampler::output_num_channels() const {
+  return impl_->resampler_.output_num_channels();
+}
+
+std::vector<std::vector<float>>
+resample(const std::vector<std::vector<float>> &samples,
+         int input_sample_rate, int output_sample_rate,
+         std::optional<int> output_num_channels) {
+  AudioResampleOptions options;
+  options.input_sample_rate = input_sample_rate;
+  options.output_sample_rate = output_sample_rate;
+  options.output_num_channels = output_num_channels;
+
+  AudioResampler resampler(options);
+  auto result = resampler.process(samples);
+  auto tail = resampler.flush();
+
+  if (result.empty())
+    return tail;
+
+  for (size_t c = 0; c < result.size() && c < tail.size(); ++c)
+    result[c].insert(result[c].end(), tail[c].begin(), tail[c].end());
+  return result;
 }
 
 } // namespace avioflow

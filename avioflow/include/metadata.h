@@ -32,6 +32,15 @@ struct AudioStreamOptions {
 };
 
 /**
+ * @brief Options for standalone resampling of in-memory planar float samples.
+ */
+struct AudioResampleOptions {
+  int input_sample_rate = 0;               ///< Required, must be > 0
+  int output_sample_rate = 0;              ///< Required, must be > 0
+  std::optional<int> output_num_channels;  ///< Defaults to the input channel count
+};
+
+/**
  * @brief Options for audio encoding and writing.
  */
 struct AVIOFLOW_API AudioWriteOptions {

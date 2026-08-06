@@ -214,6 +214,99 @@ AVIOFLOW_API void save_audio(const std::string &path,
                              const std::vector<std::vector<float>> &samples,
                              const AudioWriteOptions &options = {});
 
+/**
+ * @brief Stateful resampler for in-memory planar float samples.
+ *
+ * Keeps resampler state across calls, so feeding consecutive chunks produces
+ * output that joins seamlessly. Use this when audio arrives in pieces; for a
+ * single buffer you already hold in full, prefer the `resample()` helper.
+ *
+ * Input and output layout is planar float: samples[channel][sample].
+ *
+ * Example (chunked):
+ * @code
+ * AudioResampler resampler({.input_sample_rate = 44100,
+ *                           .output_sample_rate = 16000});
+ * std::vector<std::vector<float>> out(1);
+ * for (const auto &chunk : chunks) {
+ *   auto part = resampler.process(chunk);
+ *   for (size_t c = 0; c < part.size(); ++c)
+ *     out[c].insert(out[c].end(), part[c].begin(), part[c].end());
+ * }
+ * auto tail = resampler.flush(); // required, else the tail is lost
+ * @endcode
+ */
+class AVIOFLOW_API AudioResampler {
+public:
+  explicit AudioResampler(const AudioResampleOptions &options);
+  ~AudioResampler();
+
+  AudioResampler(const AudioResampler &) = delete;
+  AudioResampler &operator=(const AudioResampler &) = delete;
+
+  AudioResampler(AudioResampler &&) noexcept;
+  AudioResampler &operator=(AudioResampler &&) noexcept;
+
+  /**
+   * @brief Resample one chunk of planar float samples.
+   *
+   * The returned chunk may hold fewer samples than the rate ratio suggests,
+   * because the resampler buffers samples internally to keep filter continuity.
+   *
+   * @param samples Input as samples[channel][sample]; all channels must be
+   * the same length, and the channel count must not change between calls.
+   * @return Resampled samples as vector[channel][sample]
+   * @throws std::invalid_argument on ragged channels or a channel-count change
+   */
+  std::vector<std::vector<float>>
+  process(const std::vector<std::vector<float>> &samples);
+
+  /**
+   * @brief Drain samples still buffered inside the resampler.
+   *
+   * Call once after the final process() call. Skipping this drops the last
+   * few milliseconds of audio.
+   *
+   * @return Remaining samples as vector[channel][sample]
+   */
+  std::vector<std::vector<float>> flush();
+
+  /// Output sample rate the resampler was configured with.
+  int output_sample_rate() const;
+
+  /// Output channel count. Zero until the first process() call determines it.
+  int output_num_channels() const;
+
+private:
+  class Impl;
+  std::unique_ptr<Impl> impl_;
+};
+
+/**
+ * @brief Resample a complete planar float buffer in one call.
+ *
+ * Handles the internal flush, so no samples are lost. For audio arriving in
+ * chunks use AudioResampler instead, since calling this per chunk would reset
+ * filter state and introduce discontinuities at every boundary.
+ *
+ * Example:
+ * @code
+ * auto out = resample(samples, 44100, 16000);        // keep channel count
+ * auto mono = resample(samples, 44100, 16000, 1);    // also downmix to mono
+ * @endcode
+ *
+ * @param samples Input as samples[channel][sample]
+ * @param input_sample_rate Source sample rate in Hz, must be > 0
+ * @param output_sample_rate Target sample rate in Hz, must be > 0
+ * @param output_num_channels Target channel count; defaults to the input count
+ * @return Resampled samples as vector[channel][sample]
+ * @throws std::invalid_argument on non-positive rates or ragged channels
+ */
+AVIOFLOW_API std::vector<std::vector<float>>
+resample(const std::vector<std::vector<float>> &samples,
+         int input_sample_rate, int output_sample_rate,
+         std::optional<int> output_num_channels = std::nullopt);
+
 // Device Manager for hardware discovery
 class AVIOFLOW_API DeviceManager {
 public:

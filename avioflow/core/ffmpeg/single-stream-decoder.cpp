@@ -329,10 +329,12 @@ namespace avioflow
     total_samples_decoded_ = 0;
     eof_reached_ = false;
     resampler_initialized_ = false;
+    resampler_drained_ = false;
   }
 
   void SingleStreamDecoder::seek_to(double start_seconds)
   {
+    resampler_drained_ = false;
     if (start_seconds <= 0.0)
       return;
     const int64_t ts = static_cast<int64_t>(start_seconds * AV_TIME_BASE);
@@ -446,6 +448,48 @@ namespace avioflow
     }
   }
 
+  // Drains samples still buffered inside swresample at end of stream. Without
+  // this the resampler's internal delay (a few dozen samples at typical rate
+  // ratios) is silently dropped from the tail of the decoded output.
+  AVFrame *SingleStreamDecoder::drain_resampler()
+  {
+    if (resampler_drained_ || !needs_resample_ || !swr_ctx_)
+      return nullptr;
+    resampler_drained_ = true;
+
+    const int out_rate = metadata_.sample_rate > 0 ? metadata_.sample_rate
+                                                   : converted_frame_->sample_rate;
+    if (out_rate <= 0)
+      return nullptr;
+
+    const int64_t delay = swr_get_delay(swr_ctx_.get(), out_rate);
+    if (delay <= 0)
+      return nullptr;
+
+    const int out_samples = static_cast<int>(delay);
+    const int out_channels = converted_frame_->ch_layout.nb_channels > 0
+                                 ? converted_frame_->ch_layout.nb_channels
+                                 : metadata_.num_channels;
+    if (out_channels <= 0)
+      return nullptr;
+
+    av_frame_unref(converted_frame_.get());
+    converted_frame_->format = output_sample_format_;
+    converted_frame_->sample_rate = out_rate;
+    av_channel_layout_default(&converted_frame_->ch_layout, out_channels);
+    converted_frame_->nb_samples = out_samples;
+    check_av_error(av_frame_get_buffer(converted_frame_.get(), 0),
+                   "Could not allocate resampler drain buffer");
+
+    const int converted = swr_convert(swr_ctx_.get(), converted_frame_->data,
+                                      out_samples, nullptr, 0);
+    if (converted <= 0)
+      return nullptr;
+
+    converted_frame_->nb_samples = converted;
+    return converted_frame_.get();
+  }
+
   void SingleStreamDecoder::update_decoded_metadata(const AVFrame *frame)
   {
     if (!frame)
@@ -535,7 +579,18 @@ namespace avioflow
           push_buffer_.clear();
           eof_reached_ = true;
         }
-        return nullptr;
+        else
+        {
+          return nullptr;
+        }
+      }
+      if (samples <= 0)
+      {
+        // Raw PCM input is exhausted: hand back the resampler tail, if any.
+        AVFrame *tail = drain_resampler();
+        if (tail)
+          update_decoded_metadata(tail);
+        return tail;
       }
 
       const size_t bytes_to_read = static_cast<size_t>(samples) * bytes_per_frame;
@@ -659,11 +714,16 @@ namespace avioflow
 
       if (ret == AVERROR_EOF)
       {
+        eof_reached_ = true;
+        if (AVFrame *tail = drain_resampler())
+        {
+          update_decoded_metadata(tail);
+          return tail;
+        }
         metadata_.num_samples = total_samples_decoded_;
         if (metadata_.sample_rate > 0) {
             metadata_.duration = static_cast<double>(total_samples_decoded_) / metadata_.sample_rate;
         }
-        eof_reached_ = true;
         return nullptr;
       }
       else if (ret < 0 && ret != AVERROR(EAGAIN))
@@ -684,6 +744,11 @@ namespace avioflow
             AVFrame* decoded = process_decoded_frame();
             if (decoded) update_decoded_metadata(decoded);
             return decoded;
+        }
+        if (AVFrame *tail = drain_resampler())
+        {
+          update_decoded_metadata(tail);
+          return tail;
         }
         return nullptr; // Truly finished
       }
