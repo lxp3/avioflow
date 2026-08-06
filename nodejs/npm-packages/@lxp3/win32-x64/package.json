@@ -1,6 +1,6 @@
 {
   "name": "@lxp3/win32-x64",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "Windows x64 native bindings for avioflow",
   "os": [
     "win32"
