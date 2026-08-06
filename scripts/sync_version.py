@@ -135,6 +135,13 @@ def sync_rust() -> None:
         r'^version\s*=\s*"\d+\.\d+\.\d+"\r?$',
         f'version = "{VERSION}"',
     )
+    # The install snippet in the crate README quotes a major.minor requirement.
+    major_minor = ".".join(VERSION.split(".")[:2])
+    update_regex(
+        ROOT / "rust" / "README.md",
+        r'^avioflow = "\d+\.\d+"\r?$',
+        f'avioflow = "{major_minor}"',
+    )
 
 
 def sync_wasm() -> None:

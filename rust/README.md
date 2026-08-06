@@ -12,7 +12,7 @@ so there is nothing to install or locate at runtime.
 
 ```toml
 [dependencies]
-avioflow = "0.6"
+avioflow = "0.7"
 ```
 
 Building the crate compiles the native core, so the host needs a C++17 compiler

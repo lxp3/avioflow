@@ -1,6 +1,6 @@
 [package]
 name = "avioflow"
-version = "0.6.0"
+version = "0.7.0"
 edition = "2021"
 rust-version = "1.70"
 description = "High-performance audio decoding, encoding and resampling powered by FFmpeg"
