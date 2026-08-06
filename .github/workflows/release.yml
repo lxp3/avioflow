@@ -30,6 +30,7 @@ jobs:
       build-npm: ${{ steps.check.outputs.build-npm }}
       build-wasm: ${{ steps.check.outputs.build-wasm }}
       build-java: ${{ steps.check.outputs.build-java }}
+      build-rust: ${{ steps.check.outputs.build-rust }}
       python-target: ${{ steps.check.outputs.python-target }}
       cpp-target: ${{ steps.check.outputs.cpp-target }}
       tag-name: ${{ steps.check.outputs.tag-name }}
@@ -52,6 +53,7 @@ jobs:
           BUILD_NPM="false"
           BUILD_WASM="false"
           BUILD_JAVA="false"
+          BUILD_RUST="false"
           PYTHON_TARGET="all"
           CPP_TARGET="all"
           
@@ -79,6 +81,9 @@ jobs:
           elif [[ "$TAG" =~ -java$ ]]; then
             echo "Tag ends with -java: Building Java only"
             BUILD_JAVA="true"
+          elif [[ "$TAG" =~ -rust$ ]]; then
+            echo "Tag ends with -rust: Building Rust only"
+            BUILD_RUST="true"
           elif [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "Tag is version only: Building everything"
             BUILD_CPP="true"
@@ -86,9 +91,10 @@ jobs:
             BUILD_NPM="true"
             BUILD_JAVA="true"
             BUILD_WASM="true"
+            BUILD_RUST="true"
           else
             echo "Unknown tag format: $TAG"
-            echo "Supported formats: v0.1.5, v0.1.5-cpp, v0.1.5-linux-cpp, v0.1.5-py, v0.1.5-py-linux, v0.1.5-npm, v0.1.5-wasm, v0.1.5-java"
+            echo "Supported formats: v0.1.5, v0.1.5-cpp, v0.1.5-linux-cpp, v0.1.5-py, v0.1.5-py-linux, v0.1.5-npm, v0.1.5-wasm, v0.1.5-java, v0.1.5-rust"
             exit 1
           fi
           
@@ -97,6 +103,7 @@ jobs:
           echo "build-npm=$BUILD_NPM" >> $GITHUB_OUTPUT
           echo "build-wasm=$BUILD_WASM" >> $GITHUB_OUTPUT
           echo "build-java=$BUILD_JAVA" >> $GITHUB_OUTPUT
+          echo "build-rust=$BUILD_RUST" >> $GITHUB_OUTPUT
           echo "python-target=$PYTHON_TARGET" >> $GITHUB_OUTPUT
           echo "cpp-target=$CPP_TARGET" >> $GITHUB_OUTPUT
           
@@ -108,6 +115,7 @@ jobs:
           echo "  Python target: $PYTHON_TARGET"
           echo "  WASM: $BUILD_WASM"
           echo "  Java: $BUILD_JAVA"
+          echo "  Rust: $BUILD_RUST"
 
   cpp:
     needs: check-tag
@@ -158,8 +166,14 @@ jobs:
       build-wasm: ${{ needs.check-tag.outputs.build-wasm == 'true' }}
     secrets: inherit
 
+  rust:
+    needs: check-tag
+    if: needs.check-tag.outputs.build-rust == 'true'
+    uses: ./.github/workflows/rust.yml
+    secrets: inherit
+
   publish:
-    needs: [check-tag, cpp, node, windows, python, java, wasm]
+    needs: [check-tag, cpp, node, windows, python, java, wasm, rust]
     runs-on: ubuntu-latest
     if: |
       always() &&
@@ -170,7 +184,8 @@ jobs:
       (needs.windows.result == 'success' || needs.windows.result == 'skipped') &&
       (needs.python.result == 'success' || needs.python.result == 'skipped') &&
       (needs.java.result == 'success' || needs.java.result == 'skipped') &&
-      (needs.wasm.result == 'success' || needs.wasm.result == 'skipped')
+      (needs.wasm.result == 'success' || needs.wasm.result == 'skipped') &&
+      (needs.rust.result == 'success' || needs.rust.result == 'skipped')
     steps:
       - uses: actions/checkout@v4
 
@@ -182,6 +197,12 @@ jobs:
           registry-url: 'https://registry.npmjs.org'
           cache: npm
           cache-dependency-path: nodejs/package-lock.json
+
+      # cargo publish compiles the crate, which builds the C++ core, so this
+      # needs a toolchain even though the rust job already ran.
+      - name: Setup Rust
+        if: needs.check-tag.outputs.build-rust == 'true'
+        uses: dtolnay/rust-toolchain@stable
 
       # Download all artifacts
       - uses: actions/download-artifact@v4
@@ -307,3 +328,33 @@ jobs:
           fi
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      # A crates.io version is permanent: it can be yanked but never replaced or
+      # re-uploaded. So check first and skip rather than fail a re-run, and only
+      # publish after `cargo publish --dry-run` has packaged and built the crate.
+      - name: Publish avioflow to crates.io
+        if: needs.check-tag.outputs.build-rust == 'true'
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${CARGO_REGISTRY_TOKEN:-}" ]; then
+            echo "::warning::CARGO_REGISTRY_TOKEN is not set. Skipping crates.io publish."
+            exit 0
+          fi
+
+          VERSION=$(tr -d '[:space:]' < version.txt)
+          if curl -sSf -H 'User-Agent: avioflow-release' \
+               "https://crates.io/api/v1/crates/avioflow/$VERSION" > /dev/null 2>&1; then
+            echo "avioflow $VERSION is already on crates.io. Skipping."
+            exit 0
+          fi
+
+          # Cargo can only publish files inside rust/, so stage the native
+          # sources the build script compiles.
+          python3 scripts/vendor_rust_sources.py
+
+          # --allow-dirty is required because rust/native/ is generated and
+          # gitignored, so vendoring always leaves the working tree dirty.
+          cargo publish --manifest-path rust/Cargo.toml --allow-dirty --dry-run
+          cargo publish --manifest-path rust/Cargo.toml --allow-dirty

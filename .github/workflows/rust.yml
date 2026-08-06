@@ -1,0 +1,74 @@
+name: Rust
+
+on:
+  workflow_call:
+  push:
+    tags:
+      - 'v*'
+  pull_request:
+    paths:
+      - 'rust/**'
+      - 'avioflow/**'
+      - 'cmake/**'
+      - 'CMakeLists.txt'
+      - '.github/workflows/rust.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      # build.rs drives CMake, which downloads the prebuilt FFmpeg package. The
+      # cache key covers the pinned URL and hashes in cmake/ffmpeg.cmake.
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rust/target
+          key: rust-${{ runner.os }}-${{ hashFiles('rust/Cargo.toml', 'cmake/ffmpeg.cmake') }}
+          restore-keys: rust-${{ runner.os }}-
+
+      - name: Sync version metadata
+        run: python3 scripts/sync_version.py
+
+      # Fails the build if version.txt and Cargo.toml had drifted.
+      - name: Verify version is in sync
+        run: git diff --exit-code rust/Cargo.toml
+
+      - name: Check formatting
+        working-directory: rust
+        run: cargo fmt --check
+
+      - name: Build
+        working-directory: rust
+        run: cargo build --release
+
+      - name: Clippy
+        working-directory: rust
+        run: cargo clippy --release --all-targets -- -D warnings
+
+      - name: Test
+        working-directory: rust
+        run: cargo test --release
+
+      # A published crate builds from rust/native/, a different code path to the
+      # in-repo build above. Verifying it here keeps a release from shipping a
+      # crate that cannot build for anyone else.
+      - name: Verify the publishable package builds standalone
+        run: |
+          set -euo pipefail
+          python3 scripts/vendor_rust_sources.py
+          cargo package --manifest-path rust/Cargo.toml --no-verify
+          mkdir -p /tmp/crate-check
+          tar xzf rust/target/package/avioflow-*.crate -C /tmp/crate-check
+          cd /tmp/crate-check/avioflow-*
+          cargo build --release

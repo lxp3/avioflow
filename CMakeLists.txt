@@ -140,6 +140,7 @@ set(AVIOFLOW_SOURCES
     "${FFMPEG_CORE_DIR}/single-stream-encoder.cpp"
     "${FFMPEG_CORE_DIR}/ffmpeg-common.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/avioflow/include/avioflow-cxx-api.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/avioflow/include/avioflow-c-api.cpp"
 )
 
 if(ENABLE_WASAPI AND WIN32)
@@ -218,6 +219,17 @@ if(ENABLE_JAVA)
     add_subdirectory(java/src/main/cpp)
 endif()
 
+# --- glibc math symbol compatibility ---
+# The prebuilt static FFmpeg bundles a libvorbis that still refers to the
+# __*_finite math symbols glibc 2.31 removed. Any target that links those
+# archives into a binary must resolve them, so this is needed whenever FFmpeg is
+# static on Linux, not just for the Rust bindings. See the file's header comment.
+if(UNIX AND NOT APPLE AND NOT BUILD_SHARED_LIBS)
+    enable_language(C)
+    target_sources(avioflow PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/avioflow/core/compat/glibc-finite-compat.c")
+endif()
+
 # --- WebAssembly Bindings ---
 option(ENABLE_WASM "Enable WebAssembly bindings" OFF)
 if(ENABLE_WASM)
@@ -231,6 +243,7 @@ if(NOT SKBUILD)
     # Install public headers
     install(FILES 
         "avioflow/include/avioflow-cxx-api.h"
+        "avioflow/include/avioflow-c-api.h"
         "avioflow/include/metadata.h"
         DESTINATION include
     )

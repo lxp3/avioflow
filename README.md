@@ -39,9 +39,11 @@ application, or run it in WebAssembly.
 | Language / Runtime | Integration | Install / Consume | Compatibility |
 | ------------------ | ----------- | ----------------- | ------------- |
 | C++                | Native CMake package | `find_package(avioflow CONFIG REQUIRED)` | Shared/static packages for Linux, macOS, and Windows; Linux packages include both libstdc++ ABI 0 and ABI 1 variants |
+| C / other FFI      | C ABI exported by the core | `#include <avioflow-c-api.h>` | Flat `extern "C"` surface with opaque handles; usable from any language with C FFI |
 | Python             | pybind11 binding | `pip install avioflow` | Wheels for mainstream desktop/server platforms |
 | JavaScript / Node.js | Node-API native addon | `npm install avioflow` | Platform-specific native packages selected by npm |
 | Java               | JNI binding | Gradle / Maven | Runtime classifiers for Linux, macOS, and Windows |
+| Rust               | C ABI binding | `cargo add avioflow` (see [rust/README.md](rust/README.md)) | Builds the native core from source; FFmpeg linked statically |
 | WebAssembly        | WASM build | npm package / web bundle | Browser and WASM-capable runtime support |
 
 ## Decoder API Flow
@@ -589,6 +591,40 @@ AudioEncoder.saveAudio(
         .codecName("pcm_s16le")
         .sampleRate(16000)
 );
+```
+
+
+---
+
+## Rust API
+
+Full reference: [rust/README.md](rust/README.md).
+
+### File Decoding
+
+```rust
+use avioflow::{AudioDecoder, StreamOptions};
+
+let mut decoder = AudioDecoder::new(&StreamOptions::new().output_sample_rate(16000))?;
+let metadata = decoder.load_file("audio.mp3")?;
+let samples = decoder.get_samples()?;
+println!("{} channels at {} Hz", samples.len(), metadata.sample_rate);
+
+// Decode only seconds 10.3 to 20.3
+let range = decoder.get_samples_range(10.3, Some(20.3))?;
+```
+
+### Resampling and Encoding
+
+```rust
+use avioflow::{resample, save_audio, WriteOptions};
+
+let mono_16k = resample(&samples, 44100, 16000, Some(1))?;
+
+save_audio("out.wav", &mono_16k, &WriteOptions::new()
+    .container_format("wav")
+    .codec_name("pcm_s16le")
+    .sample_rate(16000))?;
 ```
 
 

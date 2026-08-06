@@ -1,0 +1,33 @@
+[package]
+name = "avioflow"
+version = "0.6.0"
+edition = "2021"
+rust-version = "1.70"
+description = "High-performance audio decoding, encoding and resampling powered by FFmpeg"
+repository = "https://github.com/lxp3/avioflow"
+homepage = "https://github.com/lxp3/avioflow"
+license = "MIT"
+readme = "README.md"
+keywords = ["audio", "ffmpeg", "decoder", "resample", "pcm"]
+categories = ["multimedia::audio", "api-bindings"]
+# The crate compiles the C++ core from source; ship only what that needs.
+include = [
+    "src/**",
+    # Staged by scripts/vendor_rust_sources.py; absent in a git checkout.
+    "native/**",
+    "build.rs",
+    "Cargo.toml",
+    "README.md",
+    "LICENSE",
+]
+
+[lib]
+name = "avioflow"
+path = "src/lib.rs"
+
+[build-dependencies]
+cmake = "0.1.50"
+
+[dev-dependencies]
+# Tests write encoded output to a scratch directory.
+tempfile = "3"

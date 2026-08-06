@@ -127,6 +127,16 @@ def sync_node_package() -> None:
     update_json(ROOT / "nodejs" / "package-lock.json", update_package_lock)
 
 
+def sync_rust() -> None:
+    # Anchored to the [package] version, which is the first version key in the
+    # file, so build-dependency versions are left alone.
+    update_regex(
+        ROOT / "rust" / "Cargo.toml",
+        r'^version\s*=\s*"\d+\.\d+\.\d+"\r?$',
+        f'version = "{VERSION}"',
+    )
+
+
 def sync_wasm() -> None:
     update_json(
         ROOT / "wasm" / "package.json",
@@ -153,6 +163,7 @@ def main() -> None:
     sync_cmake()
     sync_python()
     sync_node_package()
+    sync_rust()
     sync_wasm()
     sync_java()
     print(f"Synchronized repository version to {VERSION}")

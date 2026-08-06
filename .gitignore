@@ -2,6 +2,9 @@
 build/
 build_*/
 build-*/
+rust/target/
+# Staged for `cargo publish` by scripts/vendor_rust_sources.py
+rust/native/
 dist/
 node_modules/
 prebuilds/
@@ -26,3 +29,6 @@ __pycache__/
 !README.md
 !CMakeLists.txt
 public/downloads/miniaudio.h
+
+# Copied from the repository root by scripts/vendor_rust_sources.py
+/rust/LICENSE
