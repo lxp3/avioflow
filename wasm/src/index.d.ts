@@ -39,8 +39,8 @@ export interface LoadResult {
 export declare class AudioDecoder {
     constructor(options?: StreamOptions);
     
-    /** Load audio from URL */
-    loadFile(url: string): Metadata;
+    /** Load audio from a path in the Emscripten virtual filesystem. */
+    loadFile(path: string): Metadata;
     
     /** Load complete audio bytes from buffer */
     loadBuffer(buffer: ArrayBuffer | Uint8Array): Metadata;
@@ -67,12 +67,30 @@ export declare class AudioDecoder {
     isFinished(): boolean;
 }
 
+/** Encode options for save() */
+export interface WriteOptions {
+    codecName?: string;
+    containerFormat?: string;
+    sampleRate?: number;
+    numChannels?: number;
+    bitRate?: number;
+    sampleFormat?: string;
+    overwrite?: boolean;
+}
+
 /** Avioflow WASM module interface */
 export interface AvioflowModule {
     AudioDecoder: typeof AudioDecoder;
     setLogLevel(level: string): void;
-    load(url: string, options?: DecodeOptions): LoadResult;
+    /** Decodes a path in the Emscripten virtual filesystem, not a network URL. */
+    load(path: string, options?: DecodeOptions): LoadResult;
     loadBuffer(buffer: ArrayBuffer | Uint8Array, options?: DecodeOptions): LoadResult;
+    /** Encodes samples to a path in the Emscripten virtual filesystem. */
+    save(path: string, channels: Float32Array[], options?: WriteOptions): void;
+    getSupportedDecoders(): string[];
+    getSupportedEncoders(): string[];
+    getSupportedInputFormats(): string[];
+    getSupportedOutputFormats(): string[];
 }
 
 /** Create and initialize the WASM module */

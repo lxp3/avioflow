@@ -24,7 +24,42 @@ jobs:
 
       - name: Build WASM
         shell: pwsh
-        run: ./build-wasm.ps1
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          # Install and activate Emscripten
+          if (-not (Test-Path emsdk)) {
+            git clone https://github.com/emscripten-core/emsdk.git emsdk
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+          Push-Location emsdk
+          try {
+            .\emsdk.bat install latest
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            .\emsdk.bat activate latest
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          } finally {
+            Pop-Location
+          }
+          . ./emsdk/emsdk_env.ps1
+
+          if (-not (Get-Command emcmake -ErrorAction SilentlyContinue)) {
+            Write-Error "emcmake not found after emsdk activation."
+            exit 1
+          }
+
+          if (Test-Path build-wasm) { Remove-Item -Recurse -Force build-wasm }
+
+          emcmake cmake -B build-wasm -S . `
+            -DENABLE_WASM=ON `
+            -DCMAKE_BUILD_TYPE=Release
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          $nproc = if ($env:NUMBER_OF_PROCESSORS) { $env:NUMBER_OF_PROCESSORS } else { 2 }
+          cmake --build build-wasm --config Release --parallel $nproc
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          Get-ChildItem "wasm/dist"
 
       - name: Prepare WASM Artifact
         shell: pwsh

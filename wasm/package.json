@@ -44,7 +44,7 @@
     "node": ">=16"
   },
   "scripts": {
-    "build": "pwsh ./build.ps1",
+    "build": "emcmake cmake -B ../build-wasm -S .. -DENABLE_WASM=ON -DCMAKE_BUILD_TYPE=Release && cmake --build ../build-wasm --config Release",
     "test": "node --experimental-wasm-modules tests/test-node.mjs"
   }
 }

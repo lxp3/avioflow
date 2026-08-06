@@ -1,15 +1,33 @@
 # AvioFlow
 
-AvioFlow is a high-performance and easy-to-use streaming audio decoding library.
+AvioFlow is a high-performance and easy-to-use streaming audio decoding library. 
+
+The avioflow project is build on top of the FFMPEG library.
 
 ## Features
 
-- **Audio format**: mp3, opus, flac, ogg, wav, m4a, acc. Anything.
+- **Audio format**: mp3, opus, flac, ogg, wav, m4a, aac. Anything FFmpeg supports — see the [Supported Formats Reference](doc/supported_formats.md) for the full decoder/encoder list.
 - **Flexible Input**: Files, URLs, memory buffers, and real-time streams
 - **Hardware Capture**: WASAPI loopback (system audio) and DirectShow (microphones)
 - **Resampling**: Built-in sample rate conversion
 - **Zero-copy API**: Direct buffer access via `FrameData` for maximum performance
 - **Cross-platform**: Windows, Linux, macOS
+
+## Speed
+
+Decode time (best of 10 runs) for `public/wavs/TownTheme.mp3` (MP3, 44.1kHz
+stereo, ~97.5s) on a single machine, decoding the full file into memory both
+without resampling and with resampling to 16kHz. Numbers are for illustration
+on this environment, not a formal cross-platform benchmark.
+
+| Library        | No resample (ms) | Resample to 16kHz (ms) |
+| -------------- | ----------------- | ----------------------- |
+| **avioflow**       | **141.2**              | **132.6**                    |
+| librosa        | 98.7               | 176.7                    |
+| soundfile      | 100.6              | N/A (no built-in resampling) |
+| torchcodec     | 130.8              | 148.9                    |
+| sox (CLI)      | 206.0              | 403.7                    |
+| ffmpeg (CLI)   | 167.7              | 198.9                    |
 
 ## Supported language
 
@@ -46,8 +64,8 @@ decoding. The difference is only how input bytes enter the decoder.
             |
             v
 +-----------------------------+
-| get_frame()                 |  one decoded frame, zero-copy
-| get_samples()               |  all currently available samples
+| get_frame()                          |  one decoded frame, zero-copy
+| get_samples(start, stop)             |  samples in [start, stop), defaults to all
 +-----------+-----------------+
             |
             v
@@ -55,6 +73,12 @@ decoding. The difference is only how input bytes enter the decoder.
 | is_finished()               |
 +-----------------------------+
 ```
+
+`get_samples(start_seconds, stop_seconds)` supports offline seek/time-range
+decoding: pass a half-open range in seconds to decode only that window, or
+call it with no arguments to decode the whole file. It may be called multiple
+times on the same decoder to fetch different ranges; each call seeks
+independently.
 
 ### Streaming Input
 
@@ -71,7 +95,7 @@ decoding. The difference is only how input bytes enter the decoder.
             v
 +-----------------------------+
 | get_frame()                 |  returns empty if data is incomplete
-| get_samples()               |  drains currently available samples
+| get_samples()               |  drains currently available samples (start/stop range not supported here)
 +-----------+-----------------+
             | repeat feed/get_* while streaming
             v
@@ -87,6 +111,30 @@ decoding. The difference is only how input bytes enter the decoder.
 
 `flush()` does not discard data. It marks stream input complete so remaining
 buffered bytes and codec-delayed frames can be drained.
+
+
+## Build from Source
+
+### Prerequisites
+- CMake 3.20+
+- Visual Studio 2022+ (Windows) or GCC 11+ (Linux)
+
+### C++ Build
+
+```bash
+cmake -B build -S . -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=ON
+cmake --build build --config Release
+```
+
+FFmpeg is fetched and configured automatically during the CMake configure step.
+
+Run the tests:
+
+```bash
+ctest --test-dir build --output-on-failure
+```
+
+---
 
 ## Installation
 
@@ -188,7 +236,7 @@ AudioDecoder decoder(options);
 | `feed(data, size)` | Feed stream bytes; first feed starts stream mode                 |
 | `flush()`          | Mark stream input complete and allow draining                    |
 | `get_frame()`      | Decode next frame, returns `FrameData`                           |
-| `get_samples()`    | Drain currently available samples                                |
+| `get_samples(start_seconds=0.0, stop_seconds=nullopt)` | Decode samples in `[start_seconds, stop_seconds)` (offline mode); with no args, drains all currently available samples |
 | `get_metadata()`   | Get audio metadata                                               |
 | `is_finished()`    | Check if EOF reached                                             |
 
@@ -252,6 +300,18 @@ while (auto frame = decoder.get_frame()) {
 }
 ```
 
+#### Time-Range Decoding (Offline Seek)
+```cpp
+AudioDecoder decoder;
+decoder.load_file("audio.mp3");
+
+// Decode only seconds 10.3 to 20.3
+auto samples = decoder.get_samples(10.3, 20.3);
+
+// Can be called again with a different range on the same decoder
+auto next_range = decoder.get_samples(30.0, 40.0);
+```
+
 #### Streaming Decode (Push-based)
 ```cpp
 AudioStreamOptions opts;
@@ -297,7 +357,7 @@ decoder = avioflow.AudioDecoder(
 | `feed(data)` | `None` | Feed streaming bytes |
 | `flush()` | `None` | Mark stream input complete |
 | `get_frame()` | `ndarray \| None` | Decode next frame |
-| `get_samples()` | `ndarray` | Drain currently available samples |
+| `get_samples(start_seconds=0.0, stop_seconds=None)` | `ndarray` | Decode samples in `[start_seconds, stop_seconds)` (offline mode); with no args, drains all currently available samples |
 | `is_finished()` | `bool` | Check if EOF |
 
 #### `Metadata`
@@ -322,6 +382,18 @@ decoder = avioflow.AudioDecoder(output_sample_rate=16000)
 meta = decoder.load_file("speech.wav")
 samples = decoder.get_samples()      # numpy array (channels, samples)
 print(f"Shape: {samples.shape}")     # e.g., (1, 160000)
+```
+
+#### Time-Range Decoding (Offline Seek)
+```python
+decoder = avioflow.AudioDecoder()
+decoder.load_file("audio.mp3")
+
+# Decode only seconds 10.3 to 20.3
+samples = decoder.get_samples(10.3, 20.3)
+
+# Can be called again with a different range on the same decoder
+next_range = decoder.get_samples(30.0, 40.0)
 ```
 
 #### Streaming Decode
@@ -408,7 +480,7 @@ const decoder = new avioflow.AudioDecoder({
 | `feed(buffer)` | `void`                     | Feed streaming bytes.                             |
 | `flush()`      | `void`                     | Mark stream input complete.                       |
 | `getFrame()`   | `Float32Array[]` \| `null` | Decode next frame. Returns array of channel data. |
-| `getSamples()` | `Float32Array[]`           | Drain currently available samples.                |
+| `getSamples(startSeconds?, stopSeconds?)` | `Float32Array[]` | Decode samples in `[startSeconds, stopSeconds)` (offline mode); with no args, drains all currently available samples. |
 | `isFinished()` | `boolean`                  | Check if end of stream reached.                   |
 
 ### Examples
@@ -433,6 +505,18 @@ const meta = decoder.loadFile("audio.wav");
 // Decodes the entire file into memory
 const allSamples = decoder.getSamples();
 process(allSamples);
+```
+
+#### Time-Range Decoding (Offline Seek)
+```javascript
+const decoder = new avioflow.AudioDecoder();
+decoder.loadFile("audio.mp3");
+
+// Decode only seconds 10.3 to 20.3
+const samples = decoder.getSamples(10.3, 20.3);
+
+// Can be called again with a different range on the same decoder
+const nextRange = decoder.getSamples(30.0, 40.0);
 ```
 
 #### Streaming Decode (Real-time)
@@ -485,6 +569,9 @@ try (AudioDecoder decoder = new AudioDecoder(
     decoder.loadFile("audio.mp3");
     float[][] samples = decoder.getSamples();
     System.out.println(samples.length + " channels");
+
+    // Decode only seconds 10.3 to 20.3 (offline mode)
+    float[][] range = decoder.getSamples(10.3, 20.3);
 }
 ```
 
@@ -504,42 +591,6 @@ AudioEncoder.saveAudio(
 );
 ```
 
-
----
-
-## Build from Source
-
-### Prerequisites
-- CMake 3.20+
-- Visual Studio 2022+ (Windows) or GCC 11+ (Linux)
-- Python 3.8+ with pybind11 (for Python bindings)
-- Node.js 16+ (for Node.js bindings)
-
-### C++ & Python Build
-```bash
-./build.sh
-```
-This will configure and build the C++ library and Python bindings.
-
-### Node.js Build
-```bash
-./build-nodejs.sh
-```
-This will build the Node.js bindings using `cmake-js` and run compatibility tests.
-
-### Java Build
-```bash
-./build-java.sh linux-x86_64
-```
-This builds the JNI library and creates a platform classifier jar.
-
----
-
-## Supported Formats
-
-AvioFlow supports a wide range of audio formats, codecs, and devices through FFmpeg.
-
-For a complete and detailed list of supported decoders, encoders, and input formats, please refer to the **[Supported Formats Reference](doc/supported_formats.md)**.
 
 ---
 

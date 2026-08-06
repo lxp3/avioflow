@@ -26,7 +26,6 @@ wasm/
 ├── dist/                 # Build output (generated)
 │   ├── avioflow.js
 │   └── avioflow.wasm
-├── build.ps1             # Build script
 └── package.json          # NPM package config
 ```
 
@@ -49,45 +48,22 @@ source ./emsdk_env.sh   # Linux/macOS
 emsdk_env.bat           # Windows
 ```
 
-### 2. Build FFmpeg for WebAssembly
+### 2. Build avioflow WASM Module
 
-**Important:** FFmpeg must be compiled from source to WASM format. This project uses FFmpeg 7.1 with only audio decoders enabled.
+From the repository root, with the Emscripten environment activated:
 
-**On Linux/macOS/WSL:**
 ```bash
-cd wasm/scripts
-chmod +x build-ffmpeg-wasm.sh
-./build-ffmpeg-wasm.sh
+emcmake cmake -B build-wasm -S . -DENABLE_WASM=ON -DCMAKE_BUILD_TYPE=Release
+cmake --build build-wasm --config Release
 ```
 
-**On Windows (requires WSL):**
-```powershell
-cd wasm/scripts
-./build-ffmpeg-wasm.ps1   # Automatically calls WSL
-```
-
-This will:
-- Download FFmpeg 7.1 source code (~15MB)
-- Compile with minimal audio decoders (MP3, AAC, FLAC, Opus, Vorbis, PCM)
-- Output to `wasm/ffmpeg-wasm/` (~8MB)
-
-⏱️ **Build time:** 15-30 minutes depending on your machine.
-
-### 3. Build avioflow WASM Module
-
-```powershell
-cd wasm
-./build.ps1
-```
-
-Or build FFmpeg and avioflow together:
-```powershell
-./build.ps1 -BuildFFmpeg
-```
+A prebuilt FFmpeg 7.1 WASM package (audio decoders only) is downloaded
+automatically during the CMake configure step, so FFmpeg does not need to be
+compiled from source.
 
 Output files:
-- `dist/avioflow.js` - JavaScript loader + glue code
-- `dist/avioflow.wasm` - WebAssembly binary (~5-10MB)
+- `dist/avioflow.js` - JavaScript loader + glue code (~120KB)
+- `dist/avioflow.wasm` - WebAssembly binary (~3MB)
 
 ## Usage
 
@@ -144,6 +120,25 @@ while ((frame = decoder.getFrame()) !== null) {
     // frame is Float32Array[] (one per channel)
     processAudio(frame);
 }
+
+// No more input: drain buffered and codec-delayed frames
+decoder.flush();
+while ((frame = decoder.getFrame()) !== null) {
+    processAudio(frame);
+}
+```
+
+### Time-Range Decode (Offline Seek)
+
+```javascript
+const decoder = new avioflow.AudioDecoder();
+decoder.loadBuffer(new Uint8Array(buffer));
+
+// Decode only seconds 10.3 to 20.3
+const samples = decoder.getSamples(10.3, 20.3);
+
+// Pass -1 as stopSeconds to decode from an offset to the end
+const tail = decoder.getSamples(30.0, -1);
 ```
 
 ## API Reference
@@ -158,37 +153,53 @@ createAvioflow(): Promise<AvioflowModule>
 setLogLevel(level: string): void
 // levels: "quiet", "fatal", "error", "warning", "info", "debug", "trace"
 
-// Load and decode from URL
-load(url: string, options?: DecodeOptions): LoadResult
+// Load and decode a path in the WASM filesystem
+load(path: string, options?: DecodeOptions): LoadResult
 
 // Load and decode from buffer
 loadBuffer(buffer: ArrayBuffer | Uint8Array, options?: DecodeOptions): LoadResult
+
+// Encode samples to a path in the WASM filesystem
+save(path: string, channels: Float32Array[], options?: WriteOptions): void
+
+// Query FFmpeg capabilities
+getSupportedDecoders(): string[];
+getSupportedEncoders(): string[];
+getSupportedInputFormats(): string[];
+getSupportedOutputFormats(): string[];
 ```
+
+> `load()` and `AudioDecoder.loadFile()` read through Emscripten's virtual
+> filesystem, not the network. To decode a remote file in the browser, `fetch()`
+> it yourself and pass the bytes to `loadBuffer()`.
 
 ### AudioDecoder Class
 
 ```typescript
 class AudioDecoder {
     constructor(options?: StreamOptions);
-    
-    // Open from URL (uses fetch internally)
-    open(url: string): void;
-    
-    // Open from buffer (complete file)
-    openBuffer(buffer: ArrayBuffer | Uint8Array): void;
-    
+
+    // Open a path in the WASM filesystem; returns metadata
+    loadFile(path: string): Metadata;
+
+    // Open from buffer (complete file); returns metadata
+    loadBuffer(buffer: ArrayBuffer | Uint8Array): Metadata;
+
     // Push data for streaming decode
-    push(data: Uint8Array): void;
-    
+    feed(data: ArrayBuffer | Uint8Array): void;
+
+    // Mark stream input complete, so buffered and codec-delayed frames can drain
+    flush(): void;
+
     // Decode next available frame
     getFrame(): Float32Array[] | null;
-    
+
     // Decode samples in [startSeconds, stopSeconds). Pass -1 for stopSeconds to decode to the end.
     getSamples(startSeconds?: number, stopSeconds?: number): Float32Array[];
-    
+
     // Get audio metadata
     getMetadata(): Metadata;
-    
+
     // Check if decoding finished
     isFinished(): boolean;
 }
@@ -223,6 +234,16 @@ interface LoadResult {
     metadata: Metadata;
     samples: Float32Array[];  // one array per channel
 }
+
+interface WriteOptions {
+    codecName?: string;        // e.g. "pcm_s16le", "libmp3lame"
+    containerFormat?: string;  // e.g. "wav", "mp3"
+    sampleRate?: number;
+    numChannels?: number;
+    bitRate?: number;
+    sampleFormat?: string;
+    overwrite?: boolean;
+}
 ```
 
 ## Why WASM?
@@ -231,8 +252,8 @@ interface LoadResult {
 |---------|------------------------------|------|
 | ABI Stability | ❌ Requires rebuild per Electron version | ✅ Universal |
 | Browser Support | ❌ No | ✅ Yes |
-| Performance | ✅ Native speed | ⚠️ ~80-90% native |
-| File Size | ~20MB | ~5-10MB |
+| Performance | ✅ Native speed | ⚠️ Slower than native |
+| File Size | Larger | ~3MB |
 | Installation | Requires build tools | Just JavaScript |
 
 ## Testing

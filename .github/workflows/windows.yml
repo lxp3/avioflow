@@ -138,8 +138,33 @@ jobs:
         if: inputs.build-npm && matrix.package-kind == 'shared'
         shell: pwsh
         run: |
-          # Use the specialized build script
-          ./build-nodejs.ps1 -TargetArch ${{ matrix.arch }}
+          $ErrorActionPreference = "Stop"
+
+          if (-not (Test-Path nodejs/node_modules)) {
+            Push-Location nodejs
+            try { npm ci } finally { Pop-Location }
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+
+          # cmake-js reads configuration from package.json in the current directory
+          $cleanupPackageJson = $false
+          if (-not (Test-Path package.json)) {
+            New-Item -ItemType HardLink -Path package.json -Value nodejs/package.json | Out-Null
+            $cleanupPackageJson = $true
+          }
+
+          $env:Path = "$(Join-Path $PWD 'nodejs\node_modules\.bin');$env:Path"
+          try {
+            cmake-js compile --out build-nodejs `
+              --arch ${{ matrix.arch }} `
+              --CDENABLE_NODE_JS=ON `
+              --CDENABLE_PYTHON=OFF `
+              --CDENABLE_BINARY=OFF `
+              --CDENABLE_WASAPI=OFF
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          } finally {
+            if ($cleanupPackageJson) { Remove-Item package.json }
+          }
 
           # Copy to platform-specific package directory
           $outputFile = "build-nodejs/bin/avioflow.node"

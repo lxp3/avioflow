@@ -89,7 +89,33 @@ jobs:
         shell: bash
         env:
           AVIOFLOW_SKIP_TESTS: ${{ matrix.skip_tests }}
-        run: ./build-java.sh ${{ matrix.classifier }}
+          CLASSIFIER: ${{ matrix.classifier }}
+        run: |
+          set -euo pipefail
+          cmake -S . -B build-java \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_SHARED_LIBS=OFF \
+            -DENABLE_WASAPI=OFF \
+            -DENABLE_PYTHON=OFF \
+            -DENABLE_NODE_JS=OFF \
+            -DENABLE_JAVA=ON \
+            -DENABLE_BINARY=OFF \
+            -DBUILD_TESTS=OFF
+          cmake --build build-java --config Release -j "$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 2)"
+
+          NATIVE_DIR="java/build/native/$CLASSIFIER"
+          mkdir -p "$NATIVE_DIR"
+          cp build-java/bin/libavioflow_jni.so "$NATIVE_DIR/" 2>/dev/null || \
+          cp build-java/bin/libavioflow_jni.dylib "$NATIVE_DIR/"
+
+          GRADLE_TASKS=(test nativeJar)
+          if [ "$AVIOFLOW_SKIP_TESTS" = "1" ]; then
+            GRADLE_TASKS=(nativeJar)
+          fi
+          gradle -p java \
+            -Pavioflow.nativeClassifier="$CLASSIFIER" \
+            -Pavioflow.nativeLibraryDir="$PWD/$NATIVE_DIR" \
+            "${GRADLE_TASKS[@]}"
 
       - name: Check Linux glibc baseline
         if: startsWith(matrix.classifier, 'linux-')
@@ -100,7 +126,38 @@ jobs:
         shell: pwsh
         env:
           AVIOFLOW_SKIP_TESTS: ${{ matrix.skip_tests }}
-        run: ./build-java.ps1 -Classifier ${{ matrix.classifier }} -TargetArch ${{ matrix.target_arch }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $Classifier = "${{ matrix.classifier }}"
+          $Platform = if ("${{ matrix.target_arch }}" -eq "arm64") { "ARM64" } else { "x64" }
+
+          cmake -S . -B build-java `
+            -A $Platform `
+            -DBUILD_SHARED_LIBS=OFF `
+            -DENABLE_WASAPI=ON `
+            -DENABLE_PYTHON=OFF `
+            -DENABLE_NODE_JS=OFF `
+            -DENABLE_JAVA=ON `
+            -DENABLE_BINARY=OFF `
+            -DBUILD_TESTS=OFF
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          cmake --build build-java --config Release -j 4
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          $NativeDir = Join-Path $PWD "java/build/native/$Classifier"
+          New-Item -ItemType Directory -Force -Path $NativeDir | Out-Null
+
+          $Dll = "build-java/bin/Release/avioflow_jni.dll"
+          if (-not (Test-Path $Dll)) { $Dll = "build-java/bin/avioflow_jni.dll" }
+          Copy-Item $Dll $NativeDir
+
+          $GradleTasks = if ($env:AVIOFLOW_SKIP_TESTS -eq "1") { @("nativeJar") } else { @("test", "nativeJar") }
+          gradle -p java `
+            "-Pavioflow.nativeClassifier=$Classifier" `
+            "-Pavioflow.nativeLibraryDir=$NativeDir" `
+            $GradleTasks
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - uses: actions/upload-artifact@v4
         with:
