@@ -289,9 +289,32 @@ jobs:
 
           if compgen -G 'dist/*' > /dev/null; then (cd dist && sha256sum * > SHA256SUMS); fi
 
+      # This repository's releases are immutable, so assets cannot be replaced
+      # once uploaded. Detect that case and skip the upload rather than failing,
+      # which would block the package-registry publish steps below on a re-run.
+      - name: Check whether the release already has assets
+        id: release-assets
+        if: needs.check-tag.outputs.build-cpp == 'true' || needs.check-tag.outputs.build-python == 'true' || needs.check-tag.outputs.build-wasm == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.check-tag.outputs.tag-name }}
+        run: |
+          set -euo pipefail
+          # Keep only the last line and default to 0: a missing release makes
+          # gh print an error and the fallback add its own value.
+          COUNT=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" \
+            --jq '.assets | length' 2>/dev/null | tail -n1)
+          COUNT=${COUNT:-0}
+          echo "count=$COUNT" >> "$GITHUB_OUTPUT"
+          if [ "$COUNT" -gt 0 ]; then
+            echo "::notice::Release $TAG already has $COUNT assets; skipping upload."
+          fi
+
       # Upload to GitHub Release
       - name: Upload to GitHub Release
-        if: needs.check-tag.outputs.build-cpp == 'true' || needs.check-tag.outputs.build-python == 'true' || needs.check-tag.outputs.build-wasm == 'true'
+        if: |
+          (needs.check-tag.outputs.build-cpp == 'true' || needs.check-tag.outputs.build-python == 'true' || needs.check-tag.outputs.build-wasm == 'true') &&
+          steps.release-assets.outputs.count == '0'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.check-tag.outputs.tag-name }}
@@ -357,4 +380,10 @@ jobs:
           # --allow-dirty is required because rust/native/ and rust/LICENSE are
           # generated and gitignored, so vendoring leaves the tree dirty.
           cargo publish --manifest-path rust/Cargo.toml --allow-dirty --dry-run
-          cargo publish --manifest-path rust/Cargo.toml --allow-dirty
+
+          if ! cargo publish --manifest-path rust/Cargo.toml --allow-dirty; then
+            echo "::error::crates.io publish failed. If the message mentions a"\
+                 "verified email address, add and confirm one at"\
+                 "https://crates.io/settings/profile, then re-run this job."
+            exit 1
+          fi
