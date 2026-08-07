@@ -31,6 +31,7 @@ jobs:
       build-wasm: ${{ steps.check.outputs.build-wasm }}
       build-java: ${{ steps.check.outputs.build-java }}
       build-rust: ${{ steps.check.outputs.build-rust }}
+      build-go: ${{ steps.check.outputs.build-go }}
       python-target: ${{ steps.check.outputs.python-target }}
       cpp-target: ${{ steps.check.outputs.cpp-target }}
       tag-name: ${{ steps.check.outputs.tag-name }}
@@ -54,6 +55,7 @@ jobs:
           BUILD_WASM="false"
           BUILD_JAVA="false"
           BUILD_RUST="false"
+          BUILD_GO="false"
           PYTHON_TARGET="all"
           CPP_TARGET="all"
           
@@ -84,6 +86,9 @@ jobs:
           elif [[ "$TAG" =~ -rust$ ]]; then
             echo "Tag ends with -rust: Building Rust only"
             BUILD_RUST="true"
+          elif [[ "$TAG" =~ -go$ ]]; then
+            echo "Tag ends with -go: Building Go only"
+            BUILD_GO="true"
           elif [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "Tag is version only: Building everything"
             BUILD_CPP="true"
@@ -92,9 +97,10 @@ jobs:
             BUILD_JAVA="true"
             BUILD_WASM="true"
             BUILD_RUST="true"
+            BUILD_GO="true"
           else
             echo "Unknown tag format: $TAG"
-            echo "Supported formats: v0.1.5, v0.1.5-cpp, v0.1.5-linux-cpp, v0.1.5-py, v0.1.5-py-linux, v0.1.5-npm, v0.1.5-wasm, v0.1.5-java, v0.1.5-rust"
+            echo "Supported formats: v0.1.5, v0.1.5-cpp, v0.1.5-linux-cpp, v0.1.5-py, v0.1.5-py-linux, v0.1.5-npm, v0.1.5-wasm, v0.1.5-java, v0.1.5-rust, v0.1.5-go"
             exit 1
           fi
           
@@ -104,6 +110,7 @@ jobs:
           echo "build-wasm=$BUILD_WASM" >> $GITHUB_OUTPUT
           echo "build-java=$BUILD_JAVA" >> $GITHUB_OUTPUT
           echo "build-rust=$BUILD_RUST" >> $GITHUB_OUTPUT
+          echo "build-go=$BUILD_GO" >> $GITHUB_OUTPUT
           echo "python-target=$PYTHON_TARGET" >> $GITHUB_OUTPUT
           echo "cpp-target=$CPP_TARGET" >> $GITHUB_OUTPUT
           
@@ -116,6 +123,7 @@ jobs:
           echo "  WASM: $BUILD_WASM"
           echo "  Java: $BUILD_JAVA"
           echo "  Rust: $BUILD_RUST"
+          echo "  Go: $BUILD_GO"
 
   cpp:
     needs: check-tag
@@ -172,8 +180,14 @@ jobs:
     uses: ./.github/workflows/rust.yml
     secrets: inherit
 
+  go:
+    needs: check-tag
+    if: needs.check-tag.outputs.build-go == 'true'
+    uses: ./.github/workflows/go.yml
+    secrets: inherit
+
   publish:
-    needs: [check-tag, cpp, node, windows, python, java, wasm, rust]
+    needs: [check-tag, cpp, node, windows, python, java, wasm, rust, go]
     runs-on: ubuntu-latest
     if: |
       always() &&
@@ -185,7 +199,8 @@ jobs:
       (needs.python.result == 'success' || needs.python.result == 'skipped') &&
       (needs.java.result == 'success' || needs.java.result == 'skipped') &&
       (needs.wasm.result == 'success' || needs.wasm.result == 'skipped') &&
-      (needs.rust.result == 'success' || needs.rust.result == 'skipped')
+      (needs.rust.result == 'success' || needs.rust.result == 'skipped') &&
+      (needs.go.result == 'success' || needs.go.result == 'skipped')
     steps:
       - uses: actions/checkout@v4
 
@@ -391,3 +406,25 @@ jobs:
                  "https://crates.io/settings/profile, then re-run this job."
             exit 1
           fi
+
+      # Go has no registry: the module proxy reads git tags directly. A module in
+      # a subdirectory needs a tag prefixed with that directory, so the plain
+      # v0.7.3 tag is invisible to `go get github.com/lxp3/avioflow/go` -- it
+      # looks for go/v0.7.3. Push that alias so the Go module tracks the release.
+      - name: Tag the Go module
+        if: needs.check-tag.outputs.build-go == 'true'
+        run: |
+          set -euo pipefail
+          VERSION=$(tr -d '[:space:]' < version.txt)
+          GO_TAG="go/v$VERSION"
+
+          # Tags are effectively immutable once the proxy caches them, so never
+          # move an existing one; skip instead, which keeps a re-run safe.
+          if git ls-remote --exit-code --tags origin "refs/tags/$GO_TAG" >/dev/null 2>&1; then
+            echo "$GO_TAG already exists. Skipping."
+            exit 0
+          fi
+
+          git tag "$GO_TAG" "$GITHUB_SHA"
+          git push origin "$GO_TAG"
+          echo "::notice::Tagged $GO_TAG; go get github.com/lxp3/avioflow/go@v$VERSION"
