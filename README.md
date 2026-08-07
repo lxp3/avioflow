@@ -44,6 +44,7 @@ application, or run it in WebAssembly.
 | JavaScript / Node.js | Node-API native addon | `npm install avioflow` | Platform-specific native packages selected by npm |
 | Java               | JNI binding | Gradle / Maven | Runtime classifiers for Linux, macOS, and Windows |
 | Rust               | C ABI binding | `cargo add avioflow` (see [rust/README.md](rust/README.md)) | Builds the native core from source; FFmpeg linked statically |
+| Go                 | cgo over the C ABI | `go get github.com/lxp3/avioflow/go` (see [go/README.md](go/README.md)) | Requires the C library installed first; found via pkg-config |
 | WebAssembly        | WASM build | npm package / web bundle | Browser and WASM-capable runtime support |
 
 ## Decoder API Flow
@@ -335,6 +336,7 @@ Each binding has its own reference, kept next to the code it documents:
 - [Node.js](nodejs/README.md) — `npm install avioflow`
 - [Java](java/README.md) — Gradle / Maven
 - [Rust](rust/README.md) — `cargo add avioflow`
+- [Go](go/README.md) — `go get github.com/lxp3/avioflow/go`
 - [WebAssembly](wasm/README.md) — browser and Electron builds
 - [C ABI](avioflow/include/avioflow-c-api.h) — flat `extern "C"` surface for any language with C FFI
 

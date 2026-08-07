@@ -304,6 +304,66 @@ if(NOT SKBUILD)
         DESTINATION "${AVIOFLOW_CMAKE_INSTALL_DIR}"
     )
 
+    # --- pkg-config metadata ---
+    # Consumers without CMake need this: cgo (the Go binding) resolves the native
+    # library through `#cgo pkg-config: avioflow`, and plain C consumers get the
+    # same benefit.
+    #
+    # A static link must name FFmpeg, the bundled codecs and the glibc math shims
+    # in dependency order, because the linker resolves left to right. That order
+    # is duplicated in rust/build.rs; keep the two in step.
+    #
+    # For a static libavioflow those dependencies go in Libs, not Libs.private:
+    # Libs.private is only consulted with --static, which cgo does not pass, and
+    # there is no shared object here to hide them behind. Both are emitted, so
+    # `pkg-config --libs` and `--libs --static` each work.
+    set(AVIOFLOW_PC_CFLAGS "")
+    set(AVIOFLOW_PC_LIBS "")
+    set(AVIOFLOW_PC_LIBS_PRIVATE "")
+
+    if(NOT BUILD_SHARED_LIBS)
+        # Matches the AVIOFLOW_STATIC guard in metadata.h and avioflow-c-api.h.
+        set(AVIOFLOW_PC_CFLAGS " -DAVIOFLOW_STATIC")
+
+        set(_avioflow_pc_libs "")
+        foreach(_lib avdevice avfilter avformat avcodec swscale swresample avutil
+                     mp3lame opus speex vorbisenc vorbis ogg ssl crypto)
+            # Only name archives the FFmpeg package actually shipped; which
+            # third-party codecs are present depends on how it was configured.
+            if(EXISTS "${FFMPEG_LIB_DIR}/lib${_lib}.a")
+                string(APPEND _avioflow_pc_libs " -l${_lib}")
+            endif()
+        endforeach()
+
+        if(TARGET avioflow_glibc_compat)
+            # After FFmpeg: it resolves the __*_finite symbols libvorbis refers to.
+            string(APPEND _avioflow_pc_libs " -lavioflow_glibc_compat")
+        endif()
+
+        if(APPLE)
+            string(APPEND _avioflow_pc_libs " -lc++")
+        elseif(UNIX)
+            string(APPEND _avioflow_pc_libs " -lstdc++")
+        endif()
+        if(UNIX)
+            string(APPEND _avioflow_pc_libs " -lm -lpthread -ldl")
+        endif()
+
+        # Libs keeps the leading space, appended after -lavioflow in the template.
+        set(AVIOFLOW_PC_LIBS "${_avioflow_pc_libs}")
+        string(STRIP "${_avioflow_pc_libs}" AVIOFLOW_PC_LIBS_PRIVATE)
+    endif()
+
+    configure_file(
+        "${CMAKE_CURRENT_SOURCE_DIR}/cmake/avioflow.pc.in"
+        "${CMAKE_CURRENT_BINARY_DIR}/avioflow.pc"
+        @ONLY
+    )
+
+    install(FILES "${CMAKE_CURRENT_BINARY_DIR}/avioflow.pc"
+        DESTINATION lib/pkgconfig
+    )
+
     if(EXISTS "${FFMPEG_ROOT}/lib/cmake/FFmpeg")
         install(DIRECTORY "${FFMPEG_ROOT}/lib/cmake/FFmpeg"
             DESTINATION lib/cmake

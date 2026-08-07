@@ -1,0 +1,12 @@
+prefix=@CMAKE_INSTALL_PREFIX@
+exec_prefix=${prefix}
+libdir=${prefix}/lib
+includedir=${prefix}/include
+
+Name: avioflow
+Description: High-performance audio decoding, encoding and resampling powered by FFmpeg
+URL: https://github.com/lxp3/avioflow
+Version: @PROJECT_VERSION@
+Cflags: -I${includedir}@AVIOFLOW_PC_CFLAGS@
+Libs: -L${libdir} -lavioflow@AVIOFLOW_PC_LIBS@
+Libs.private: @AVIOFLOW_PC_LIBS_PRIVATE@
