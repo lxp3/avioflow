@@ -80,13 +80,15 @@ jobs:
           PKG_CONFIG_PATH: ${{ github.workspace }}/build-go/prefix/lib/pkgconfig
         run: go test -count=1 ./...
 
-      # cgocheck=2 catches Go pointers written into C memory, which the default
-      # checks miss and which corrupt memory only intermittently at runtime.
+      # The strict check catches Go pointers written into C memory, which the
+      # default checks miss and which corrupt memory only intermittently at
+      # runtime. Go 1.21 moved it from the runtime GODEBUG=cgocheck=2 to a
+      # build-time experiment, and on 1.21+ the old form is a fatal error.
       - name: Test with strict cgo pointer checks
         working-directory: go
         env:
           PKG_CONFIG_PATH: ${{ github.workspace }}/build-go/prefix/lib/pkgconfig
-          GODEBUG: cgocheck=2
+          GOEXPERIMENT: cgocheck2
         run: go test -count=1 ./...
 
       - name: Test with the race detector

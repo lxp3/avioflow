@@ -367,7 +367,18 @@ corrupt native state. Decoding is inherently sequential, though, so interleaving
 calls on one `Decoder` from several goroutines is a logic error. Give each
 goroutine its own handle.
 
-The test suite runs under both `-race` and `GODEBUG=cgocheck=2`.
+CI runs the test suite under the race detector and under strict cgo pointer
+checking, which catches Go pointers written into C memory — a mistake the default
+checks miss and that corrupts memory only intermittently:
+
+```bash
+go test -race ./...
+GOEXPERIMENT=cgocheck2 go test -count=1 ./...   # Go 1.21+
+GODEBUG=cgocheck=2 go test -count=1 ./...       # Go 1.20 and earlier
+```
+
+The flag moved from a runtime setting to a build-time experiment in Go 1.21, and
+the old form is a fatal error on newer toolchains.
 
 ## Running the tests
 
