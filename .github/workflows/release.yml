@@ -300,11 +300,15 @@ jobs:
           TAG: ${{ needs.check-tag.outputs.tag-name }}
         run: |
           set -euo pipefail
-          # Keep only the last line and default to 0: a missing release makes
-          # gh print an error and the fallback add its own value.
+          # A tag with no release yet makes gh exit nonzero, which set -e and
+          # pipefail would turn into a step failure, so absorb that here and
+          # treat "no release" as zero assets.
           COUNT=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" \
-            --jq '.assets | length' 2>/dev/null | tail -n1)
-          COUNT=${COUNT:-0}
+            --jq '.assets | length' 2>/dev/null || true)
+          # Guard against a non-numeric or empty result for the same reason.
+          case "$COUNT" in
+            ''|*[!0-9]*) COUNT=0 ;;
+          esac
           echo "count=$COUNT" >> "$GITHUB_OUTPUT"
           if [ "$COUNT" -gt 0 ]; then
             echo "::notice::Release $TAG already has $COUNT assets; skipping upload."
