@@ -335,12 +335,52 @@ namespace avioflow
   void SingleStreamDecoder::seek_to(double start_seconds)
   {
     resampler_drained_ = false;
+    range_sample_offset_ = 0;
     if (start_seconds <= 0.0)
       return;
     const int64_t ts = static_cast<int64_t>(start_seconds * AV_TIME_BASE);
     check_av_error(av_seek_frame(fmt_ctx_.get(), -1, ts, AVSEEK_FLAG_BACKWARD),
                    "Could not seek to start_seconds");
     avcodec_flush_buffers(codec_ctx_.get());
+    // The seek landed on a keyframe at or before the target, so decoding resumes
+    // somewhere earlier than start_seconds. The exact position comes from the
+    // first decoded frame's PTS; record that this pass no longer starts at sample
+    // zero so trim_to_range can keep working in absolute coordinates.
+    pending_range_seek_ = true;
+  }
+
+  // Converts a decoded frame's presentation timestamp into an absolute sample
+  // index, so a decode pass that began with a seek knows where it really is.
+  //
+  // Returns false when the frame carries no usable timestamp, in which case the
+  // caller keeps the previous offset rather than guessing.
+  bool SingleStreamDecoder::absolute_sample_offset(const AVFrame *frame,
+                                                   int64_t &out_offset) const
+  {
+    if (audio_stream_index_ < 0 || !fmt_ctx_)
+      return false;
+
+    const int64_t pts = frame->best_effort_timestamp != AV_NOPTS_VALUE
+                            ? frame->best_effort_timestamp
+                            : frame->pts;
+    if (pts == AV_NOPTS_VALUE)
+      return false;
+
+    const AVStream *stream = fmt_ctx_->streams[audio_stream_index_];
+    if (!stream || stream->time_base.den <= 0)
+      return false;
+
+    const double seconds = static_cast<double>(pts) * av_q2d(stream->time_base);
+    if (seconds < 0.0)
+      return false;
+
+    // Deliberately the output rate: trim_to_range compares against bounds scaled
+    // by metadata_.sample_rate, which reflects resampling once configured.
+    if (metadata_.sample_rate <= 0)
+      return false;
+
+    out_offset = static_cast<int64_t>(std::llround(seconds * metadata_.sample_rate));
+    return true;
   }
 
   void SingleStreamDecoder::setup_resampler(AVFrame *frame)
@@ -507,19 +547,27 @@ namespace avioflow
   // Trims `frame` in place to the [start_seconds, stop_seconds) range, at sample
   // accuracy. Must be called immediately after update_decoded_metadata() so
   // total_samples_decoded_ reflects samples through the end of `frame`.
+  //
+  // `range_sample_offset_` is the absolute sample index this decode pass started
+  // at. It is non-zero after a seek, because AVSEEK_FLAG_BACKWARD lands on a
+  // keyframe at or before the target rather than exactly on it. Without it the
+  // counter would restart at zero while the bounds below stay absolute, so every
+  // frame would look like it precedes start_seconds and the range would come back
+  // short or empty.
   SingleStreamDecoder::TrimAction SingleStreamDecoder::trim_to_range(
       AVFrame *frame, double start_seconds, const std::optional<double> &stop_seconds)
   {
     if (metadata_.sample_rate <= 0)
       return TrimAction::Keep;
 
-    const int64_t frame_start = total_samples_decoded_ - frame->nb_samples;
+    const int64_t absolute_end = range_sample_offset_ + total_samples_decoded_;
+    const int64_t frame_start = absolute_end - frame->nb_samples;
 
     if (start_seconds > 0.0)
     {
       const int64_t skip_until = static_cast<int64_t>(
           std::llround(start_seconds * metadata_.sample_rate));
-      if (total_samples_decoded_ <= skip_until)
+      if (absolute_end <= skip_until)
         return TrimAction::Skip; // frame entirely before start_seconds
 
       if (frame_start < skip_until)
@@ -538,7 +586,7 @@ namespace avioflow
       if (frame_start >= stop_at)
         return TrimAction::Stop; // fully past stop_seconds
 
-      if (total_samples_decoded_ > stop_at)
+      if (absolute_end > stop_at)
       {
         frame->nb_samples = static_cast<int>(stop_at - frame_start);
         if (frame->nb_samples <= 0)
@@ -834,6 +882,17 @@ namespace avioflow
 
       if (has_range && mode_ == Mode::Offline)
       {
+        // The first frame after a seek tells us where decoding actually resumed.
+        // total_samples_decoded_ already counts this frame, so subtract it to get
+        // the offset of the pass rather than of the frame's end.
+        if (pending_range_seek_)
+        {
+          pending_range_seek_ = false;
+          int64_t frame_offset = 0;
+          if (absolute_sample_offset(f, frame_offset))
+            range_sample_offset_ = frame_offset - (total_samples_decoded_ - f->nb_samples);
+        }
+
         const TrimAction action = trim_to_range(f, start_seconds, stop_seconds);
         if (action == TrimAction::Skip)
           continue;

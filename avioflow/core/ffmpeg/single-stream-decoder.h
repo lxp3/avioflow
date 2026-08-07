@@ -67,6 +67,7 @@ namespace avioflow
     enum class TrimAction { Keep, Skip, Stop };
     TrimAction trim_to_range(AVFrame *frame, double start_seconds,
                              const std::optional<double> &stop_seconds);
+    bool absolute_sample_offset(const AVFrame *frame, int64_t &out_offset) const;
     AVFrame *decode_next_frame();
     AVFrame *read_raw_pcm_frame();
     void setup_resampler(AVFrame *frame);
@@ -94,6 +95,11 @@ namespace avioflow
     bool resampler_initialized_ = false;
     bool resampler_drained_ = false;
     int64_t total_samples_decoded_ = 0;
+    // Absolute sample index this decode pass started at. Non-zero only after a
+    // range seek, where AVSEEK_FLAG_BACKWARD lands before the requested start.
+    int64_t range_sample_offset_ = 0;
+    // Set by seek_to(); the next decoded frame's PTS establishes the offset.
+    bool pending_range_seek_ = false;
 
 #ifdef AVIOFLOW_HAS_WASAPI
     std::unique_ptr<WasapiHandler> wasapi_handler_;

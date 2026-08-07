@@ -302,6 +302,53 @@ def test_get_samples_offline():
     print("  PASS: get_samples() works correctly for file input")
 
 
+def test_time_range_across_whole_file():
+    """Ranges late in the file are a regression guard.
+
+    The trim bounds are absolute sample offsets, but a seek restarts the decoder's
+    own sample counter, so comparing the two directly made every range past
+    roughly half the duration come back short or empty.
+    """
+    print("\n=== Test: Time ranges across the whole file ===")
+
+    if not os.path.exists(MP3_PATH):
+        print(f"  Skip: File not found at {MP3_PATH}")
+        return
+
+    decoder = avioflow.AudioDecoder()
+    decoder.load_file(MP3_PATH)
+    rate = decoder.get_metadata().sample_rate
+
+    for start in (0.0, 20.0, 50.0, 70.0, 90.0):
+        samples = decoder.get_samples(start, start + 5.0)
+        count = get_sample_count(samples)
+        seconds = count / rate if rate else 0.0
+        print(f"  [{start}, {start + 5.0}) -> {count} samples, {seconds:.3f}s")
+        assert count > 0, f"range starting at {start}s returned nothing"
+        assert abs(seconds - 5.0) < 0.01, f"range at {start}s gave {seconds:.3f}s, want 5.0s"
+
+
+def test_open_ended_time_range():
+    """An unset stop_seconds must decode to the end from any start point."""
+    print("\n=== Test: Open-ended time ranges ===")
+
+    if not os.path.exists(MP3_PATH):
+        print(f"  Skip: File not found at {MP3_PATH}")
+        return
+
+    decoder = avioflow.AudioDecoder()
+    decoder.load_file(MP3_PATH)
+    rate = decoder.get_metadata().sample_rate
+
+    # TownTheme.mp3 is ~97.45s.
+    for start, expected in ((0.0, 97.45), (30.0, 67.45), (90.0, 7.45)):
+        samples = decoder.get_samples(start)
+        seconds = get_sample_count(samples) / rate if rate else 0.0
+        print(f"  from {start}s -> {seconds:.3f}s (expected ~{expected}s)")
+        assert seconds > 0, f"open-ended range from {start}s returned nothing"
+        assert abs(seconds - expected) < 0.1, f"from {start}s: got {seconds:.3f}s, want ~{expected}s"
+
+
 def main():
     print("=== avioflow Offline Decoder Tests ===")
     avioflow.set_log_level("warning")
@@ -320,6 +367,8 @@ def main():
         # New tests
         test_info_metadata()
         test_get_samples_offline()
+        test_time_range_across_whole_file()
+        test_open_ended_time_range()
 
         print("\nAll offline tests passed!")
     except AssertionError as e:

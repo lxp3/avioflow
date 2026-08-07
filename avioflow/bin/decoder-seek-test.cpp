@@ -1,13 +1,27 @@
 #include "avioflow-cxx-api.h"
-#include <cassert>
 #include <chrono>
 #include <cmath>
+#include <cstdlib>
 #include <iomanip>
 #include <iostream>
+
+// assert() is compiled out in Release builds (NDEBUG), which would make this
+// test pass unconditionally. CHECK always evaluates and reports.
+#define CHECK(cond)                                                            \
+  do {                                                                         \
+    if (!(cond)) {                                                             \
+      std::cerr << "CHECK failed: " #cond " at " << __FILE__ << ":" << __LINE__ \
+                << std::endl;                                                   \
+      std::exit(1);                                                            \
+    }                                                                          \
+  } while (0)
 
 using namespace avioflow;
 
 const std::string MP3_PATH = "public/wavs/TownTheme.mp3";
+
+// TownTheme.mp3 is ~97.45s at 44100 Hz.
+constexpr double FILE_DURATION = 97.45;
 
 struct DecodeResult {
   size_t total_samples = 0;
@@ -46,10 +60,75 @@ void test_full_vs_range_decode() {
             << range_duration << "s, " << range.elapsed_ms << " ms" << std::endl;
 
   // Range decode must be sample-accurate: within a couple ms of the requested 10s window.
-  assert(std::abs(range_duration - 10.0) < 0.01);
-  assert(range.total_samples < full.total_samples);
+  CHECK(std::abs(range_duration - 10.0) < 0.01);
+  CHECK(range.total_samples < full.total_samples);
   // Seeking should skip decode work for the prefix/suffix outside the range.
-  assert(range.elapsed_ms < full.elapsed_ms);
+  CHECK(range.elapsed_ms < full.elapsed_ms);
+}
+
+// Ranges late in the file are the regression this guards. The trim bounds are
+// absolute sample offsets, but a seek restarts the decoder's own sample counter,
+// so comparing the two directly made every range past roughly half the duration
+// come back short or empty.
+void test_ranges_across_the_whole_file() {
+  std::cout << "\n=== Test: 5s windows across the whole file ===" << std::endl;
+
+  for (double start = 0.0; start + 5.0 <= FILE_DURATION; start += 10.0) {
+    const DecodeResult range = decode_range(start, start + 5.0);
+    const double duration = range.sample_rate > 0
+        ? static_cast<double>(range.total_samples) / range.sample_rate
+        : 0.0;
+
+    std::cout << "  [" << start << ", " << (start + 5.0) << ") -> "
+              << range.total_samples << " samples, " << duration << "s" << std::endl;
+
+    CHECK(range.total_samples > 0);
+    CHECK(std::abs(duration - 5.0) < 0.01);
+  }
+}
+
+// An unset stop_seconds must decode through to the end, from any start point.
+void test_open_ended_ranges() {
+  std::cout << "\n=== Test: Open-ended ranges ===" << std::endl;
+
+  for (double start : {0.0, 30.0, 60.0, 90.0}) {
+    const DecodeResult range = decode_range(start, std::nullopt);
+    const double duration = range.sample_rate > 0
+        ? static_cast<double>(range.total_samples) / range.sample_rate
+        : 0.0;
+    const double expected = FILE_DURATION - start;
+
+    std::cout << "  from " << start << "s -> " << duration << "s (expected ~"
+              << expected << "s)" << std::endl;
+
+    CHECK(range.total_samples > 0);
+    // Seeking lands on a frame boundary, so allow a frame of slack either way.
+    CHECK(std::abs(duration - expected) < 0.1);
+  }
+}
+
+// Each call seeks independently, so the same range must be repeatable and a
+// different range must return different audio.
+void test_repeated_ranges_are_stable() {
+  std::cout << "\n=== Test: Repeated ranges on one decoder ===" << std::endl;
+
+  AudioDecoder decoder;
+  decoder.load_file(MP3_PATH);
+
+  auto first = decoder.get_samples(60.0, 62.0);
+  auto second = decoder.get_samples(60.0, 62.0);
+  auto elsewhere = decoder.get_samples(20.0, 22.0);
+
+  CHECK(!first.empty() && !first[0].empty());
+  CHECK(!second.empty() && !second[0].empty());
+  CHECK(!elsewhere.empty() && !elsewhere[0].empty());
+
+  std::cout << "  60-62s twice: " << first[0].size() << " and " << second[0].size()
+            << " samples" << std::endl;
+
+  CHECK(first[0].size() == second[0].size());
+  CHECK(first[0] == second[0]);
+  CHECK(first[0] != elsewhere[0]);
 }
 
 void test_invalid_range() {
@@ -64,7 +143,7 @@ void test_invalid_range() {
   } catch (const std::invalid_argument &) {
     threw = true;
   }
-  assert(threw);
+  CHECK(threw);
 
   threw = false;
   try {
@@ -72,7 +151,7 @@ void test_invalid_range() {
   } catch (const std::invalid_argument &) {
     threw = true;
   }
-  assert(threw);
+  CHECK(threw);
 
   std::cout << "  Invalid range combinations correctly rejected" << std::endl;
 }
@@ -80,6 +159,9 @@ void test_invalid_range() {
 int main() {
   try {
     test_full_vs_range_decode();
+    test_ranges_across_the_whole_file();
+    test_open_ended_ranges();
+    test_repeated_ranges_are_stable();
     test_invalid_range();
     std::cout << "\nAll seek tests passed!" << std::endl;
   } catch (const std::exception &e) {

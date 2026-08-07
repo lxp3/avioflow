@@ -97,6 +97,52 @@ fn get_samples_range_decodes_only_the_requested_window() {
     );
 }
 
+/// Ranges late in the file are a regression guard. The trim bounds are absolute
+/// sample offsets, but a seek restarts the decoder's own sample counter, so
+/// comparing the two directly made every range past roughly half the duration
+/// come back short or empty.
+#[test]
+fn ranges_work_across_the_whole_file() {
+    let mut decoder = AudioDecoder::new(&StreamOptions::new()).unwrap();
+    decoder.load_file(&path()).unwrap();
+
+    let expected = 5 * SAMPLE_RATE as i64;
+    for start in [0.0, 20.0, 50.0, 70.0, 90.0] {
+        let samples = decoder.get_samples_range(start, Some(start + 5.0)).unwrap();
+        assert!(
+            !samples.is_empty() && !samples[0].is_empty(),
+            "range starting at {start}s returned nothing"
+        );
+        let diff = samples[0].len() as i64 - expected;
+        assert!(
+            diff.abs() <= 2304,
+            "range starting at {start}s: expected ~{expected} samples, got {} (diff {diff})",
+            samples[0].len()
+        );
+    }
+}
+
+/// An unset stop must decode to the end from any start point.
+#[test]
+fn open_ended_ranges_reach_the_end() {
+    let mut decoder = AudioDecoder::new(&StreamOptions::new()).unwrap();
+    decoder.load_file(&path()).unwrap();
+
+    // TownTheme.mp3 is ~97.45s.
+    for (start, expected_seconds) in [(0.0, 97.45), (30.0, 67.45), (90.0, 7.45)] {
+        let samples = decoder.get_samples_range(start, None).unwrap();
+        assert!(
+            !samples.is_empty() && !samples[0].is_empty(),
+            "open-ended range from {start}s returned nothing"
+        );
+        let seconds = samples[0].len() as f64 / SAMPLE_RATE as f64;
+        assert!(
+            (seconds - expected_seconds).abs() < 0.1,
+            "from {start}s: got {seconds:.3}s, expected ~{expected_seconds}s"
+        );
+    }
+}
+
 #[test]
 fn ranges_can_be_requested_repeatedly_from_one_decoder() {
     let mut decoder = AudioDecoder::new(&StreamOptions::new()).unwrap();
