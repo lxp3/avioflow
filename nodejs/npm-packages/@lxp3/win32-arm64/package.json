@@ -1,6 +1,6 @@
 {
   "name": "@lxp3/win32-arm64",
-  "version": "0.7.4",
+  "version": "0.7.5",
   "description": "Windows ARM64 native bindings for avioflow",
   "os": [
     "win32"

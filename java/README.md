@@ -16,8 +16,8 @@ Gradle:
 
 ```kotlin
 dependencies {
-    implementation("io.github.lxp3:avioflow:0.7.4")
-    runtimeOnly("io.github.lxp3:avioflow:0.7.4:linux-x86_64")
+    implementation("io.github.lxp3:avioflow:0.7.5")
+    runtimeOnly("io.github.lxp3:avioflow:0.7.5:linux-x86_64")
 }
 ```
 
@@ -27,12 +27,12 @@ Maven:
 <dependency>
   <groupId>io.github.lxp3</groupId>
   <artifactId>avioflow</artifactId>
-  <version>0.7.4</version>
+  <version>0.7.5</version>
 </dependency>
 <dependency>
   <groupId>io.github.lxp3</groupId>
   <artifactId>avioflow</artifactId>
-  <version>0.7.4</version>
+  <version>0.7.5</version>
   <classifier>linux-x86_64</classifier>
   <scope>runtime</scope>
 </dependency>
