@@ -38,14 +38,14 @@ application, or run it in WebAssembly.
 
 | Language / Runtime | Integration | Install / Consume | Compatibility |
 | ------------------ | ----------- | ----------------- | ------------- |
-| C++                | Native CMake package | `find_package(avioflow CONFIG REQUIRED)` | Shared/static packages for Linux, macOS, and Windows; Linux packages include both libstdc++ ABI 0 and ABI 1 variants |
-| C / other FFI      | C ABI exported by the core | `#include <avioflow-c-api.h>` | Flat `extern "C"` surface with opaque handles; usable from any language with C FFI |
-| Python             | pybind11 binding | `pip install avioflow` | Wheels for mainstream desktop/server platforms |
-| JavaScript / Node.js | Node-API native addon | `npm install avioflow` | Platform-specific native packages selected by npm |
-| Java               | JNI binding | Gradle / Maven | Runtime classifiers for Linux, macOS, and Windows |
-| Rust               | C ABI binding | `cargo add avioflow` (see [rust/README.md](rust/README.md)) | Builds the native core from source; FFmpeg linked statically |
-| Go                 | cgo over the C ABI | `go get github.com/lxp3/avioflow/go` (see [go/README.md](go/README.md)) | Requires the C library installed first; found via pkg-config |
-| WebAssembly        | WASM build | npm package / web bundle | Browser and WASM-capable runtime support |
+| C++                | Native CMake package | `find_package(avioflow CONFIG REQUIRED)` — [reference](#c-api) | Shared/static packages for Linux, macOS, and Windows; Linux packages include both libstdc++ ABI 0 and ABI 1 variants |
+| C / other FFI      | C ABI exported by the core | `#include <avioflow-c-api.h>` — [header](avioflow/include/avioflow-c-api.h) | Flat `extern "C"` surface with opaque handles; usable from any language with C FFI |
+| Python             | pybind11 binding | `pip install avioflow` — [reference](python/README.md) | Wheels for mainstream desktop/server platforms |
+| JavaScript / Node.js | Node-API native addon | `npm install avioflow` — [reference](nodejs/README.md) | Platform-specific native packages selected by npm |
+| Java               | JNI binding | Gradle / Maven — [reference](java/README.md) | Runtime classifiers for Linux, macOS, and Windows |
+| Rust               | C ABI binding | `cargo add avioflow` — [reference](rust/README.md) | Builds the native core from source; FFmpeg linked statically |
+| Go                 | cgo over the C ABI | `go get github.com/lxp3/avioflow/go` — [reference](go/README.md) | Requires the C library installed first; found via pkg-config |
+| WebAssembly        | WASM build | npm package / web bundle — [reference](wasm/README.md) | Browser and WASM-capable runtime support |
 
 ## Decoder API Flow
 
@@ -141,8 +141,9 @@ ctest --test-dir build --output-on-failure
 
 ## Installation
 
-Language packages have their own install instructions; see [Other language
-APIs](#other-language-apis). The C++ package is below.
+Language packages install through their own package managers; see
+[Supported language](#supported-language) for the command and reference for each.
+The C++ package is below.
 
 ### C++ (CMake)
 
@@ -325,20 +326,6 @@ consume(resampler.flush());   // required, else the tail is lost
 `flush()` is not optional: the resampler holds back the last few milliseconds to
 keep filter continuity. Calling `resample()` per chunk instead would reset that
 state and introduce a discontinuity at every boundary.
-
----
-
-## Other language APIs
-
-Each binding has its own reference, kept next to the code it documents:
-
-- [Python](python/README.md) — `pip install avioflow`
-- [Node.js](nodejs/README.md) — `npm install avioflow`
-- [Java](java/README.md) — Gradle / Maven
-- [Rust](rust/README.md) — `cargo add avioflow`
-- [Go](go/README.md) — `go get github.com/lxp3/avioflow/go`
-- [WebAssembly](wasm/README.md) — browser and Electron builds
-- [C ABI](avioflow/include/avioflow-c-api.h) — flat `extern "C"` surface for any language with C FFI
 
 ---
 
