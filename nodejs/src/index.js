@@ -137,6 +137,8 @@ export const getSupportedInputFormats = addon.getSupportedInputFormats;
 export const getSupportedOutputFormats = addon.getSupportedOutputFormats;
 export const save = addon.save;
 export const getWaveform = addon.getWaveform;
+export const resample = addon.resample;
 export const AudioDecoder = addon.AudioDecoder;
+export const AudioResampler = addon.AudioResampler;
 
 export default addon;

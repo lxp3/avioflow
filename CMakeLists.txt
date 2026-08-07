@@ -221,13 +221,27 @@ endif()
 
 # --- glibc math symbol compatibility ---
 # The prebuilt static FFmpeg bundles a libvorbis that still refers to the
-# __*_finite math symbols glibc 2.31 removed. Any target that links those
-# archives into a binary must resolve them, so this is needed whenever FFmpeg is
-# static on Linux, not just for the Rust bindings. See the file's header comment.
+# __*_finite math symbols glibc 2.31 removed. Any target linking those archives
+# into a binary must resolve them, so this applies whenever FFmpeg is static on
+# Linux, not just to the Rust bindings. See the file's header comment.
+#
+# This is a separate object library rather than sources compiled into avioflow,
+# because a static linker resolves left to right: with the definitions inside
+# libavioflow.a they sit *before* libvorbis.a on the link line and are already
+# passed by the time vorbis's references are seen. Linking the objects directly
+# into every consumer sidesteps archive ordering entirely.
 if(UNIX AND NOT APPLE AND NOT BUILD_SHARED_LIBS)
     enable_language(C)
-    target_sources(avioflow PRIVATE
+    add_library(avioflow_glibc_compat STATIC
         "${CMAKE_CURRENT_SOURCE_DIR}/avioflow/core/compat/glibc-finite-compat.c")
+    set_target_properties(avioflow_glibc_compat PROPERTIES
+        POSITION_INDEPENDENT_CODE ON)
+
+    # Appended after ffmpeg::ffmpeg so the definitions follow libvorbis.a on the
+    # link line, and wrapped in a link group so the linker rescans: plain
+    # left-to-right resolution would already have passed these objects.
+    target_link_libraries(avioflow PUBLIC
+        "-Wl,--start-group" avioflow_glibc_compat "-Wl,--end-group")
 endif()
 
 # --- WebAssembly Bindings ---
@@ -249,7 +263,14 @@ if(NOT SKBUILD)
     )
 
     # Install library
-    install(TARGETS avioflow
+    # avioflow links avioflow_glibc_compat publicly on static Linux builds, so
+    # that target has to be exported alongside it.
+    set(AVIOFLOW_INSTALL_TARGETS avioflow)
+    if(TARGET avioflow_glibc_compat)
+        list(APPEND AVIOFLOW_INSTALL_TARGETS avioflow_glibc_compat)
+    endif()
+
+    install(TARGETS ${AVIOFLOW_INSTALL_TARGETS}
         EXPORT avioflowTargets
         RUNTIME DESTINATION bin
         LIBRARY DESTINATION lib

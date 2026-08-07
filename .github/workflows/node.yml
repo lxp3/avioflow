@@ -48,6 +48,7 @@ jobs:
         run: |
           export AVIOFLOW_BINDINGS_PATH="$(pwd)/npm-packages/@lxp3/linux-x64/avioflow.node"
           node tests/test-offline-load.js
+          node tests/test-resample.js
 
       - uses: actions/upload-artifact@v4
         with:
@@ -95,6 +96,7 @@ jobs:
               dnf install -y nodejs && \
               export AVIOFLOW_BINDINGS_PATH=\"\$(pwd)/npm-packages/@lxp3/linux-arm64/avioflow.node\" && \
               node tests/test-offline-load.js
+          node tests/test-resample.js
             "
 
       - uses: actions/upload-artifact@v4
@@ -136,6 +138,7 @@ jobs:
         run: |
           export AVIOFLOW_BINDINGS_PATH="$(pwd)/npm-packages/@lxp3/darwin-x64/avioflow.node"
           node tests/test-offline-load.js
+          node tests/test-resample.js
 
       - uses: actions/upload-artifact@v4
         with:
@@ -176,6 +179,7 @@ jobs:
         run: |
           export AVIOFLOW_BINDINGS_PATH="$(pwd)/npm-packages/@lxp3/darwin-arm64/avioflow.node"
           node tests/test-offline-load.js
+          node tests/test-resample.js
 
       - uses: actions/upload-artifact@v4
         with:

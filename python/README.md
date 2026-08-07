@@ -46,6 +46,7 @@ print(samples.shape)  # (channels, samples)
 | `info(source)` | `Metadata` | Read metadata without decoding. |
 | `load(source, output_sample_rate=None, output_num_channels=None)` | `(Metadata, ndarray)` | Open and decode everything in one call. |
 | `save(path, samples, options=None)` | `None` | Write samples to a file. |
+| `resample(samples, input_sample_rate, output_sample_rate, output_num_channels=None)` | `ndarray` | Resample a complete buffer. |
 | `set_log_level(level)` | `None` | FFmpeg verbosity. |
 | `get_supported_decoders()` | `list[str]` | Available decoders, e.g. `"mp3"`. |
 | `get_supported_encoders()` | `list[str]` | Available encoders, e.g. `"pcm_s16le"`. |
@@ -174,6 +175,42 @@ preset is also available:
 ```python
 options = avioflow.AudioWriteOptions("wav", 16000, 1)   # format, rate, channels
 ```
+
+## Resampling
+
+Two entry points: `resample` for a buffer held in full, `AudioResampler` for
+audio arriving in chunks. Both work on any array, not only avioflow output, so a
+NumPy array from another library can be resampled directly.
+
+To resample *while decoding*, pass `output_sample_rate` to `AudioDecoder`
+instead; that avoids a second pass over the samples.
+
+### One-shot
+
+```python
+downsampled = avioflow.resample(samples, 44100, 16000)
+mono = avioflow.resample(samples, 44100, 16000, output_num_channels=1)
+```
+
+### Chunked
+
+```python
+import numpy as np
+
+resampler = avioflow.AudioResampler(44100, 16000)
+parts = [resampler.process(chunk) for chunk in chunks]
+parts.append(resampler.flush())
+out = np.concatenate([p for p in parts if p.size], axis=1)
+```
+
+`flush()` is not optional. The resampler holds back the last few milliseconds to
+keep filter continuity, and skipping the flush discards them. Filter state
+carries across `process` calls, so chunked output matches a one-shot conversion
+sample for sample — calling `resample` per chunk instead would introduce a
+discontinuity at every boundary.
+
+`output_num_channels` returns 0 until the first `process` call reveals the input
+channel count. The channel count must not change between calls.
 
 ## Metadata
 

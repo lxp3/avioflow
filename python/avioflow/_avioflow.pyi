@@ -318,6 +318,113 @@ class AudioDecoder:
         """
         ...
 
+def resample(
+    samples: np.ndarray,
+    input_sample_rate: int,
+    output_sample_rate: int,
+    output_num_channels: Optional[int] = None
+) -> np.ndarray:
+    """
+    Resample a complete buffer of audio samples in one call.
+
+    Handles the internal flush, so no samples are lost. For audio arriving in
+    chunks use AudioResampler instead: calling this per chunk would reset the
+    filter state and introduce a discontinuity at every boundary.
+
+    Args:
+        samples (numpy.ndarray): Input samples with shape (channels, samples).
+        input_sample_rate (int): Source sample rate in Hz. Must be > 0.
+        output_sample_rate (int): Target sample rate in Hz. Must be > 0.
+        output_num_channels (int, optional): Target channel count. Defaults to
+            the input channel count.
+
+    Returns:
+        numpy.ndarray: Resampled samples with shape (channels, samples).
+
+    Raises:
+        ValueError: If a sample rate is not positive, or the input is ragged.
+
+    Example:
+        >>> import avioflow
+        >>> out = avioflow.resample(samples, 44100, 16000)
+        >>> mono = avioflow.resample(samples, 44100, 16000, output_num_channels=1)
+    """
+    ...
+
+class AudioResampler:
+    """
+    Stateful resampler for audio that arrives in chunks.
+
+    Filter state is preserved across process() calls, so consecutive chunks join
+    without discontinuities at the boundaries. For a buffer you already hold in
+    full, the resample() function is simpler.
+
+    flush() is not optional: the resampler holds back the last few milliseconds
+    of audio internally, and skipping the flush discards them.
+    """
+
+    def __init__(
+        self,
+        input_sample_rate: int,
+        output_sample_rate: int,
+        output_num_channels: Optional[int] = None
+    ) -> None:
+        """
+        Create a resampler.
+
+        Args:
+            input_sample_rate (int): Source sample rate in Hz. Must be > 0.
+            output_sample_rate (int): Target sample rate in Hz. Must be > 0.
+            output_num_channels (int, optional): Target channel count. Defaults
+                to the input channel count.
+
+        Raises:
+            ValueError: If a sample rate is not positive.
+        """
+        ...
+
+    def process(self, samples: np.ndarray) -> np.ndarray:
+        """
+        Resample one chunk of samples.
+
+        May return fewer samples than the rate ratio suggests, because the
+        resampler buffers samples internally to keep filter continuity. The
+        remainder is emitted by flush().
+
+        Args:
+            samples (numpy.ndarray): Input with shape (channels, samples). The
+                channel count must not change between calls.
+
+        Returns:
+            numpy.ndarray: Resampled samples with shape (channels, samples).
+
+        Raises:
+            ValueError: If the input is ragged or the channel count changed.
+        """
+        ...
+
+    def flush(self) -> np.ndarray:
+        """
+        Drain the samples still buffered inside the resampler.
+
+        Call once after the final process() call. Skipping this drops the last
+        few milliseconds of audio.
+
+        Returns:
+            numpy.ndarray: Remaining samples with shape (channels, samples).
+        """
+        ...
+
+    @property
+    def output_sample_rate(self) -> int:
+        """int: The output sample rate the resampler was configured with."""
+        ...
+
+    @property
+    def output_num_channels(self) -> int:
+        """int: Output channel count. Zero until the first process() call."""
+        ...
+
 class DeviceManager:
     """Utility class for discovering system audio devices."""
 

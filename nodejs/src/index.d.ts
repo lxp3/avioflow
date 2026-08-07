@@ -207,6 +207,95 @@ export function getSupportedInputFormats(): string[];
 export function getSupportedOutputFormats(): string[];
 export function save(path: string, samples: Float32Array[], options?: AudioWriteOptions): void;
 
+/** Options for the AudioResampler constructor */
+export interface AudioResamplerOptions {
+    /** Source sample rate in Hz. Required, must be greater than zero. */
+    inputSampleRate: number;
+    /** Target sample rate in Hz. Required, must be greater than zero. */
+    outputSampleRate: number;
+    /** Target channel count. Defaults to the input channel count. */
+    outputNumChannels?: number;
+}
+
+/**
+ * Resample a complete buffer of audio in one call.
+ *
+ * Handles the internal flush, so no samples are lost. For audio arriving in
+ * chunks use AudioResampler instead: calling this per chunk would reset the
+ * filter state and introduce a discontinuity at every boundary.
+ *
+ * @param samples Input samples, one Float32Array per channel
+ * @param inputSampleRate Source sample rate in Hz
+ * @param outputSampleRate Target sample rate in Hz
+ * @param outputNumChannels Target channel count; defaults to the input count
+ * @returns Resampled samples, one Float32Array per channel
+ * @throws Error if a sample rate is not positive, or the input is ragged
+ *
+ * @example
+ * ```typescript
+ * const downsampled = avioflow.resample(samples, 44100, 16000);
+ * const mono = avioflow.resample(samples, 44100, 16000, 1);
+ * ```
+ */
+export function resample(
+    samples: Float32Array[],
+    inputSampleRate: number,
+    outputSampleRate: number,
+    outputNumChannels?: number
+): Float32Array[];
+
+/**
+ * Stateful resampler for audio that arrives in chunks.
+ *
+ * Filter state is preserved across `process()` calls, so consecutive chunks join
+ * without discontinuities at the boundaries. For a buffer you already hold in
+ * full, {@link resample} is simpler.
+ *
+ * `flush()` is not optional: the resampler holds back the last few milliseconds
+ * of audio internally, and skipping the flush discards them.
+ *
+ * @example
+ * ```typescript
+ * const resampler = new avioflow.AudioResampler({
+ *     inputSampleRate: 44100,
+ *     outputSampleRate: 16000,
+ * });
+ *
+ * const parts = chunks.map((chunk) => resampler.process(chunk));
+ * parts.push(resampler.flush());   // else the tail is lost
+ * ```
+ */
+export class AudioResampler {
+    constructor(options: AudioResamplerOptions);
+
+    /**
+     * Resample one chunk.
+     *
+     * May return fewer samples than the rate ratio suggests, because the
+     * resampler buffers samples internally to keep filter continuity. The
+     * remainder is emitted by flush().
+     *
+     * @param samples Input samples, one Float32Array per channel. The channel
+     *   count must not change between calls.
+     * @returns Resampled samples, one Float32Array per channel
+     * @throws Error if the input is ragged or the channel count changed
+     */
+    process(samples: Float32Array[]): Float32Array[];
+
+    /**
+     * Drain the samples still buffered inside the resampler.
+     * Call once after the final process() call.
+     * @returns The remaining samples, one Float32Array per channel
+     */
+    flush(): Float32Array[];
+
+    /** The output sample rate the resampler was configured with. */
+    outputSampleRate(): number;
+
+    /** Output channel count. Zero until the first process() call. */
+    outputNumChannels(): number;
+}
+
 /**
  * Get waveform summary for visualization.
  * 
@@ -231,6 +320,8 @@ declare const avioflow: {
     getSupportedOutputFormats: typeof getSupportedOutputFormats;
     save: typeof save;
     getWaveform: typeof getWaveform;
+    resample: typeof resample;
+    AudioResampler: typeof AudioResampler;
 };
 
 export default avioflow;

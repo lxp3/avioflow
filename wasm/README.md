@@ -162,6 +162,10 @@ loadBuffer(buffer: ArrayBuffer | Uint8Array, options?: DecodeOptions): LoadResul
 // Encode samples to a path in the WASM filesystem
 save(path: string, channels: Float32Array[], options?: WriteOptions): void
 
+// Resample a complete buffer; pass -1 for outputNumChannels to keep the input count
+resample(channels: Float32Array[], inputSampleRate: number,
+         outputSampleRate: number, outputNumChannels: number): Float32Array[]
+
 // Query FFmpeg capabilities
 getSupportedDecoders(): string[];
 getSupportedEncoders(): string[];
@@ -204,6 +208,44 @@ class AudioDecoder {
     isFinished(): boolean;
 }
 ```
+
+### AudioResampler Class
+
+```typescript
+class AudioResampler {
+    constructor(options: {
+        inputSampleRate: number;      // required, > 0
+        outputSampleRate: number;     // required, > 0
+        outputNumChannels?: number;   // defaults to the input count
+    });
+
+    process(channels: Float32Array[]): Float32Array[];
+    flush(): Float32Array[];
+    outputSampleRate(): number;
+    outputNumChannels(): number;     // 0 until the first process() call
+    delete(): void;                  // release the WASM object
+}
+```
+
+For audio arriving in chunks, use this rather than calling `resample()` per
+chunk: filter state carries across `process()` calls, so the output matches a
+one-shot conversion sample for sample, whereas per-chunk `resample()` would
+introduce a discontinuity at every boundary.
+
+```javascript
+const resampler = new avioflow.AudioResampler({
+    inputSampleRate: 44100,
+    outputSampleRate: 16000,
+});
+
+const parts = [];
+for (const chunk of chunks) parts.push(resampler.process(chunk));
+parts.push(resampler.flush());   // else the tail is lost
+resampler.delete();              // embind objects are not garbage collected
+```
+
+`flush()` is not optional: the resampler holds back the last few milliseconds to
+keep filter continuity, and skipping it discards them.
 
 ### Types
 

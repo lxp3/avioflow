@@ -83,6 +83,8 @@ try (AudioDecoder decoder = new AudioDecoder(
 | `Avioflow.getSupportedOutputFormats()` | `String[]` | Available muxers. |
 | `Avioflow.listAudioDevices()` | `DeviceInfo[]` | Enumerate audio devices. |
 | `AudioEncoder.saveAudio(String, float[][], AudioWriteOptions)` | `void` | Write samples to a file. |
+| `AudioResampler.resample(float[][], int, int)` | `float[][]` | Resample a complete buffer. |
+| `AudioResampler.resample(float[][], int, int, int)` | `float[][]` | Same, also setting the channel count. |
 
 ## Decoding
 
@@ -220,6 +222,54 @@ preset is also available:
 ```java
 AudioWriteOptions options = AudioWriteOptions.format("wav").sampleRate(16000);
 ```
+
+## Resampling
+
+Two entry points: the static `AudioResampler.resample` for a buffer held in full,
+and an `AudioResampler` instance for audio arriving in chunks. Both work on any
+`float[][]`, not only avioflow output.
+
+To resample *while decoding*, set `outputSampleRate` on `AudioStreamOptions`
+instead; that avoids a second pass over the samples.
+
+### One-shot
+
+```java
+float[][] downsampled = AudioResampler.resample(samples, 44100, 16000);
+float[][] mono = AudioResampler.resample(samples, 44100, 16000, 1);
+```
+
+### Chunked
+
+```java
+try (AudioResampler resampler = new AudioResampler(
+        new AudioResampleOptions(44100, 16000))) {
+    for (float[][] chunk : chunks) {
+        consume(resampler.process(chunk));
+    }
+    consume(resampler.flush());   // else the tail is lost
+}
+```
+
+`flush()` is not optional. The resampler holds back the last few milliseconds to
+keep filter continuity, and skipping the flush discards them. Filter state
+carries across `process` calls, so chunked output matches a one-shot conversion
+sample for sample — calling the static `resample` per chunk instead would
+introduce a discontinuity at every boundary.
+
+`outputNumChannels()` returns 0 until the first `process` call reveals the input
+channel count. The channel count must not change between calls.
+
+### `AudioResampleOptions`
+
+| Builder | Notes |
+| ------- | ----- |
+| `inputSampleRate(int)` | Required, must be greater than zero. |
+| `outputSampleRate(int)` | Required, must be greater than zero. |
+| `outputNumChannels(int)` | Defaults to the input channel count. |
+
+Both rates can also be passed to the constructor:
+`new AudioResampleOptions(44100, 16000)`.
 
 ## Metadata
 

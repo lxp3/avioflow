@@ -300,6 +300,31 @@ while (auto frame = decoder.get_frame()) {
 decoder.flush();
 ```
 
+### Resampling
+
+Two entry points: `resample()` for a buffer held in full, and `AudioResampler`
+for audio arriving in chunks. Both take planar float `samples[channel][sample]`.
+To resample while decoding, set `output_sample_rate` on `AudioStreamOptions`
+instead.
+
+```cpp
+// One-shot; flushes internally so no samples are lost
+auto out = resample(samples, 44100, 16000);
+auto mono = resample(samples, 44100, 16000, 1);   // also downmix
+
+// Chunked: filter state carries across calls, so chunk boundaries are seamless
+AudioResampler resampler({.input_sample_rate = 44100,
+                          .output_sample_rate = 16000});
+for (const auto &chunk : chunks) {
+    consume(resampler.process(chunk));
+}
+consume(resampler.flush());   // required, else the tail is lost
+```
+
+`flush()` is not optional: the resampler holds back the last few milliseconds to
+keep filter continuity. Calling `resample()` per chunk instead would reset that
+state and introduce a discontinuity at every boundary.
+
 ---
 
 ## Other language APIs

@@ -78,15 +78,57 @@ export interface WriteOptions {
     overwrite?: boolean;
 }
 
+/** Options for the AudioResampler constructor */
+export interface ResampleOptions {
+    /** Source sample rate in Hz. Required, must be greater than zero. */
+    inputSampleRate: number;
+    /** Target sample rate in Hz. Required, must be greater than zero. */
+    outputSampleRate: number;
+    /** Target channel count. Defaults to the input channel count. */
+    outputNumChannels?: number;
+}
+
+/**
+ * Stateful resampler for audio that arrives in chunks.
+ *
+ * Filter state is preserved across `process()` calls, so consecutive chunks join
+ * without discontinuities. `flush()` is not optional: the resampler holds back
+ * the last few milliseconds of audio, and skipping the flush discards them.
+ */
+export declare class AudioResampler {
+    constructor(options: ResampleOptions);
+    /** Resample one chunk; may emit fewer samples than the ratio suggests. */
+    process(channels: Float32Array[]): Float32Array[];
+    /** Drain buffered samples. Call once after the final process(). */
+    flush(): Float32Array[];
+    /** The output sample rate the resampler was configured with. */
+    outputSampleRate(): number;
+    /** Output channel count. Zero until the first process() call. */
+    outputNumChannels(): number;
+    /** Release the underlying WASM object. */
+    delete(): void;
+}
+
 /** Avioflow WASM module interface */
 export interface AvioflowModule {
     AudioDecoder: typeof AudioDecoder;
+    AudioResampler: typeof AudioResampler;
     setLogLevel(level: string): void;
     /** Decodes a path in the Emscripten virtual filesystem, not a network URL. */
     load(path: string, options?: DecodeOptions): LoadResult;
     loadBuffer(buffer: ArrayBuffer | Uint8Array, options?: DecodeOptions): LoadResult;
     /** Encodes samples to a path in the Emscripten virtual filesystem. */
     save(path: string, channels: Float32Array[], options?: WriteOptions): void;
+    /**
+     * Resample a complete buffer in one call.
+     * @param outputNumChannels Target channel count; pass -1 to keep the input count.
+     */
+    resample(
+        channels: Float32Array[],
+        inputSampleRate: number,
+        outputSampleRate: number,
+        outputNumChannels: number
+    ): Float32Array[];
     getSupportedDecoders(): string[];
     getSupportedEncoders(): string[];
     getSupportedInputFormats(): string[];

@@ -60,6 +60,7 @@ CommonJS works too: `const avioflow = require('avioflow');`
 | `loadAsync(path, options?)` | `Promise<{metadata, samples}>` | Same, off the event loop. |
 | `save(path, samples, options?)` | `void` | Write samples to a file. |
 | `getWaveform(path, samplesPerPixel)` | `{metadata, min, max}` | Min/max summary for visualization. |
+| `resample(samples, inputSampleRate, outputSampleRate, outputNumChannels?)` | `Float32Array[]` | Resample a complete buffer. |
 | `listAudioDevices()` | `DeviceInfo[]` | Enumerate audio devices. |
 | `setLogLevel(level)` | `void` | FFmpeg verbosity. |
 | `getSupportedDecoders()` | `string[]` | Available decoders, e.g. `"mp3"`. |
@@ -187,6 +188,44 @@ avioflow.save('out.wav', samples, {
 | `overwrite` | Defaults to `true` |
 
 Unset fields are inferred from the container and the input samples.
+
+## Resampling
+
+Two entry points: `resample` for a buffer held in full, `AudioResampler` for
+audio arriving in chunks. Both work on any `Float32Array[]`, not only avioflow
+output.
+
+To resample *while decoding*, pass `outputSampleRate` to `AudioDecoder` instead;
+that avoids a second pass over the samples.
+
+### One-shot
+
+```javascript
+const downsampled = avioflow.resample(samples, 44100, 16000);
+const mono = avioflow.resample(samples, 44100, 16000, 1);
+```
+
+### Chunked
+
+```javascript
+const resampler = new avioflow.AudioResampler({
+    inputSampleRate: 44100,
+    outputSampleRate: 16000,
+});
+
+const parts = [];
+for (const chunk of chunks) parts.push(resampler.process(chunk));
+parts.push(resampler.flush());     // else the tail is lost
+```
+
+`flush()` is not optional. The resampler holds back the last few milliseconds to
+keep filter continuity, and skipping the flush discards them. Filter state
+carries across `process` calls, so chunked output matches a one-shot conversion
+sample for sample — calling `resample` per chunk instead would introduce a
+discontinuity at every boundary.
+
+`outputNumChannels()` returns 0 until the first `process` call reveals the input
+channel count. The channel count must not change between calls.
 
 ## Waveform summaries
 

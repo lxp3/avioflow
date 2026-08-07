@@ -57,6 +57,15 @@ bool boolean_field(JNIEnv *env, jobject object, const char *field_name, bool def
   return result;
 }
 
+// Reads a primitive int field, as opposed to a boxed java.lang.Integer.
+int int_field(JNIEnv *env, jobject object, const char *field_name) {
+  jclass cls = env->GetObjectClass(object);
+  jfieldID field = env->GetFieldID(cls, field_name, "I");
+  int result = field ? env->GetIntField(object, field) : 0;
+  env->DeleteLocalRef(cls);
+  return result;
+}
+
 int integer_value(JNIEnv *env, jobject value) {
   jclass cls = env->FindClass("java/lang/Integer");
   jmethodID method = env->GetMethodID(cls, "intValue", "()I");
@@ -107,6 +116,26 @@ AudioStreamOptions to_stream_options(JNIEnv *env, jobject options) {
   if (input_format) {
     result.input_format = jstring_to_string(env, input_format);
     env->DeleteLocalRef(input_format);
+  }
+
+  return result;
+}
+
+AudioResampleOptions to_resample_options(JNIEnv *env, jobject options) {
+  AudioResampleOptions result;
+  if (!options) {
+    return result;
+  }
+
+  // Both rates are primitive ints on the Java side, so they are always present;
+  // the C++ constructor rejects non-positive values.
+  result.input_sample_rate = int_field(env, options, "inputSampleRate");
+  result.output_sample_rate = int_field(env, options, "outputSampleRate");
+
+  jobject output_num_channels = object_field(env, options, "outputNumChannels", "Ljava/lang/Integer;");
+  if (output_num_channels) {
+    result.output_num_channels = integer_value(env, output_num_channels);
+    env->DeleteLocalRef(output_num_channels);
   }
 
   return result;
@@ -285,6 +314,10 @@ AudioDecoder *decoder_from_handle(jlong handle) {
 
 AudioEncoder *encoder_from_handle(jlong handle) {
   return reinterpret_cast<AudioEncoder *>(static_cast<intptr_t>(handle));
+}
+
+AudioResampler *resampler_from_handle(jlong handle) {
+  return reinterpret_cast<AudioResampler *>(static_cast<intptr_t>(handle));
 }
 
 } // namespace
@@ -481,4 +514,85 @@ Java_io_github_lxp3_avioflow_AudioEncoder_nativeSave(JNIEnv *env, jclass, jlong 
 extern "C" JNIEXPORT void JNICALL
 Java_io_github_lxp3_avioflow_AudioEncoder_nativeDestroy(JNIEnv *, jclass, jlong handle) {
   delete encoder_from_handle(handle);
+}
+
+// --- AudioResampler ---
+
+extern "C" JNIEXPORT jlong JNICALL
+Java_io_github_lxp3_avioflow_AudioResampler_nativeCreate(JNIEnv *env, jclass, jobject options) {
+  try {
+    return reinterpret_cast<jlong>(new AudioResampler(to_resample_options(env, options)));
+  } catch (const std::exception &error) {
+    throw_avioflow(env, error);
+    return 0;
+  }
+}
+
+extern "C" JNIEXPORT jobjectArray JNICALL
+Java_io_github_lxp3_avioflow_AudioResampler_nativeProcess(JNIEnv *env, jclass, jlong handle,
+                                                          jobjectArray samples) {
+  try {
+    return to_float_2d_array(
+        env, resampler_from_handle(handle)->process(from_float_2d_array(env, samples)));
+  } catch (const std::exception &error) {
+    throw_avioflow(env, error);
+    return nullptr;
+  }
+}
+
+extern "C" JNIEXPORT jobjectArray JNICALL
+Java_io_github_lxp3_avioflow_AudioResampler_nativeFlush(JNIEnv *env, jclass, jlong handle) {
+  try {
+    return to_float_2d_array(env, resampler_from_handle(handle)->flush());
+  } catch (const std::exception &error) {
+    throw_avioflow(env, error);
+    return nullptr;
+  }
+}
+
+extern "C" JNIEXPORT jint JNICALL
+Java_io_github_lxp3_avioflow_AudioResampler_nativeOutputSampleRate(JNIEnv *env, jclass,
+                                                                   jlong handle) {
+  try {
+    return resampler_from_handle(handle)->output_sample_rate();
+  } catch (const std::exception &error) {
+    throw_avioflow(env, error);
+    return 0;
+  }
+}
+
+extern "C" JNIEXPORT jint JNICALL
+Java_io_github_lxp3_avioflow_AudioResampler_nativeOutputNumChannels(JNIEnv *env, jclass,
+                                                                     jlong handle) {
+  try {
+    return resampler_from_handle(handle)->output_num_channels();
+  } catch (const std::exception &error) {
+    throw_avioflow(env, error);
+    return 0;
+  }
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_io_github_lxp3_avioflow_AudioResampler_nativeDestroy(JNIEnv *, jclass, jlong handle) {
+  delete resampler_from_handle(handle);
+}
+
+extern "C" JNIEXPORT jobjectArray JNICALL
+Java_io_github_lxp3_avioflow_AudioResampler_nativeResample(JNIEnv *env, jclass,
+                                                            jobjectArray samples,
+                                                            jint input_sample_rate,
+                                                            jint output_sample_rate,
+                                                            jint output_num_channels) {
+  try {
+    // -1 is the documented "keep the input channel count" sentinel.
+    std::optional<int> channels;
+    if (output_num_channels > 0) {
+      channels = output_num_channels;
+    }
+    return to_float_2d_array(env, resample(from_float_2d_array(env, samples),
+                                           input_sample_rate, output_sample_rate, channels));
+  } catch (const std::exception &error) {
+    throw_avioflow(env, error);
+    return nullptr;
+  }
 }

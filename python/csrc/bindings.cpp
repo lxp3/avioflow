@@ -146,6 +146,27 @@ py::array_t<float> samples_to_array(const std::vector<std::vector<float>>& sampl
     return result;
 }
 
+// Converts a (channels, samples) array into the planar vectors the C++ API
+// takes. Used by both save() and the resampling entry points.
+std::vector<std::vector<float>> array_to_samples(
+        const py::array_t<float, py::array::c_style | py::array::forcecast>& samples,
+        const char* argument_name) {
+    py::buffer_info buf = samples.request();
+    if (buf.ndim != 2) {
+        throw std::invalid_argument(
+            std::string(argument_name) + " must be a 2D array with shape (channels, samples)");
+    }
+
+    const auto num_channels = static_cast<size_t>(buf.shape[0]);
+    const auto num_samples = static_cast<size_t>(buf.shape[1]);
+    std::vector<std::vector<float>> result(num_channels);
+    const auto* ptr = static_cast<const float*>(buf.ptr);
+    for (size_t c = 0; c < num_channels; ++c) {
+        result[c].assign(ptr + c * num_samples, ptr + (c + 1) * num_samples);
+    }
+    return result;
+}
+
 std::vector<std::string> get_supported_decoders_released() {
     py::gil_scoped_release release;
     return get_supported_decoders();
@@ -600,19 +621,7 @@ PYBIND11_MODULE(_avioflow, m) {
     m.def("save", [](const std::string& path,
                      py::array_t<float, py::array::c_style | py::array::forcecast> samples,
                      py::object options_obj) {
-        py::buffer_info buf = samples.request();
-        if (buf.ndim != 2) {
-            throw std::runtime_error("samples must be 2D array with shape (channels, samples)");
-        }
-
-        int num_channels = static_cast<int>(buf.shape[0]);
-        int num_samples = static_cast<int>(buf.shape[1]);
-
-        std::vector<std::vector<float>> samples_vec(num_channels);
-        auto ptr = static_cast<float*>(buf.ptr);
-        for (int c = 0; c < num_channels; ++c) {
-            samples_vec[c].assign(ptr + c * num_samples, ptr + (c + 1) * num_samples);
-        }
+        std::vector<std::vector<float>> samples_vec = array_to_samples(samples, "samples");
 
         AudioWriteOptions options;
         if (!options_obj.is_none()) {
@@ -658,6 +667,144 @@ PYBIND11_MODULE(_avioflow, m) {
         Returns:
             list[str]: Output format names such as "wav", "flac", "mp4", and "adts".
     )pbdoc");
+
+    // --- Resampling ---
+
+    m.def("resample", [](py::array_t<float, py::array::c_style | py::array::forcecast> samples,
+                         int input_sample_rate,
+                         int output_sample_rate,
+                         std::optional<int> output_num_channels) -> py::array_t<float> {
+        std::vector<std::vector<float>> input = array_to_samples(samples, "samples");
+        std::vector<std::vector<float>> output;
+        {
+            py::gil_scoped_release release;
+            output = resample(input, input_sample_rate, output_sample_rate,
+                              output_num_channels);
+        }
+        return samples_to_array(output);
+    },
+    py::arg("samples"),
+    py::arg("input_sample_rate"),
+    py::arg("output_sample_rate"),
+    py::arg("output_num_channels") = py::none(),
+    R"pbdoc(
+        Resample a complete buffer of audio samples in one call.
+
+        Handles the internal flush, so no samples are lost. For audio arriving in
+        chunks use AudioResampler instead: calling this per chunk would reset the
+        filter state and introduce a discontinuity at every boundary.
+
+        Args:
+            samples (numpy.ndarray): Input samples with shape (channels, samples).
+            input_sample_rate (int): Source sample rate in Hz. Must be > 0.
+            output_sample_rate (int): Target sample rate in Hz. Must be > 0.
+            output_num_channels (int, optional): Target channel count. Defaults to
+                the input channel count.
+
+        Returns:
+            numpy.ndarray: Resampled samples with shape (channels, samples).
+
+        Raises:
+            ValueError: If a sample rate is not positive, or the input is ragged.
+
+        Example:
+            >>> out = avioflow.resample(samples, 44100, 16000)
+            >>> mono = avioflow.resample(samples, 44100, 16000, output_num_channels=1)
+    )pbdoc");
+
+    py::class_<AudioResampler>(m, "AudioResampler", R"pbdoc(
+        Stateful resampler for audio that arrives in chunks.
+
+        Filter state is preserved across process() calls, so consecutive chunks
+        join without discontinuities at the boundaries. For a buffer you already
+        hold in full, the resample() function is simpler.
+
+        flush() is not optional: the resampler holds back the last few
+        milliseconds of audio internally, and skipping the flush discards them.
+
+        Example:
+            >>> resampler = avioflow.AudioResampler(44100, 16000)
+            >>> parts = [resampler.process(chunk) for chunk in chunks]
+            >>> parts.append(resampler.flush())   # else the tail is lost
+            >>> out = numpy.concatenate([p for p in parts if p.size], axis=1)
+    )pbdoc")
+        .def(py::init([](int input_sample_rate, int output_sample_rate,
+                         std::optional<int> output_num_channels) {
+            AudioResampleOptions options;
+            options.input_sample_rate = input_sample_rate;
+            options.output_sample_rate = output_sample_rate;
+            options.output_num_channels = output_num_channels;
+            return std::make_unique<AudioResampler>(options);
+        }),
+        py::arg("input_sample_rate"),
+        py::arg("output_sample_rate"),
+        py::arg("output_num_channels") = py::none(),
+        R"pbdoc(
+            Create a resampler.
+
+            Args:
+                input_sample_rate (int): Source sample rate in Hz. Must be > 0.
+                output_sample_rate (int): Target sample rate in Hz. Must be > 0.
+                output_num_channels (int, optional): Target channel count.
+                    Defaults to the input channel count.
+
+            Raises:
+                ValueError: If a sample rate is not positive.
+        )pbdoc")
+
+        .def("process", [](AudioResampler& self,
+                           py::array_t<float, py::array::c_style | py::array::forcecast> samples)
+                        -> py::array_t<float> {
+            std::vector<std::vector<float>> input = array_to_samples(samples, "samples");
+            std::vector<std::vector<float>> output;
+            {
+                py::gil_scoped_release release;
+                output = self.process(input);
+            }
+            return samples_to_array(output);
+        },
+        py::arg("samples"),
+        R"pbdoc(
+            Resample one chunk of samples.
+
+            May return fewer samples than the rate ratio suggests, because the
+            resampler buffers samples internally to keep filter continuity. The
+            remainder is emitted by flush().
+
+            Args:
+                samples (numpy.ndarray): Input with shape (channels, samples). The
+                    channel count must not change between calls.
+
+            Returns:
+                numpy.ndarray: Resampled samples with shape (channels, samples).
+
+            Raises:
+                ValueError: If the input is ragged or the channel count changed.
+        )pbdoc")
+
+        .def("flush", [](AudioResampler& self) -> py::array_t<float> {
+            std::vector<std::vector<float>> output;
+            {
+                py::gil_scoped_release release;
+                output = self.flush();
+            }
+            return samples_to_array(output);
+        },
+        R"pbdoc(
+            Drain the samples still buffered inside the resampler.
+
+            Call once after the final process() call. Skipping this drops the last
+            few milliseconds of audio.
+
+            Returns:
+                numpy.ndarray: Remaining samples with shape (channels, samples).
+        )pbdoc")
+
+        .def_property_readonly("output_sample_rate", &AudioResampler::output_sample_rate,
+            "int: The output sample rate the resampler was configured with.")
+
+        .def_property_readonly("output_num_channels", &AudioResampler::output_num_channels,
+            "int: Output channel count. Zero until the first process() call.");
 
     // --- DeviceManager ---
 

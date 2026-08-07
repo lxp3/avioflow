@@ -12,6 +12,7 @@
 #include <vector>
 #include <string>
 #include <memory>
+#include <optional>
 #include <stdexcept>
 
 using namespace emscripten;
@@ -235,6 +236,31 @@ val load(const std::string &path, val options) {
 }
 
 /**
+ * @brief Read a JS array of Float32Array into planar sample vectors.
+ *
+ * Throws std::invalid_argument, which embind surfaces as a JS exception.
+ */
+std::vector<std::vector<float>> JsToSamples(val channels) {
+    if (channels.isUndefined() || channels.isNull()) {
+        throw std::invalid_argument("samples must be an array of Float32Array");
+    }
+
+    const unsigned int num_channels = channels["length"].as<unsigned int>();
+    std::vector<std::vector<float>> samples(num_channels);
+    for (unsigned int channel = 0; channel < num_channels; ++channel) {
+        val source = channels[channel];
+        if (!source.instanceof(val::global("Float32Array"))) {
+            throw std::invalid_argument("Every channel must be a Float32Array");
+        }
+        const unsigned int length = source["length"].as<unsigned int>();
+        samples[channel].resize(length);
+        val(typed_memory_view(samples[channel].size(), samples[channel].data()))
+            .call<void>("set", source);
+    }
+    return samples;
+}
+
+/**
  * @brief Load from ArrayBuffer
  */
 val loadBuffer(val buffer, val options) {
@@ -277,20 +303,7 @@ val loadBuffer(val buffer, val options) {
 }
 
 void save(const std::string &path, val channels, val options) {
-    const unsigned int num_channels = channels["length"].as<unsigned int>();
-    std::vector<std::vector<float>> samples(num_channels);
-    for (unsigned int channel = 0; channel < num_channels; ++channel) {
-        val source = channels[channel];
-        if (!source.instanceof(val::global("Float32Array"))) {
-            val::global("console").call<void>(
-                "error", std::string("Every channel must be a Float32Array"));
-            return;
-        }
-        const unsigned int length = source["length"].as<unsigned int>();
-        samples[channel].resize(length);
-        val(typed_memory_view(samples[channel].size(), samples[channel].data()))
-            .call<void>("set", source);
-    }
+    std::vector<std::vector<float>> samples = JsToSamples(channels);
 
     AudioWriteOptions write_options;
     if (!options.isUndefined() && !options.isNull()) {
@@ -312,6 +325,75 @@ void save(const std::string &path, val channels, val options) {
     save_audio(path, samples, write_options);
 }
 
+/**
+ * @brief Resample a complete buffer in one call.
+ *
+ * Pass a non-positive outputNumChannels to keep the input channel count.
+ */
+val resampleBuffer(val channels, int inputSampleRate, int outputSampleRate,
+                   int outputNumChannels) {
+    std::optional<int> channel_count;
+    if (outputNumChannels > 0) {
+        channel_count = outputNumChannels;
+    }
+    return SamplesToJs(resample(JsToSamples(channels), inputSampleRate,
+                                outputSampleRate, channel_count));
+}
+
+// --- AudioResampler Wrapper Class ---
+
+/**
+ * @class AudioResamplerWrapper
+ * @brief WASM-friendly wrapper for AudioResampler.
+ *
+ * Filter state is kept across process() calls, so consecutive chunks join
+ * without discontinuities. flush() must be called at the end, or the last few
+ * milliseconds of audio are lost.
+ */
+class AudioResamplerWrapper {
+public:
+    AudioResamplerWrapper(val options)
+        : resampler_(toOptions(options)) {}
+
+    /** Resample one chunk; may emit fewer samples than the ratio suggests. */
+    val process(val channels) {
+        return SamplesToJs(resampler_.process(JsToSamples(channels)));
+    }
+
+    /** Drain buffered samples. Call once after the final process(). */
+    val flush() {
+        return SamplesToJs(resampler_.flush());
+    }
+
+    int outputSampleRate() { return resampler_.output_sample_rate(); }
+
+    /** Output channel count; zero until the first process() call. */
+    int outputNumChannels() { return resampler_.output_num_channels(); }
+
+private:
+    // Built before the member is constructed, so the C++ constructor can
+    // validate the rates and throw rather than leaving a half-built object.
+    static AudioResampleOptions toOptions(val options) {
+        AudioResampleOptions result;
+        if (options.isUndefined() || options.isNull()) {
+            throw std::invalid_argument(
+                "Expected an options object with inputSampleRate and outputSampleRate");
+        }
+        if (options.hasOwnProperty("inputSampleRate")) {
+            result.input_sample_rate = options["inputSampleRate"].as<int>();
+        }
+        if (options.hasOwnProperty("outputSampleRate")) {
+            result.output_sample_rate = options["outputSampleRate"].as<int>();
+        }
+        if (options.hasOwnProperty("outputNumChannels")) {
+            result.output_num_channels = options["outputNumChannels"].as<int>();
+        }
+        return result;
+    }
+
+    AudioResampler resampler_;
+};
+
 // --- Emscripten Bindings ---
 
 EMSCRIPTEN_BINDINGS(avioflow) {
@@ -324,7 +406,16 @@ EMSCRIPTEN_BINDINGS(avioflow) {
     function("getSupportedInputFormats", &getSupportedInputFormats);
     function("getSupportedOutputFormats", &getSupportedOutputFormats);
     function("save", &save);
-    
+    function("resample", &resampleBuffer);
+
+    // AudioResampler class
+    class_<AudioResamplerWrapper>("AudioResampler")
+        .constructor<val>()
+        .function("process", &AudioResamplerWrapper::process)
+        .function("flush", &AudioResamplerWrapper::flush)
+        .function("outputSampleRate", &AudioResamplerWrapper::outputSampleRate)
+        .function("outputNumChannels", &AudioResamplerWrapper::outputNumChannels);
+
     // AudioDecoder class
     class_<AudioDecoderWrapper>("AudioDecoder")
         .constructor<>()

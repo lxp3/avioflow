@@ -16,22 +16,27 @@
  * forwarding to the standard functions is behaviourally correct; it costs the
  * classification the caller had promised was unnecessary.
  *
- * Compiled only on Linux (see CMakeLists.txt). The symbols are weak so that a
- * host still providing them wins.
+ * Compiled only on Linux (see CMakeLists.txt).
+ *
+ * These are strong definitions, deliberately. A weak definition in a static
+ * archive does not cause the linker to pull in this object file to satisfy an
+ * undefined reference, so libvorbis's references stayed unresolved and the link
+ * failed. Modern glibc no longer exports these names, so there is nothing to
+ * collide with; on a host that still does, the archive member wins.
  */
 
 #include <math.h>
 
 #define AVIOFLOW_FINITE_ALIAS_1(name)                                          \
-  __attribute__((weak)) double __##name##_finite(double x) { return name(x); }
+  double __##name##_finite(double x) { return name(x); }
 
 #define AVIOFLOW_FINITE_ALIAS_1F(name)                                         \
-  __attribute__((weak)) float __##name##f_finite(float x) { return name##f(x); }
+  float __##name##f_finite(float x) { return name##f(x); }
 
 AVIOFLOW_FINITE_ALIAS_1(log)
 AVIOFLOW_FINITE_ALIAS_1(exp)
 AVIOFLOW_FINITE_ALIAS_1F(acos)
 
-__attribute__((weak)) double __pow_finite(double x, double y) {
+double __pow_finite(double x, double y) {
   return pow(x, y);
 }

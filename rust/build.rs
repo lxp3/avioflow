@@ -60,6 +60,12 @@ fn main() {
         }
     }
 
+    // After FFmpeg, because it resolves the __*_finite math symbols the bundled
+    // libvorbis still references and a static linker resolves left to right.
+    if lib_dir.join("libavioflow_glibc_compat.a").exists() {
+        println!("cargo:rustc-link-lib=static=avioflow_glibc_compat");
+    }
+
     // Anything left is expected to come from the host system, so link it
     // dynamically.
     for lib in system_libs(&lib_dir) {
