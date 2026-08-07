@@ -159,10 +159,18 @@ def sync_java() -> None:
             r'^version\s*=\s*providers\.fileContents\(layout\.projectDirectory\.file\("\.\./version\.txt"\)\)\.asText\.get\(\)\.trim\(\)\r?$',
             'version = providers.fileContents(layout.projectDirectory.file("../version.txt")).asText.get().trim()',
         )
+    # Gradle coordinates and the Maven <version> tags both live in the Java
+    # README now. The Maven tags previously drifted because nothing synced them.
+    readme = ROOT / "java" / "README.md"
     update_regex(
-        ROOT / "README.md",
+        readme,
         r"io\.github\.lxp3:avioflow:\d+\.\d+\.\d+",
         f"io.github.lxp3:avioflow:{VERSION}",
+    )
+    update_regex(
+        readme,
+        r"^(\s*)<version>\d+\.\d+\.\d+</version>\r?$",
+        rf"\g<1><version>{VERSION}</version>",
     )
 
 

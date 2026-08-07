@@ -17,7 +17,8 @@
   "files": [
     "src/index.js",
     "src/index.cjs",
-    "src/index.d.ts"
+    "src/index.d.ts",
+    "README.md"
   ],
   "repository": {
     "type": "git",
