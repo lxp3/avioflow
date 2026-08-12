@@ -40,7 +40,7 @@ set_target_properties(avioflow_wasm PROPERTIES
 # Emscripten compile flags
 target_compile_options(avioflow_wasm PRIVATE
     -O3
-    -fno-exceptions  # Disable C++ exceptions for smaller size
+    -fexceptions  # Needed so decoder errors surface as catchable JS exceptions
 )
 
 # Emscripten link flags
@@ -68,6 +68,7 @@ target_link_options(avioflow_wasm PRIVATE
 
     # Error handling
     -sABORTING_MALLOC=0         # Don't abort on malloc failure
+    -sDISABLE_EXCEPTION_CATCHING=0  # Let embind convert C++ exceptions to JS errors
 )
 
 # Output location

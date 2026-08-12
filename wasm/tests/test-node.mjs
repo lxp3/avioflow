@@ -11,12 +11,13 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 // Test audio files
 const MP3_PATH = join(__dirname, '../../public/wavs/TownTheme.mp3');
 const WAV_PATH = join(__dirname, '../../public/wavs/zh.wav');
+const OPUS_PATH = join(__dirname, '../../public/wavs/Y0000000000_--5llN02F84.opus');
 
 async function main() {
     console.log('=== avioflow WASM Node.js Test ===\n');
     
     // Import WASM module
-    console.log('[1/4] Loading WASM module...');
+    console.log('[1/5] Loading WASM module...');
     const start = performance.now();
     
     const createAvioflow = (await import('../dist/avioflow.js')).default;
@@ -29,7 +30,7 @@ async function main() {
     avioflow.setLogLevel('warning');
     
     // Test 1: Load MP3 from buffer
-    console.log('[2/4] Testing MP3 decode from buffer...');
+    console.log('[2/5] Testing MP3 decode from buffer...');
     try {
         const mp3Data = readFileSync(MP3_PATH);
         console.log(`  File size: ${mp3Data.length} bytes`);
@@ -50,7 +51,7 @@ async function main() {
     }
     
     // Test 2: Load WAV with resampling
-    console.log('[3/4] Testing WAV decode with resampling...');
+    console.log('[3/5] Testing WAV decode with resampling...');
     try {
         const wavData = readFileSync(WAV_PATH);
         console.log(`  File size: ${wavData.length} bytes`);
@@ -71,7 +72,7 @@ async function main() {
     }
     
     // Test 3: Streaming decode
-    console.log('[4/4] Testing streaming decode...');
+    console.log('[4/5] Testing streaming decode...');
     try {
         const mp3Data = readFileSync(MP3_PATH);
         
@@ -118,6 +119,40 @@ async function main() {
         console.log(`  ✗ Streaming decode FAILED: ${e.message}\n`);
     }
     
+    // Test 5: getSamples time-range seeking across a long Ogg/Opus file
+    console.log('[5/5] Testing getSamples(start, stop) seeking on a long Opus file...');
+    try {
+        const opusData = readFileSync(OPUS_PATH);
+        const decoder = new avioflow.AudioDecoder();
+        decoder.loadBuffer(new Uint8Array(opusData), {});
+
+        const meta = decoder.getMetadata();
+        console.log(`  Duration: ${meta.duration.toFixed(2)}s, Sample rate: ${meta.sampleRate}Hz`);
+
+        // Ranges chosen to cross every page boundary, including well past 1300s
+        // where a stale/incompatible WASM build previously returned empty samples.
+        const ranges = [[0, 50], [700, 750], [1300, 1350], [1900, 1950], [2400, meta.duration]];
+        let allPassed = true;
+
+        for (const [startSeconds, stopSeconds] of ranges) {
+            const samples = decoder.getSamples(startSeconds, stopSeconds);
+            const numSamples = samples[0]?.length || 0;
+            const expectedSamples = Math.round((stopSeconds - startSeconds) * meta.sampleRate);
+            const withinTolerance = Math.abs(numSamples - expectedSamples) < meta.sampleRate * 0.1;
+
+            console.log(`  [${startSeconds}s, ${stopSeconds.toFixed(1)}s) -> ${numSamples} samples` +
+                (withinTolerance ? '' : ` (expected ~${expectedSamples})`));
+
+            if (numSamples === 0 || !withinTolerance) {
+                allPassed = false;
+            }
+        }
+
+        console.log(allPassed ? '  ✓ Opus range seeking PASSED\n' : '  ✗ Opus range seeking FAILED\n');
+    } catch (e) {
+        console.log(`  ✗ Opus range seeking FAILED: ${e.message}\n`);
+    }
+
     console.log('=== All WASM tests completed ===');
 }
 
