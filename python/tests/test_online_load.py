@@ -1,14 +1,19 @@
-#!/usr/bin/env python3
-"""Test script for online (streaming) audio decoding with avioflow."""
+"""Tests for online (streaming) audio decoding with avioflow."""
 import io
-import os
-import sys
-import time
+from pathlib import Path
+
 import avioflow
 import numpy as np
+import pytest
 
-MP3_PATH = "public/wavs/TownTheme.mp3"
-WAV_PATH = "public/wavs/zh.wav"
+REPO_ROOT = Path(__file__).resolve().parents[2]
+MP3_PATH = REPO_ROOT / "public/wavs/TownTheme.mp3"
+WAV_PATH = REPO_ROOT / "public/wavs/zh.wav"
+
+
+def require_audio_file(path):
+    if not path.exists():
+        pytest.skip(f"audio fixture not found: {path}")
 
 
 def get_sample_count(samples):
@@ -42,9 +47,7 @@ def simulate_streaming(test_name: str, file_path: str, format: str,
     """
     print(f"\n=== Running {test_name} (100ms chunks) ===")
     
-    if not os.path.exists(file_path):
-        print(f"  Skip: File not found at {file_path}")
-        return
+    require_audio_file(file_path)
     
     with open(file_path, "rb") as f:
         buffer = f.read()
@@ -69,8 +72,6 @@ def simulate_streaming(test_name: str, file_path: str, format: str,
     offset = 0
     total_decoded = 0
     push_count = 0
-    start_time = time.time()
-    
     # Push all data in chunks, decoding after each push
     while offset < len(buffer):
         to_push = min(chunk_size, len(buffer) - offset)
@@ -89,9 +90,7 @@ def simulate_streaming(test_name: str, file_path: str, format: str,
             break
         total_decoded += decoded
     
-    elapsed = (time.time() - start_time) * 1000
     print(f"  Push count: {push_count}, Total samples: {total_decoded}")
-    print(f"  Time: {elapsed:.1f}ms")
     
     assert total_decoded > 0, f"{test_name} failed: No samples decoded"
 
@@ -113,9 +112,7 @@ def test_online_pcm_fallback():
     """
     print("\n=== Running Online PCM Fallback Test ===")
     
-    if not os.path.exists(WAV_PATH):
-        print(f"  Skip: File not found at {WAV_PATH}")
-        return
+    require_audio_file(WAV_PATH)
     
     with open(WAV_PATH, "rb") as f:
         buffer = f.read()
@@ -138,8 +135,6 @@ def test_online_pcm_fallback():
     chunk_size = int(16000 * 1 * 2 * 0.1)
     offset = 0
     total_decoded = 0
-    start_time = time.time()
-    
     while offset < len(buffer):
         to_push = min(chunk_size, len(buffer) - offset)
         decoder.feed(buffer[offset:offset + to_push])
@@ -153,9 +148,7 @@ def test_online_pcm_fallback():
             break
         total_decoded += decoded
     
-    elapsed = (time.time() - start_time) * 1000
     print(f"  Total samples: {total_decoded}")
-    print(f"  Time: {elapsed:.1f}ms")
     
     assert total_decoded > 0, "PCM fallback test failed: No samples decoded"
 
@@ -164,9 +157,7 @@ def test_feed_with_buffer_inputs():
     """Test: feed accepts bytes-like inputs."""
     print("\n=== Running Streaming Buffer Input Test ===")
 
-    if not os.path.exists(MP3_PATH):
-        print(f"  Skip: File not found at {MP3_PATH}")
-        return
+    require_audio_file(MP3_PATH)
 
     with open(MP3_PATH, "rb") as f:
         raw = f.read()
@@ -217,28 +208,3 @@ def test_online_pcm_8k_small_chunks():
             total_decoded += decoded
         print(f"  Chunk {chunk_size} bytes: {total_decoded} samples")
         assert total_decoded == sample_rate, f"Chunk {chunk_size} decoded {total_decoded} samples"
-
-
-def main():
-    print("=== avioflow Online (Streaming) Decoder Tests ===")
-    avioflow.set_log_level("warning")
-    
-    try:
-        test_online_mp3()
-        test_online_wav()
-        test_online_pcm_fallback()
-        test_feed_with_buffer_inputs()
-        test_online_pcm_8k_small_chunks()
-        print("\nAll online tests passed!")
-    except AssertionError as e:
-        print(f"\nTest failed: {e}")
-        sys.exit(1)
-    except Exception as e:
-        print(f"\nError: {e}")
-        import traceback
-        traceback.print_exc()
-        sys.exit(1)
-
-
-if __name__ == "__main__":
-    main()

@@ -1,9 +1,7 @@
-#!/usr/bin/env python3
 """Tests for standalone resampling: resample() and AudioResampler."""
-import sys
-
 import avioflow
 import numpy as np
+import pytest
 
 # Only rounding of the rate ratio may move the count; the resampler tail is
 # drained, so a larger gap means samples are being dropped. Mirrors
@@ -133,55 +131,35 @@ def test_empty_flush():
     print("test_empty_flush passed")
 
 
-def test_invalid_arguments():
+@pytest.mark.parametrize(
+    "call",
+    [
+        pytest.param(
+            lambda samples: avioflow.resample(samples, 0, 16000),
+            id="zero-input-rate",
+        ),
+        pytest.param(
+            lambda samples: avioflow.resample(samples, 16000, -1),
+            id="negative-output-rate",
+        ),
+        pytest.param(
+            lambda samples: avioflow.resample(samples[0], 16000, 8000),
+            id="one-dimensional-array",
+        ),
+        pytest.param(
+            lambda samples: avioflow.AudioResampler(16000, 0),
+            id="constructor-zero-rate",
+        ),
+    ],
+)
+def test_invalid_arguments(call):
     samples = make_sine(1, 100, 16000)
+    with pytest.raises(ValueError):
+        call(samples)
 
-    for description, call in [
-        ("zero input rate", lambda: avioflow.resample(samples, 0, 16000)),
-        ("negative output rate", lambda: avioflow.resample(samples, 16000, -1)),
-        ("1D array", lambda: avioflow.resample(samples[0], 16000, 8000)),
-        ("constructor zero rate", lambda: avioflow.AudioResampler(16000, 0)),
-    ]:
-        try:
-            call()
-        except ValueError:
-            pass
-        else:
-            raise AssertionError(f"{description} should have raised ValueError")
 
+def test_rejects_channel_count_change():
     resampler = avioflow.AudioResampler(16000, 8000)
     resampler.process(make_sine(2, 100, 16000))
-    try:
+    with pytest.raises(ValueError):
         resampler.process(make_sine(1, 100, 16000))
-    except ValueError:
-        pass
-    else:
-        raise AssertionError("changing the channel count should have raised")
-    print("test_invalid_arguments passed")
-
-
-def main():
-    try:
-        test_one_shot_downsample()
-        test_upsample()
-        test_equal_rates_pass_through()
-        test_downmix_to_mono()
-        test_flush_recovers_tail()
-        test_chunked_matches_one_shot()
-        test_output_rate_and_channels_reported()
-        test_accepts_foreign_arrays()
-        test_empty_flush()
-        test_invalid_arguments()
-        print("\nAll resample tests passed!")
-    except AssertionError as error:
-        print(f"\nTest failed: {error}")
-        sys.exit(1)
-    except Exception as error:  # noqa: BLE001 - surface the traceback and fail
-        print(f"\nError: {error}")
-        import traceback
-        traceback.print_exc()
-        sys.exit(1)
-
-
-if __name__ == "__main__":
-    main()

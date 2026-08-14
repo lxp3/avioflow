@@ -140,8 +140,11 @@ py::array_t<float> samples_to_array(const std::vector<std::vector<float>>& sampl
     size_t num_samples = samples[0].size();
     py::array_t<float> result({num_channels, num_samples});
     auto buf = result.mutable_unchecked<2>();
-    for (size_t c = 0; c < num_channels; ++c) {
-        std::copy(samples[c].begin(), samples[c].end(), &buf(c, 0));
+    {
+        py::gil_scoped_release release;
+        for (size_t c = 0; c < num_channels; ++c) {
+            std::copy(samples[c].begin(), samples[c].end(), &buf(c, 0));
+        }
     }
     return result;
 }
@@ -161,10 +164,28 @@ std::vector<std::vector<float>> array_to_samples(
     const auto num_samples = static_cast<size_t>(buf.shape[1]);
     std::vector<std::vector<float>> result(num_channels);
     const auto* ptr = static_cast<const float*>(buf.ptr);
-    for (size_t c = 0; c < num_channels; ++c) {
-        result[c].assign(ptr + c * num_samples, ptr + (c + 1) * num_samples);
+    {
+        py::gil_scoped_release release;
+        for (size_t c = 0; c < num_channels; ++c) {
+            result[c].assign(ptr + c * num_samples, ptr + (c + 1) * num_samples);
+        }
     }
     return result;
+}
+
+std::vector<std::vector<float>> get_decoder_frame(AudioDecoder& decoder) {
+    py::gil_scoped_release release;
+    FrameData frame = decoder.get_frame();
+    if (!frame) {
+        return {};
+    }
+
+    std::vector<std::vector<float>> samples(frame.num_channels);
+    for (size_t channel = 0; channel < frame.num_channels; ++channel) {
+        samples[channel].assign(frame.data[channel],
+                                frame.data[channel] + frame.num_samples);
+    }
+    return samples;
 }
 
 std::vector<std::string> get_supported_decoders_released() {
@@ -539,20 +560,11 @@ PYBIND11_MODULE(_avioflow, m) {
         )pbdoc")
 
         .def("get_frame", [](AudioDecoder& self) -> py::object {
-            // Keep the GIL until the internal zero-copy frame has been copied.
-            FrameData frame = self.get_frame();
-            if (!frame) {
+            auto samples = get_decoder_frame(self);
+            if (samples.empty()) {
                 return py::none();
             }
-
-            size_t num_channels = frame.num_channels;
-            size_t num_samples = frame.num_samples;
-            py::array_t<float> result({num_channels, num_samples});
-            auto buf = result.mutable_unchecked<2>();
-            for (size_t c = 0; c < num_channels; ++c) {
-                std::copy(frame.data[c], frame.data[c] + num_samples, &buf(c, 0));
-            }
-            return result;
+            return samples_to_array(samples);
         },
         R"pbdoc(
             Decode next audio frame.

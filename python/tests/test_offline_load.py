@@ -1,14 +1,19 @@
-#!/usr/bin/env python3
-"""Test script for offline audio loading with avioflow."""
+"""Tests for offline audio loading with avioflow."""
 import io
-import os
-import sys
-import time
+from pathlib import Path
+
 import avioflow
 import numpy as np
+import pytest
 
-MP3_PATH = os.path.abspath(sys.argv[1]) if len(sys.argv) > 1 else "public/wavs/TownTheme.mp3"
-WAV_PATH = os.path.join(os.path.dirname(MP3_PATH), "zh.wav")
+REPO_ROOT = Path(__file__).resolve().parents[2]
+MP3_PATH = REPO_ROOT / "public/wavs/TownTheme.mp3"
+WAV_PATH = REPO_ROOT / "public/wavs/zh.wav"
+
+
+def require_audio_file(path):
+    if not path.exists():
+        pytest.skip(f"audio fixture not found: {path}")
 
 
 def get_sample_count(samples):
@@ -33,13 +38,9 @@ def test_offline_filepath():
     """Test: Offline decode from file path."""
     print("\n=== Test: Offline Decode from Filepath ===")
     
-    if not os.path.exists(MP3_PATH):
-        print(f"  Skip: File not found at {MP3_PATH}")
-        return
-    
-    start = time.time()
+    require_audio_file(MP3_PATH)
     decoder = avioflow.AudioDecoder()
-    decoder.load_file(MP3_PATH)
+    decoder.load_file(str(MP3_PATH))
     
     meta = decoder.get_metadata()
     print(f"  Codec: {meta.codec}, Duration: {meta.duration:.2f}s")
@@ -48,7 +49,6 @@ def test_offline_filepath():
     total_samples = get_sample_count(samples)
 
     print(f"  Total samples decoded: {total_samples}")
-    print(f"  Time: {(time.time() - start) * 1000:.1f}ms")
     assert total_samples > 0, "No samples decoded"
 
 
@@ -56,11 +56,7 @@ def test_offline_memory():
     """Test: Offline decode from memory (full bytes)."""
     print("\n=== Test: Offline Decode from Memory ===")
     
-    if not os.path.exists(MP3_PATH):
-        print(f"  Skip: File not found at {MP3_PATH}")
-        return
-    
-    start = time.time()
+    require_audio_file(MP3_PATH)
     
     # Read entire file into memory
     with open(MP3_PATH, "rb") as f:
@@ -78,7 +74,6 @@ def test_offline_memory():
     total_samples = get_sample_count(samples)
 
     print(f"  Total samples decoded: {total_samples}")
-    print(f"  Time: {(time.time() - start) * 1000:.1f}ms")
     assert total_samples > 0, "No samples decoded"
 
 
@@ -86,11 +81,7 @@ def test_load_from_bytes():
     """Test: Load function with bytes input."""
     print("\n=== Test: avioflow.load() with bytes ===")
     
-    if not os.path.exists(WAV_PATH):
-        print(f"  Skip: File not found at {WAV_PATH}")
-        return
-    
-    start = time.time()
+    require_audio_file(WAV_PATH)
     
     # Read file as bytes
     with open(WAV_PATH, 'rb') as f:
@@ -104,7 +95,7 @@ def test_load_from_bytes():
     print(f"  Samples shape: {samples1.shape}, dtype: {samples1.dtype}")
     
     # Test 2: Load from filepath (for comparison)
-    meta2, samples2 = avioflow.load(WAV_PATH)
+    meta2, samples2 = avioflow.load(str(WAV_PATH))
     print(f"  From path - Codec: {meta2.codec}, Duration: {meta2.duration:.2f}s")
     
     # Verify both methods produce identical results
@@ -114,18 +105,15 @@ def test_load_from_bytes():
     assert meta1.sample_rate == meta2.sample_rate, "Sample rate mismatch"
     
     print("  PASS: Bytes and filepath produce identical results")
-    print(f"  Time: {(time.time() - start) * 1000:.1f}ms")
 
 
 def test_info_with_buffer_inputs():
     """Test: avioflow.info() accepts bytes-like inputs."""
     print("\n=== Test: avioflow.info() with bytes-like inputs ===")
 
-    if not os.path.exists(MP3_PATH):
-        print(f"  Skip: File not found at {MP3_PATH}")
-        return
+    require_audio_file(MP3_PATH)
 
-    expected = avioflow.info(MP3_PATH)
+    expected = avioflow.info(str(MP3_PATH))
     test_buffers = get_test_buffers(MP3_PATH)
 
     for name, source in test_buffers.items():
@@ -141,11 +129,9 @@ def test_decoder_load_buffer_with_inputs():
     """Test: AudioDecoder.load_buffer() accepts bytes-like inputs."""
     print("\n=== Test: AudioDecoder.load_buffer() with bytes-like inputs ===")
 
-    if not os.path.exists(WAV_PATH):
-        print(f"  Skip: File not found at {WAV_PATH}")
-        return
+    require_audio_file(WAV_PATH)
 
-    expected_meta, expected_samples = avioflow.load(WAV_PATH)
+    expected_meta, expected_samples = avioflow.load(str(WAV_PATH))
 
     for name, source in get_test_buffers(WAV_PATH).items():
         decoder = avioflow.AudioDecoder()
@@ -161,11 +147,9 @@ def test_load_with_buffer_inputs():
     """Test: avioflow.load() accepts bytes-like inputs."""
     print("\n=== Test: avioflow.load() with bytes-like inputs ===")
 
-    if not os.path.exists(WAV_PATH):
-        print(f"  Skip: File not found at {WAV_PATH}")
-        return
+    require_audio_file(WAV_PATH)
 
-    expected_meta, expected_samples = avioflow.load(WAV_PATH)
+    expected_meta, expected_samples = avioflow.load(str(WAV_PATH))
 
     for name, source in get_test_buffers(WAV_PATH).items():
         meta, samples = avioflow.load(source)
@@ -179,25 +163,17 @@ def test_invalid_info_input_type():
     """Test: avioflow.info() rejects unsupported input types."""
     print("\n=== Test: avioflow.info() invalid input type ===")
 
-    try:
+    with pytest.raises(TypeError) as exc_info:
         avioflow.info(io.StringIO("not audio bytes"))
-    except TypeError as exc:
-        message = str(exc)
-        print(f"  Error: {message}")
-        assert "bytes" in message and "BytesIO" in message, "TypeError should list supported byte inputs"
-    else:
-        raise AssertionError("Expected TypeError for io.StringIO input")
+    message = str(exc_info.value)
+    assert "bytes" in message and "BytesIO" in message
 
 
 def test_load_with_resampling():
     """Test: Load function with bytes and resampling."""
     print("\n=== Test: avioflow.load() with bytes + resampling ===")
     
-    if not os.path.exists(WAV_PATH):
-        print(f"  Skip: File not found at {WAV_PATH}")
-        return
-    
-    start = time.time()
+    require_audio_file(WAV_PATH)
     
     # Read file as bytes
     with open(WAV_PATH, 'rb') as f:
@@ -223,16 +199,13 @@ def test_load_with_resampling():
     assert sample_diff < 1000, f"Sample count mismatch too large: {sample_diff}"
     
     print("  PASS: Resampling works correctly with bytes input")
-    print(f"  Time: {(time.time() - start) * 1000:.1f}ms")
 
 
 def test_load_with_passthrough_output_options():
     """Test: -1 preserves source sample rate and channel count."""
     print("\n=== Test: avioflow.load() with passthrough output options ===")
 
-    if not os.path.exists(WAV_PATH):
-        print(f"  Skip: File not found at {WAV_PATH}")
-        return
+    require_audio_file(WAV_PATH)
 
     with open(WAV_PATH, "rb") as f:
         audio_bytes = f.read()
@@ -257,21 +230,14 @@ def test_info_metadata():
     """Test: avioflow.info() for fast metadata reading."""
     print("\n=== Test: avioflow.info() Metadata ===")
 
-    if not os.path.exists(MP3_PATH):
-        print(f"  Skip: File not found at {MP3_PATH}")
-        return
-
-    start = time.time()
+    require_audio_file(MP3_PATH)
 
     # Test info()
-    meta = avioflow.info(MP3_PATH)
-
-    duration_ms = (time.time() - start) * 1000
+    meta = avioflow.info(str(MP3_PATH))
     print(f"  Codec: {meta.codec}")
     print(f"  Duration: {meta.duration:.2f}s")
     print(f"  Sample Rate: {meta.sample_rate}Hz")
     print(f"  Channels: {meta.num_channels}")
-    print(f"  Time: {duration_ms:.2f}ms")
 
     # Validation
     assert meta.sample_rate > 0, "Invalid sample rate"
@@ -285,12 +251,10 @@ def test_get_samples_offline():
     """Test: get_samples() in offline mode."""
     print("\n=== Test: get_samples() Offline ===")
 
-    if not os.path.exists(MP3_PATH):
-        print(f"  Skip: File not found at {MP3_PATH}")
-        return
+    require_audio_file(MP3_PATH)
 
     decoder = avioflow.AudioDecoder()
-    decoder.load_file(MP3_PATH)
+    decoder.load_file(str(MP3_PATH))
 
     # Test new method name
     samples = decoder.get_samples()
@@ -311,12 +275,10 @@ def test_time_range_across_whole_file():
     """
     print("\n=== Test: Time ranges across the whole file ===")
 
-    if not os.path.exists(MP3_PATH):
-        print(f"  Skip: File not found at {MP3_PATH}")
-        return
+    require_audio_file(MP3_PATH)
 
     decoder = avioflow.AudioDecoder()
-    decoder.load_file(MP3_PATH)
+    decoder.load_file(str(MP3_PATH))
     rate = decoder.get_metadata().sample_rate
 
     for start in (0.0, 20.0, 50.0, 70.0, 90.0):
@@ -332,12 +294,10 @@ def test_open_ended_time_range():
     """An unset stop_seconds must decode to the end from any start point."""
     print("\n=== Test: Open-ended time ranges ===")
 
-    if not os.path.exists(MP3_PATH):
-        print(f"  Skip: File not found at {MP3_PATH}")
-        return
+    require_audio_file(MP3_PATH)
 
     decoder = avioflow.AudioDecoder()
-    decoder.load_file(MP3_PATH)
+    decoder.load_file(str(MP3_PATH))
     rate = decoder.get_metadata().sample_rate
 
     # TownTheme.mp3 is ~97.45s.
@@ -347,39 +307,3 @@ def test_open_ended_time_range():
         print(f"  from {start}s -> {seconds:.3f}s (expected ~{expected}s)")
         assert seconds > 0, f"open-ended range from {start}s returned nothing"
         assert abs(seconds - expected) < 0.1, f"from {start}s: got {seconds:.3f}s, want ~{expected}s"
-
-
-def main():
-    print("=== avioflow Offline Decoder Tests ===")
-    avioflow.set_log_level("warning")
-
-    try:
-        test_offline_filepath()
-        test_offline_memory()
-        test_load_from_bytes()
-        test_info_with_buffer_inputs()
-        test_decoder_load_buffer_with_inputs()
-        test_load_with_buffer_inputs()
-        test_load_with_resampling()
-        test_load_with_passthrough_output_options()
-        test_invalid_info_input_type()
-
-        # New tests
-        test_info_metadata()
-        test_get_samples_offline()
-        test_time_range_across_whole_file()
-        test_open_ended_time_range()
-
-        print("\nAll offline tests passed!")
-    except AssertionError as e:
-        print(f"\nTest failed: {e}")
-        sys.exit(1)
-    except Exception as e:
-        print(f"\nError: {e}")
-        import traceback
-        traceback.print_exc()
-        sys.exit(1)
-
-
-if __name__ == "__main__":
-    main()
