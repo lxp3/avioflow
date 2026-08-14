@@ -257,7 +257,7 @@ Building compiles the C++ core, so the host needs a C++17 compiler and CMake
 Run the tests against a checkout:
 
 ```bash
-python python/tests/test_offline_load.py public/wavs/TownTheme.mp3
+python -m pytest python/tests
 ```
 
 ## License
