@@ -7,6 +7,11 @@
 
 namespace avioflow {
 
+struct EncoderMemoryOutput {
+  std::vector<uint8_t> data;
+  size_t position = 0;
+};
+
 class SingleStreamEncoder {
 public:
   explicit SingleStreamEncoder(const AudioWriteOptions &options = {});
@@ -47,7 +52,7 @@ private:
   int64_t next_pts_ = 0;
   int input_channels_ = 0;
   int total_input_samples_ = 0;
-  std::vector<uint8_t> *output_buffer_ = nullptr;
+  EncoderMemoryOutput *memory_output_ = nullptr;
 };
 
 } // namespace avioflow
