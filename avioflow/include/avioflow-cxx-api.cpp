@@ -151,11 +151,23 @@ void AudioEncoder::save(const std::string &path,
   impl_->encoder_.save(path, samples);
 }
 
+std::vector<uint8_t> AudioEncoder::save_buffer(
+    const std::vector<std::vector<float>> &samples) {
+  return impl_->encoder_.save_buffer(samples);
+}
+
 void save_audio(const std::string &path,
                 const std::vector<std::vector<float>> &samples,
                 const AudioWriteOptions &options) {
   AudioEncoder encoder(options);
   encoder.save(path, samples);
+}
+
+std::vector<uint8_t> save_audio_buffer(
+    const std::vector<std::vector<float>> &samples,
+    const AudioWriteOptions &options) {
+  AudioEncoder encoder(options);
+  return encoder.save_buffer(samples);
 }
 
 // --- AudioResampler ---

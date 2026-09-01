@@ -206,6 +206,7 @@ export function getSupportedEncoders(): string[];
 export function getSupportedInputFormats(): string[];
 export function getSupportedOutputFormats(): string[];
 export function save(path: string, samples: Float32Array[], options?: AudioWriteOptions): void;
+export function saveBuffer(samples: Float32Array[], options?: AudioWriteOptions): Buffer;
 
 /** Options for the AudioResampler constructor */
 export interface AudioResamplerOptions {

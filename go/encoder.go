@@ -75,6 +75,21 @@ func (e *Encoder) Save(path string, samples [][]float32) error {
 		channels.count, channels.numSamples))
 }
 
+// SaveBuffer encodes samples and returns the complete container bytes.
+func (e *Encoder) SaveBuffer(samples [][]float32) ([]byte, error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.handle == nil { return nil, ErrClosed }
+	channels, err := newChannelArray(samples); if err != nil { return nil, err }
+	defer channels.release()
+	var data *C.uint8_t; var size C.size_t
+	status := C.avf_encoder_save_buffer(e.handle, channels.data, channels.count, channels.numSamples, &data, &size)
+	if err := check(status); err != nil { return nil, err }
+	result := C.GoBytes(unsafe.Pointer(data), C.int(size))
+	C.avf_free_buffer(data)
+	return result, nil
+}
+
 // SaveAudio writes planar float samples to a file in one call.
 //
 // Pass nil options to infer the format from the file extension and the samples.

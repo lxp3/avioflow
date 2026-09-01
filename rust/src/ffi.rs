@@ -206,6 +206,10 @@ extern "C" {
         num_channels: i32,
         num_samples: i64,
     ) -> c_int;
+    pub fn avf_encoder_save_buffer(
+        encoder: *mut AvfEncoder, channels: *const *const f32, num_channels: i32,
+        num_samples: i64, out_data: *mut *mut u8, out_size: *mut usize) -> c_int;
+    pub fn avf_free_buffer(data: *mut u8);
     pub fn avf_save_audio(
         path: *const c_char,
         channels: *const *const f32,

@@ -137,6 +137,24 @@ Napi::Value Save(const Napi::CallbackInfo &info) {
   return env.Undefined();
 }
 
+Napi::Value SaveBuffer(const Napi::CallbackInfo &info) {
+  Napi::Env env = info.Env();
+  if (info.Length() < 1) { Napi::TypeError::New(env, "samples expected").ThrowAsJavaScriptException(); return env.Undefined(); }
+  std::vector<std::vector<float>> samples;
+  if (!JsToSamples(env, info[0], samples)) return env.Undefined();
+  AudioWriteOptions options;
+  try {
+    if (info.Length() > 1 && info[1].IsObject()) {
+      auto o = info[1].As<Napi::Object>();
+      if (o.Has("containerFormat")) options.container_format = o.Get("containerFormat").As<Napi::String>().Utf8Value();
+      if (o.Has("codecName")) options.codec_name = o.Get("codecName").As<Napi::String>().Utf8Value();
+      if (o.Has("sampleRate")) options.sample_rate = o.Get("sampleRate").As<Napi::Number>().Int32Value();
+    }
+    auto bytes = save_audio_buffer(samples, options);
+    return Napi::Buffer<uint8_t>::Copy(env, bytes.data(), bytes.size());
+  } catch (const std::exception &error) { Napi::Error::New(env, error.what()).ThrowAsJavaScriptException(); return env.Undefined(); }
+}
+
 /**
  * @brief Resample a complete buffer in one call.
  *
@@ -741,6 +759,7 @@ Napi::Object InitAll(Napi::Env env, Napi::Object exports) {
   exports.Set("getSupportedInputFormats", Napi::Function::New(env, GetSupportedInputFormats));
   exports.Set("getSupportedOutputFormats", Napi::Function::New(env, GetSupportedOutputFormats));
   exports.Set("save", Napi::Function::New(env, Save));
+  exports.Set("saveBuffer", Napi::Function::New(env, SaveBuffer));
   exports.Set("getWaveform", Napi::Function::New(env, GetWaveform));
   exports.Set("resample", Napi::Function::New(env, Resample));
 

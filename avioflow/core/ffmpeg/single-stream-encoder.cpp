@@ -9,6 +9,20 @@
 namespace avioflow {
 
 namespace {
+int write_memory(void *opaque, const uint8_t *data, int size) {
+  auto *out = static_cast<std::vector<uint8_t> *>(opaque);
+  out->insert(out->end(), data, data + size);
+  return size;
+}
+int64_t seek_memory(void *opaque, int64_t offset, int whence) {
+  auto *out = static_cast<std::vector<uint8_t> *>(opaque);
+  if (whence == AVSEEK_SIZE) return static_cast<int64_t>(out->size());
+  if ((whence & ~AVSEEK_FORCE) != SEEK_SET) return AVERROR(EINVAL);
+  if (offset < 0) return AVERROR(EINVAL);
+  auto pos = static_cast<size_t>(offset);
+  if (pos > out->size()) out->resize(pos);
+  return offset;
+}
 
 const void *get_supported_config(const AVCodec *codec,
                                  AVCodecConfig config,
@@ -114,6 +128,7 @@ void SingleStreamEncoder::reset() {
   next_pts_ = 0;
   input_channels_ = 0;
   total_input_samples_ = 0;
+  output_buffer_ = nullptr;
 
   if (fmt_ctx_) {
     if (!(fmt_ctx_->oformat->flags & AVFMT_NOFILE) && fmt_ctx_->pb) {
@@ -149,7 +164,7 @@ void SingleStreamEncoder::validate_input(const std::vector<std::vector<float>> &
     }
   }
 
-  if (!options_.overwrite && std::filesystem::exists(path)) {
+  if (!output_buffer_ && !options_.overwrite && std::filesystem::exists(path)) {
     throw std::runtime_error("Output file already exists: " + path);
   }
 }
@@ -158,7 +173,8 @@ void SingleStreamEncoder::setup_output(const std::string &path,
                                        const std::vector<std::vector<float>> &samples) {
   const char *format_name =
       options_.container_format.has_value() ? options_.container_format->c_str() : nullptr;
-  check_av_error(avformat_alloc_output_context2(&fmt_ctx_, nullptr, format_name, path.c_str()),
+  check_av_error(avformat_alloc_output_context2(&fmt_ctx_, nullptr, format_name,
+                                                output_buffer_ ? nullptr : path.c_str()),
                  "Could not allocate output context");
   if (!fmt_ctx_) {
     throw std::runtime_error("Could not determine output format for " + path);
@@ -226,7 +242,14 @@ void SingleStreamEncoder::setup_output(const std::string &path,
                  "Could not copy audio encoder parameters");
   stream_->time_base = codec_ctx_->time_base;
 
-  if (!(fmt_ctx_->oformat->flags & AVFMT_NOFILE)) {
+  if (output_buffer_) {
+    auto *avio_buf = static_cast<uint8_t *>(av_malloc(64 * 1024));
+    if (!avio_buf) throw std::runtime_error("Could not allocate output buffer");
+    fmt_ctx_->pb = avio_alloc_context(avio_buf, 64 * 1024, 1, output_buffer_,
+                                      nullptr, write_memory, seek_memory);
+    if (!fmt_ctx_->pb) { av_free(avio_buf); throw std::runtime_error("Could not allocate output AVIO context"); }
+    fmt_ctx_->flags |= AVFMT_FLAG_CUSTOM_IO;
+  } else if (!(fmt_ctx_->oformat->flags & AVFMT_NOFILE)) {
     check_av_error(avio_open(&fmt_ctx_->pb, path.c_str(), AVIO_FLAG_WRITE),
                    "Could not open output file " + path);
   }
@@ -352,6 +375,23 @@ void SingleStreamEncoder::save(const std::string &path,
   }
   encode_all_samples(samples);
   flush_encoder();
+}
+
+std::vector<uint8_t> SingleStreamEncoder::save_buffer(
+    const std::vector<std::vector<float>> &samples) {
+  reset();
+  std::vector<uint8_t> output;
+  output_buffer_ = &output;
+  std::string format = options_.container_format.value_or("wav");
+  if (!options_.container_format) options_.container_format = format;
+  if (!options_.codec_name) options_.codec_name = "pcm_s16le";
+  validate_input(samples, "memory-output");
+  setup_output("memory-output", samples);
+  if (codec_ctx_->sample_fmt != AV_SAMPLE_FMT_FLTP) setup_resampler();
+  encode_all_samples(samples);
+  flush_encoder();
+  output_buffer_ = nullptr;
+  return output;
 }
 
 } // namespace avioflow

@@ -19,6 +19,7 @@ public:
   SingleStreamEncoder &operator=(SingleStreamEncoder &&) = delete;
 
   void save(const std::string &path, const std::vector<std::vector<float>> &samples);
+  std::vector<uint8_t> save_buffer(const std::vector<std::vector<float>> &samples);
 
 private:
   void reset();
@@ -46,6 +47,7 @@ private:
   int64_t next_pts_ = 0;
   int input_channels_ = 0;
   int total_input_samples_ = 0;
+  std::vector<uint8_t> *output_buffer_ = nullptr;
 };
 
 } // namespace avioflow

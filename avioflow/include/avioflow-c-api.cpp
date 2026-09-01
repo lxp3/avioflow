@@ -11,6 +11,7 @@
 #include "metadata.h"
 
 #include <cstring>
+#include <cstdlib>
 #include <exception>
 #include <new>
 #include <optional>
@@ -420,6 +421,36 @@ int avf_encoder_save(AvfEncoder *encoder, const char *path,
     return AVF_OK;
   });
 }
+
+int avf_encoder_save_buffer(AvfEncoder *encoder, const float *const *channels,
+                            int32_t num_channels, int64_t num_samples,
+                            uint8_t **out_data, size_t *out_size) {
+  return guard([&] {
+    if (!encoder || !out_data || !out_size) throw std::invalid_argument("null argument");
+    auto data = encoder->encoder.save_buffer(to_sample_vectors(channels, num_channels, num_samples));
+    *out_size = data.size();
+    *out_data = static_cast<uint8_t *>(std::malloc(data.size()));
+    if (data.size() && !*out_data) throw std::bad_alloc();
+    if (data.size()) std::memcpy(*out_data, data.data(), data.size());
+    return AVF_OK;
+  });
+}
+
+int avf_save_audio_buffer(const float *const *channels, int32_t num_channels,
+                          int64_t num_samples, const AvfWriteOptions *options,
+                          uint8_t **out_data, size_t *out_size) {
+  return guard([&] {
+    if (!out_data || !out_size) throw std::invalid_argument("null output");
+    auto data = save_audio_buffer(to_sample_vectors(channels, num_channels, num_samples), to_write_options(options));
+    *out_size = data.size();
+    *out_data = static_cast<uint8_t *>(std::malloc(data.size()));
+    if (data.size() && !*out_data) throw std::bad_alloc();
+    if (data.size()) std::memcpy(*out_data, data.data(), data.size());
+    return AVF_OK;
+  });
+}
+
+void avf_free_buffer(uint8_t *data) { std::free(data); }
 
 int avf_save_audio(const char *path, const float *const *channels,
                    int32_t num_channels, int64_t num_samples,

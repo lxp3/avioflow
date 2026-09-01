@@ -630,29 +630,44 @@ PYBIND11_MODULE(_avioflow, m) {
         .def_readwrite("sample_format", &AudioWriteOptions::sample_format)
         .def_readwrite("overwrite", &AudioWriteOptions::overwrite);
 
-    m.def("save", [](const std::string& path,
+    m.def("save", [](py::object target,
                      py::array_t<float, py::array::c_style | py::array::forcecast> samples,
                      py::object options_obj) {
         std::vector<std::vector<float>> samples_vec = array_to_samples(samples, "samples");
 
         AudioWriteOptions options;
+        bool is_path = py::isinstance<py::str>(target) || py::hasattr(target, "__fspath__");
+        std::string path;
+        if (is_path) path = parse_path_input(target);
         if (!options_obj.is_none()) {
             options = py::cast<AudioWriteOptions>(options_obj);
         } else {
             // Auto-detect format from file extension
-            std::string ext = path.substr(path.find_last_of('.') + 1);
+            std::string ext = is_path ? path.substr(path.find_last_of('.') + 1) : "wav";
             std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
             if (!ext.empty()) {
                 options = AudioWriteOptions(ext);
             }
         }
 
+        std::vector<uint8_t> encoded;
         {
             py::gil_scoped_release release;
-            save_audio(path, samples_vec, options);
+            if (is_path) save_audio(path, samples_vec, options);
+            else encoded = save_audio_buffer(samples_vec, options);
+        }
+        if (!is_path) {
+                if (py::isinstance<py::bytearray>(target)) {
+                    target.attr("clear")();
+                    target.attr("extend")(py::bytes(reinterpret_cast<const char*>(encoded.data()), encoded.size()));
+                } else if (py::hasattr(target, "write")) {
+                    target.attr("write")(py::bytes(reinterpret_cast<const char*>(encoded.data()), encoded.size()));
+                } else {
+                    throw py::type_error("target must be a path, bytearray, or writable binary stream");
+                }
         }
     },
-    py::arg("path"),
+    py::arg("target"),
     py::arg("samples"),
     py::arg("options") = py::none(),
     R"pbdoc(

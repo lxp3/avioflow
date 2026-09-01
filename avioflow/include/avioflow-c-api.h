@@ -255,6 +255,14 @@ AVIOFLOW_API void avf_encoder_free(AvfEncoder *encoder);
 AVIOFLOW_API int avf_encoder_save(AvfEncoder *encoder, const char *path,
                      const float *const *channels, int32_t num_channels,
                      int64_t num_samples);
+AVIOFLOW_API int avf_encoder_save_buffer(AvfEncoder *encoder,
+                     const float *const *channels, int32_t num_channels,
+                     int64_t num_samples, uint8_t **out_data, size_t *out_size);
+AVIOFLOW_API int avf_save_audio_buffer(const float *const *channels,
+                   int32_t num_channels, int64_t num_samples,
+                   const AvfWriteOptions *options, uint8_t **out_data,
+                   size_t *out_size);
+AVIOFLOW_API void avf_free_buffer(uint8_t *data);
 
 /** @brief One-shot encode, equivalent to avioflow::save_audio(). */
 AVIOFLOW_API int avf_save_audio(const char *path, const float *const *channels,

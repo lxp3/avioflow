@@ -201,6 +201,7 @@ public:
 
   void save(const std::string &path,
             const std::vector<std::vector<float>> &samples);
+  std::vector<uint8_t> save_buffer(const std::vector<std::vector<float>> &samples);
 
 private:
   class Impl;
@@ -213,6 +214,9 @@ private:
 AVIOFLOW_API void save_audio(const std::string &path,
                              const std::vector<std::vector<float>> &samples,
                              const AudioWriteOptions &options = {});
+AVIOFLOW_API std::vector<uint8_t> save_audio_buffer(
+    const std::vector<std::vector<float>> &samples,
+    const AudioWriteOptions &options = {});
 
 /**
  * @brief Stateful resampler for in-memory planar float samples.

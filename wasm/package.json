@@ -1,6 +1,6 @@
 {
   "name": "avioflow-wasm",
-  "version": "0.7.5",
+  "version": "0.7.8",
   "description": "High-performance audio decoding library (WebAssembly build)",
   "author": "lxp3",
   "license": "MIT",
