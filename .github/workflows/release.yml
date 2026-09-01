@@ -273,6 +273,7 @@ jobs:
               require_glob "Windows Python arm64 wheels" artifacts/windows-python-wheels-arm64/*.whl
             fi
             for wheel in artifacts/linux-python-wheels-*/*.whl artifacts/macos-python-wheels-*/*.whl artifacts/windows-python-wheels-*/*.whl; do
+              python3 -c 'import sys, zipfile; p=sys.argv[1]; assert zipfile.is_zipfile(p), f"Invalid wheel ZIP: {p}"; z=zipfile.ZipFile(p); bad=z.testzip(); assert bad is None, f"Corrupt wheel member {bad} in {p}"' "$wheel"
               cp "$wheel" dist/
               cp "$wheel" pypi_dist/
             done
