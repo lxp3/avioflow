@@ -2,7 +2,6 @@
 #include "ffmpeg-common.h"
 #include <algorithm>
 #include <cstring>
-#include <iostream>
 
 namespace avioflow
 {
@@ -118,11 +117,25 @@ namespace avioflow
     {
       char err_buf[AV_ERROR_MAX_STRING_SIZE];
       av_strerror(err, err_buf, sizeof(err_buf));
-      std::cerr << "[ERROR] avformat_open_input failed: " << err_buf << " (code: " << err << ")" << std::endl;
-      
-      av_freep(&avio_ctx->buffer);
-      avio_context_free(&avio_ctx);
-      avformat_free_context(fmt_ctx);
+
+      // FFmpeg 7.1 frees a user-supplied AVFormatContext and nulls *ps on
+      // failure. Custom IO is not closed, but probing may already have replaced
+      // pb->buffer. Free that AVIOContext exactly once.
+      AVIOContext *pb = avio_ctx;
+      if (fmt_ctx) {
+        if ((fmt_ctx->flags & AVFMT_FLAG_CUSTOM_IO) != 0 && fmt_ctx->pb) {
+          pb = fmt_ctx->pb;
+          fmt_ctx->pb = nullptr;
+        } else {
+          pb = nullptr;
+        }
+        avformat_free_context(fmt_ctx);
+        fmt_ctx = nullptr;
+      }
+      if (pb) {
+        av_freep(&pb->buffer);
+        avio_context_free(&pb);
+      }
       throw std::runtime_error("Could not open custom I/O input: " + std::string(err_buf));
     }
     

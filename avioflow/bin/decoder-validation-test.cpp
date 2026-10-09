@@ -74,6 +74,39 @@ int main() {
         [&] { buffer_decoder.load_buffer(nullptr, 1); },
         "null buffer with non-zero size");
 
+    expect_exception(
+        [] {
+          const uint8_t garbage[] = {0x00, 0x01, 0x02, 0x03, 0xff, 0xfe, 0x7f, 0x80};
+          AudioDecoder decoder;
+          decoder.load_buffer(garbage, sizeof(garbage));
+          decoder.get_samples();
+        },
+        "invalid audio bytes");
+
+    expect_exception(
+        [] {
+          const uint8_t truncated_wav[] = {'R', 'I', 'F', 'F', 0, 0, 0, 0, 'W', 'A', 'V', 'E'};
+          AudioDecoder decoder;
+          decoder.load_buffer(truncated_wav, sizeof(truncated_wav));
+          decoder.get_samples();
+        },
+        "truncated wav header");
+
+    AudioDecoder retry_after_invalid;
+    expect_exception(
+        [&] {
+          const uint8_t garbage[] = {0x11, 0x22, 0x33, 0x44};
+          retry_after_invalid.load_buffer(garbage, sizeof(garbage));
+        },
+        "first invalid audio");
+    expect_exception(
+        [&] {
+          const uint8_t garbage[] = {'R', 'I', 'F', 'F', 1, 2, 3, 4};
+          retry_after_invalid.load_buffer(garbage, sizeof(garbage));
+          retry_after_invalid.get_samples();
+        },
+        "second invalid audio on same decoder");
+
     AudioStreamOptions stream_options;
     stream_options.input_sample_rate = 16000;
     stream_options.input_channels = 1;
