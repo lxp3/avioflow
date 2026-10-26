@@ -59,6 +59,19 @@ target_link_options(avioflow_wasm PRIVATE
     # Bindings
     --bind                       # Enable embind
 
+    # Virtual filesystem access. Exposing FS lets callers mount real files
+    # (NODEFS in Node.js, WORKERFS for File/Blob in a browser worker) so that
+    # loadFile() reads a video on demand instead of copying all of it into the
+    # WASM heap, which is capped by MAXIMUM_MEMORY.
+    -sFORCE_FILESYSTEM=1
+    -sEXPORTED_RUNTIME_METHODS=FS
+    -lnodefs.js
+    -lworkerfs.js
+
+    # Lets JS read the message of a C++ exception via getExceptionMessage();
+    # without it a failure surfaces as an opaque number.
+    -sEXPORT_EXCEPTION_HANDLING_HELPERS
+
     # Optimization (ASYNCIFY removed for better performance)
     -O3
     -flto                       # Link-time optimization

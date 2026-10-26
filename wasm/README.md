@@ -141,6 +141,61 @@ const samples = decoder.getSamples(10.3, 20.3);
 const tail = decoder.getSamples(30.0, -1);
 ```
 
+### Extracting Audio From Large Videos
+
+`loadBuffer()` copies the whole file into the WASM heap, and the module caps that
+heap at 512 MB (`-sMAXIMUM_MEMORY` in `csrc/CMakeLists.txt`). In testing a 234 MB
+video still loaded and a 253 MB one failed with `std::bad_alloc`, so buffer input
+is only suitable for small files.
+
+For anything larger, mount the real file and use `loadFile()`. FFmpeg then reads
+it on demand and memory use stays flat. A 390 MB, 4.5 minute video decoded in
+about 8 seconds with a peak of roughly 78 MB.
+
+```javascript
+// Node.js: mount a directory with NODEFS
+avioflow.FS.mkdir('/mnt');
+avioflow.FS.mount(avioflow.FS.filesystems.NODEFS, { root: '/path/to/videos' }, '/mnt');
+
+const decoder = new avioflow.AudioDecoder({ outputSampleRate: 16000, outputNumChannels: 1 });
+decoder.loadFile('/mnt/movie.mp4');
+for (let frame = decoder.getFrame(); frame; frame = decoder.getFrame()) {
+    // frame[channel] is a Float32Array; copy it if you keep it
+}
+```
+
+```javascript
+// Browser: mount a File or Blob with WORKERFS (only available inside a Web Worker)
+avioflow.FS.mkdir('/mnt');
+avioflow.FS.mount(avioflow.FS.filesystems.WORKERFS, { files: [file] }, '/mnt');
+decoder.loadFile('/mnt/' + file.name);
+```
+
+The WORKERFS path is built in but has not been tested in a browser.
+
+Push-style `feed()` is not a substitute for large files: in testing it failed with
+`std::bad_alloc` partway through a 390 MB mkv and mp4, and it cannot read an mp4
+whose `moov` atom is at the end of the file.
+
+Choose a track in a multi-audio video with `getStreams()` and `audioStreamIndex`:
+
+```javascript
+const probe = new avioflow.AudioDecoder();
+probe.loadFile('/mnt/movie.mp4');
+console.log(probe.getStreams()); // [{ index, mediaType, codec, language, sampleRate, ... }]
+
+const decoder = new avioflow.AudioDecoder({ audioStreamIndex: 2 });
+decoder.loadFile('/mnt/movie.mp4');
+```
+
+C++ exceptions are thrown to JavaScript as numbers. Read the message with
+`avioflow.getExceptionMessage(e)`, which returns `[type, message]`:
+
+```javascript
+try { decoder.loadFile(path); }
+catch (e) { console.error(typeof e === 'number' ? avioflow.getExceptionMessage(e) : e); }
+```
+
 ## API Reference
 
 ### Module Functions
@@ -175,7 +230,8 @@ getSupportedOutputFormats(): string[];
 
 > `load()` and `AudioDecoder.loadFile()` read through Emscripten's virtual
 > filesystem, not the network. To decode a remote file in the browser, `fetch()`
-> it yourself and pass the bytes to `loadBuffer()`.
+> it yourself and pass the bytes to `loadBuffer()`, or for large files mount it
+> as described in "Extracting Audio From Large Videos".
 
 ### AudioDecoder Class
 
@@ -188,6 +244,9 @@ class AudioDecoder {
 
     // Open from buffer (complete file); returns metadata
     loadBuffer(buffer: ArrayBuffer | Uint8Array): Metadata;
+
+    // Every stream of the opened container, including video
+    getStreams(): StreamInfo[];
 
     // Push data for streaming decode
     feed(data: ArrayBuffer | Uint8Array): void;
@@ -314,6 +373,7 @@ npx serve .
 
 ```bash
 node --experimental-wasm-modules tests/test-node.mjs
+node tests/test-video.mjs   # stream listing, track selection, mounted-file decode; needs ffmpeg
 ```
 
 ## License

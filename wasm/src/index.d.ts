@@ -152,6 +152,23 @@ export interface AvioflowModule {
     getSupportedEncoders(): string[];
     getSupportedInputFormats(): string[];
     getSupportedOutputFormats(): string[];
+    /**
+     * Emscripten virtual filesystem. Mount a real directory (NODEFS, Node.js) or
+     * File/Blob list (WORKERFS, Web Worker only) and pass the mounted path to
+     * AudioDecoder.loadFile() to decode large videos without copying them into
+     * the WASM heap.
+     */
+    FS: {
+        mkdir(path: string): void;
+        mount(type: unknown, opts: Record<string, unknown>, mountpoint: string): void;
+        unmount(mountpoint: string): void;
+        filesystems: { NODEFS: unknown; WORKERFS: unknown; MEMFS: unknown };
+    };
+    /**
+     * Message of a C++ exception thrown to JavaScript, which otherwise arrives as
+     * an opaque number. Returns [exceptionType, message].
+     */
+    getExceptionMessage(exception: number): [string, string];
 }
 
 /** Create and initialize the WASM module */
