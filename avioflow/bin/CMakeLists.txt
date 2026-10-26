@@ -1,6 +1,6 @@
 # Tools/Binaries CMakeLists.txt
 
-if(ENABLE_BINARY)
+if(AVIOFLOW_ENABLE_BINARY)
     # Example apps
     add_executable(avioflow-offline-load-audio avioflow-offline-load-audio.cpp)
     target_link_libraries(avioflow-offline-load-audio PRIVATE avioflow)
@@ -8,7 +8,7 @@ if(ENABLE_BINARY)
     add_executable(avioflow-online-load-audio avioflow-online-load-audio.cpp)
     target_link_libraries(avioflow-online-load-audio PRIVATE avioflow)
 
-    if(ENABLE_WASAPI AND WIN32)
+    if(AVIOFLOW_ENABLE_WASAPI AND WIN32)
         add_executable(avioflow-wasapi-capture avioflow-wasapi-capture.cpp)
         target_link_libraries(avioflow-wasapi-capture PRIVATE avioflow)
     endif()
@@ -17,7 +17,7 @@ if(ENABLE_BINARY)
     target_link_libraries(avioflow-microphone-capture PRIVATE avioflow)
 endif()
 
-if(BUILD_TESTS)
+if(AVIOFLOW_BUILD_TESTS)
     add_executable(ffmpeg-decoder-offline-load-test decoder-offline-load-test.cpp)
     target_link_libraries(ffmpeg-decoder-offline-load-test PRIVATE avioflow)
 
@@ -41,6 +41,10 @@ if(BUILD_TESTS)
 
     add_executable(ffmpeg-resample-test resample-test.cpp)
     target_link_libraries(ffmpeg-resample-test PRIVATE avioflow)
+
+    # Manual benchmark, not registered with ctest: needs a media file argument.
+    add_executable(ffmpeg-decoder-video-benchmark decoder-video-benchmark.cpp)
+    target_link_libraries(ffmpeg-decoder-video-benchmark PRIVATE avioflow)
 
     if(BUILD_TESTING)
         add_executable(ffmpeg-decoder-validation-test decoder-validation-test.cpp)

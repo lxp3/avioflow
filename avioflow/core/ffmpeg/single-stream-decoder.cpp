@@ -1,6 +1,7 @@
 #include "single-stream-decoder.h"
 #include "avio-context-handler.h"
 #include "device-handler.h"
+#include <algorithm>
 #include <mutex>
 #include <functional>
 #include <cstring>
@@ -295,6 +296,14 @@ namespace avioflow
     if (audio_stream_index_ < 0)
       throw std::runtime_error("Could not find audio stream");
 
+    // Let the demuxer skip packets of every other stream (video, subtitles,
+    // other audio tracks) instead of reading and discarding them one by one.
+    for (unsigned i = 0; i < fmt_ctx_->nb_streams; ++i)
+    {
+      if (static_cast<int>(i) != audio_stream_index_)
+        fmt_ctx_->streams[i]->discard = AVDISCARD_ALL;
+    }
+
     AVStream *stream = fmt_ctx_->streams[audio_stream_index_];
     const AVCodec *codec = avcodec_find_decoder(stream->codecpar->codec_id);
     if (!codec)
@@ -338,9 +347,33 @@ namespace avioflow
     range_sample_offset_ = 0;
     if (start_seconds <= 0.0)
       return;
-    const int64_t ts = static_cast<int64_t>(start_seconds * AV_TIME_BASE);
-    check_av_error(av_seek_frame(fmt_ctx_.get(), -1, ts, AVSEEK_FLAG_BACKWARD),
-                   "Could not seek to start_seconds");
+    // Seek on the audio stream itself so a video container does not land on a
+    // video keyframe instead. Land slightly early: lossy codecs (AAC, MP3, Opus)
+    // need a few frames of warm-up after a flush before their output is exact,
+    // and trim_to_range drops the extra samples afterwards.
+    constexpr double kSeekPreRollSeconds = 0.5;
+    const AVStream *stream = fmt_ctx_->streams[audio_stream_index_];
+    // Deliberately not clamped at 0: a negative target makes the demuxer land on
+    // the first packet, which for AAC in mp4 is a priming packet at pts < 0 that
+    // the decoder needs to produce exact samples from the start of the stream.
+    const double target = start_seconds - kSeekPreRollSeconds;
+    const int64_t ts =
+        av_rescale_q(static_cast<int64_t>(target * AV_TIME_BASE), AV_TIME_BASE_Q,
+                     stream->time_base) +
+        (stream->start_time != AV_NOPTS_VALUE ? stream->start_time : 0);
+    int seek_ret = av_seek_frame(fmt_ctx_.get(), audio_stream_index_, ts,
+                                 AVSEEK_FLAG_BACKWARD);
+    if (seek_ret < 0 && target < 0.0)
+    {
+      // Some demuxers (mp3) reject a target before the first packet; retry at
+      // the stream start, which is what they would land on anyway.
+      const int64_t first = stream->start_time != AV_NOPTS_VALUE
+                                ? stream->start_time
+                                : 0;
+      seek_ret = av_seek_frame(fmt_ctx_.get(), audio_stream_index_, first,
+                               AVSEEK_FLAG_BACKWARD);
+    }
+    check_av_error(seek_ret, "Could not seek to start_seconds");
     avcodec_flush_buffers(codec_ctx_.get());
     // The seek landed on a keyframe at or before the target, so decoding resumes
     // somewhere earlier than start_seconds. The exact position comes from the
@@ -370,9 +403,14 @@ namespace avioflow
     if (!stream || stream->time_base.den <= 0)
       return false;
 
-    const double seconds = static_cast<double>(pts) * av_q2d(stream->time_base);
-    if (seconds < 0.0)
-      return false;
+    // Range times are relative to the stream's first sample, like `ffmpeg -ss`.
+    // Many streams (mp3 with encoder delay, mp4 with edit lists) start at a
+    // non-zero timestamp, and the first frame after a seek can report a pts
+    // before it because the decoder trims priming samples.
+    const int64_t start_pts =
+        stream->start_time != AV_NOPTS_VALUE ? stream->start_time : 0;
+    const double seconds = std::max(
+        0.0, static_cast<double>(pts - start_pts) * av_q2d(stream->time_base));
 
     // Deliberately the output rate: trim_to_range compares against bounds scaled
     // by metadata_.sample_rate, which reflects resampling once configured.
@@ -906,6 +944,15 @@ namespace avioflow
       if (result.empty())
       {
         result.resize(static_cast<size_t>(f->ch_layout.nb_channels));
+        // Whole-file offline decode: size the output once instead of growing it.
+        if (mode_ == Mode::Offline && !has_range && metadata_.duration > 0 &&
+            metadata_.sample_rate > 0)
+        {
+          const size_t expected = static_cast<size_t>(
+              metadata_.duration * metadata_.sample_rate) + 4096;
+          for (auto &ch : result)
+            ch.reserve(expected);
+        }
       }
 
       for (int c = 0; c < f->ch_layout.nb_channels; ++c)
