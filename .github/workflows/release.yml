@@ -164,7 +164,6 @@ jobs:
     needs: check-tag
     if: needs.check-tag.outputs.build-java == 'true'
     uses: ./.github/workflows/java.yml
-    secrets: inherit
 
   wasm:
     needs: check-tag
@@ -218,6 +217,21 @@ jobs:
       - name: Setup Rust
         if: needs.check-tag.outputs.build-rust == 'true'
         uses: dtolnay/rust-toolchain@stable
+
+      # The Maven Central upload runs here, after every build has passed, so a
+      # failed job elsewhere can no longer leave Java published on its own.
+      - name: Setup Java
+        if: needs.check-tag.outputs.build-java == 'true'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Gradle
+        if: needs.check-tag.outputs.build-java == 'true'
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
 
       # Download all artifacts
       - uses: actions/download-artifact@v4
@@ -429,3 +443,35 @@ jobs:
           git tag "$GO_TAG" "$GITHUB_SHA"
           git push origin "$GO_TAG"
           echo "::notice::Tagged $GO_TAG; go get github.com/lxp3/avioflow/go@v$VERSION"
+
+      # A Maven Central version is permanent: it cannot be replaced or deleted.
+      # So publish last, after the registries that tolerate a re-run, and skip
+      # when the version is already there instead of failing a re-run.
+      - name: Publish to Maven Central
+        if: needs.check-tag.outputs.build-java == 'true'
+        env:
+          ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+          ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.MAVEN_CENTRAL_SECRET }}
+          ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.MAVEN_CENTRAL_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          VERSION=$(tr -d '[:space:]' < version.txt)
+          POM="https://repo1.maven.org/maven2/io/github/lxp3/avioflow/$VERSION/avioflow-$VERSION.pom"
+          if curl -sSf -H 'User-Agent: avioflow-release' "$POM" > /dev/null 2>&1; then
+            echo "io.github.lxp3:avioflow:$VERSION is already on Maven Central. Skipping."
+            exit 0
+          fi
+
+          # Each java-native-<classifier> artifact holds native/<classifier>/<lib>.
+          mkdir -p java/build/native
+          for classifier in linux-x86_64 linux-aarch64 macos-x86_64 macos-aarch64 windows-x86_64 windows-aarch64; do
+            mkdir -p "java/build/native/$classifier"
+            find artifacts -path "*/java-native-$classifier/*" -path "*/$classifier/*" -type f \( -name '*.so' -o -name '*.dylib' -o -name '*.dll' \) -exec cp {} "java/build/native/$classifier/" \;
+            if [ -z "$(find "java/build/native/$classifier" -type f)" ]; then
+              echo "::error::Missing native library for $classifier"
+              exit 1
+            fi
+          done
+
+          gradle -p java publishAndReleaseToMavenCentral --no-configuration-cache
