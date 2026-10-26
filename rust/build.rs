@@ -133,12 +133,12 @@ fn build_native(project_root: &Path) -> PathBuf {
     let mut config = cmake::Config::new(project_root);
     config
         .define("BUILD_SHARED_LIBS", "OFF")
-        .define("BUILD_TESTS", "OFF")
+        .define("AVIOFLOW_BUILD_TESTS", "OFF")
         .define("BUILD_TESTING", "OFF")
-        .define("ENABLE_BINARY", "OFF")
-        .define("ENABLE_PYTHON", "OFF")
-        .define("ENABLE_NODE_JS", "OFF")
-        .define("ENABLE_JAVA", "OFF")
+        .define("AVIOFLOW_ENABLE_BINARY", "OFF")
+        .define("AVIOFLOW_ENABLE_PYTHON", "OFF")
+        .define("AVIOFLOW_ENABLE_NODE_JS", "OFF")
+        .define("AVIOFLOW_ENABLE_JAVA", "OFF")
         // A Debug Rust profile should not force a Debug C++ core; the core is
         // an opaque dependency and building it optimized is always preferable.
         .profile("Release");

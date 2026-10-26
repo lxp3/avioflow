@@ -3,7 +3,7 @@
 # ============================================================================
 #
 # Build with Emscripten:
-#   emcmake cmake -B build -S .. -DENABLE_WASM=ON
+#   emcmake cmake -B build -S .. -DAVIOFLOW_ENABLE_WASM=ON
 #   cmake --build build
 #
 # Output: avioflow.js + avioflow.wasm

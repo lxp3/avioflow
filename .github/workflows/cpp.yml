@@ -115,7 +115,7 @@ jobs:
               ! nm -C /tmp/avioflow_abi_check | grep 'std::__cxx11::basic_string'; \
             fi && \
             /tmp/avioflow_abi_check && \
-            cmake -B build_${{ matrix.package-kind }}_abi${{ matrix.cxx11-abi }} -DCMAKE_BUILD_TYPE=Release -DAVIOFLOW_GLIBCXX_USE_CXX11_ABI=${{ matrix.cxx11-abi }} -DBUILD_SHARED_LIBS=${{ matrix.shared-libs }} -DBUILD_TESTING=ON -DENABLE_WASAPI=OFF -DENABLE_PYTHON=OFF -DENABLE_NODE_JS=OFF -DENABLE_BINARY=ON && \
+            cmake -B build_${{ matrix.package-kind }}_abi${{ matrix.cxx11-abi }} -DCMAKE_BUILD_TYPE=Release -DAVIOFLOW_GLIBCXX_USE_CXX11_ABI=${{ matrix.cxx11-abi }} -DBUILD_SHARED_LIBS=${{ matrix.shared-libs }} -DBUILD_TESTING=ON -DAVIOFLOW_ENABLE_WASAPI=OFF -DAVIOFLOW_ENABLE_PYTHON=OFF -DAVIOFLOW_ENABLE_NODE_JS=OFF -DAVIOFLOW_ENABLE_BINARY=ON && \
             cmake --build build_${{ matrix.package-kind }}_abi${{ matrix.cxx11-abi }} --config Release -j \$(nproc) && \
             ctest --test-dir build_${{ matrix.package-kind }}_abi${{ matrix.cxx11-abi }} --output-on-failure && \
             LIB=\$(find build_${{ matrix.package-kind }}_abi${{ matrix.cxx11-abi }} -type f \( -name 'libavioflow.so*' -o -name 'libavioflow.a' \) | head -n1) && \
@@ -198,10 +198,10 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0 \
             -DBUILD_SHARED_LIBS=${{ matrix.shared-libs }} \
-            -DENABLE_WASAPI=OFF \
-            -DENABLE_PYTHON=OFF \
-            -DENABLE_NODE_JS=OFF \
-            -DENABLE_BINARY=ON
+            -DAVIOFLOW_ENABLE_WASAPI=OFF \
+            -DAVIOFLOW_ENABLE_PYTHON=OFF \
+            -DAVIOFLOW_ENABLE_NODE_JS=OFF \
+            -DAVIOFLOW_ENABLE_BINARY=ON
           cmake --build build_macos_${{ matrix.package-kind }} --config Release -j "$(sysctl -n hw.logicalcpu)"
           cmake --install build_macos_${{ matrix.package-kind }} --prefix "${{ matrix.pkg-dir }}" --config Release
           if [ "${{ matrix.package-kind }}" = "shared" ]; then

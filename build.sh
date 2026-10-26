@@ -7,21 +7,17 @@ set -e
 
 # Configuration
 BUILD_SHARED_LIBS="ON"
-if [ "$BUILD_SHARED_LIBS" = "ON" ]; then
-    BUILD_DIR="build_shared"
-else
-    BUILD_DIR="build_static"
-fi
+BUILD_DIR="build"
 
 # Run CMake Configuration
 echo "Configuring project ($BUILD_DIR)..."
 cmake -B "$BUILD_DIR" -S . \
     -DCMAKE_BUILD_TYPE=Release \
-    -DENABLE_WASAPI=ON \
-    -DENABLE_BINARY=ON \
-    -DENABLE_PYTHON=ON \
+    -DAVIOFLOW_ENABLE_WASAPI=ON \
+    -DAVIOFLOW_ENABLE_BINARY=ON \
+    -DAVIOFLOW_ENABLE_PYTHON=ON \
     -DBUILD_SHARED_LIBS=${BUILD_SHARED_LIBS} \
-    -DENABLE_NODE_JS=OFF
+    -DAVIOFLOW_ENABLE_NODE_JS=OFF
 
 # Build the project
 cmake --build "$BUILD_DIR" --config Release

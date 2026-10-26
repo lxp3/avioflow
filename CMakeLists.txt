@@ -9,12 +9,12 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 option(BUILD_SHARED_LIBS "Whether to build shared libraries" OFF)
-option(BUILD_TESTS "Build tests and examples" ON)
-option(ENABLE_WASAPI "Enable WASAPI loopback capture support" OFF)
-option(ENABLE_PYTHON "Enable Python bindings" OFF)
-option(ENABLE_NODE_JS "Enable Node.js bindings" OFF)
-option(ENABLE_JAVA "Enable Java JNI bindings" OFF)
-option(ENABLE_BINARY "Whether to build binaries" OFF)
+option(AVIOFLOW_BUILD_TESTS "Build tests and examples" ON)
+option(AVIOFLOW_ENABLE_WASAPI "Enable WASAPI loopback capture support" OFF)
+option(AVIOFLOW_ENABLE_PYTHON "Enable Python bindings" OFF)
+option(AVIOFLOW_ENABLE_NODE_JS "Enable Node.js bindings" OFF)
+option(AVIOFLOW_ENABLE_JAVA "Enable Java JNI bindings" OFF)
+option(AVIOFLOW_ENABLE_BINARY "Whether to build binaries" OFF)
 set(AVIOFLOW_GLIBCXX_USE_CXX11_ABI "1" CACHE STRING "Set _GLIBCXX_USE_CXX11_ABI for Linux libstdc++ builds")
 if(UNIX AND NOT APPLE)
     if(NOT AVIOFLOW_GLIBCXX_USE_CXX11_ABI MATCHES "^[01]$")
@@ -25,10 +25,10 @@ endif()
 
 # Logic to force static build if Node.js is enabled
 if(CMAKE_JS_VERSION)
-    set(ENABLE_NODE_JS ON CACHE BOOL "Auto-enable Node.js for cmake-js" FORCE)
+    set(AVIOFLOW_ENABLE_NODE_JS ON CACHE BOOL "Auto-enable Node.js for cmake-js" FORCE)
 endif()
 
-if(ENABLE_NODE_JS)
+if(AVIOFLOW_ENABLE_NODE_JS)
     message(STATUS "Node.js bindings enabled, forcing static build for core.")
     set(BUILD_SHARED_LIBS "OFF" CACHE BOOL "Force static build for Node.js" FORCE)
 endif()
@@ -124,7 +124,7 @@ endif()
 include(cmake/ffmpeg.cmake)
 
 # miniaudio Configuration
-if(ENABLE_WASAPI AND WIN32)
+if(AVIOFLOW_ENABLE_WASAPI AND WIN32)
     include(cmake/miniaudio.cmake)
 endif()
 
@@ -143,7 +143,7 @@ set(AVIOFLOW_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/avioflow/include/avioflow-c-api.cpp"
 )
 
-if(ENABLE_WASAPI AND WIN32)
+if(AVIOFLOW_ENABLE_WASAPI AND WIN32)
     list(APPEND AVIOFLOW_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/avioflow/core/wasapi/wasapi-handler.cpp")
 endif()
 
@@ -160,7 +160,7 @@ target_compile_definitions(avioflow PRIVATE AVIOFLOW_EXPORTS)
 if(NOT BUILD_SHARED_LIBS STREQUAL "ON")
     target_compile_definitions(avioflow PUBLIC AVIOFLOW_STATIC)
 endif()
-if(ENABLE_WASAPI AND WIN32)
+if(AVIOFLOW_ENABLE_WASAPI AND WIN32)
     target_compile_definitions(avioflow PRIVATE AVIOFLOW_HAS_WASAPI)
 endif()
 if(UNIX AND NOT APPLE)
@@ -174,7 +174,7 @@ target_include_directories(avioflow PUBLIC
     $<INSTALL_INTERFACE:include>
 )
 
-if(ENABLE_WASAPI AND WIN32)
+if(AVIOFLOW_ENABLE_WASAPI AND WIN32)
     target_include_directories(avioflow PRIVATE "${MINIAUDIO_INCLUDE_DIR}")
 endif()
 
@@ -200,22 +200,22 @@ if(WIN32)
 endif()
 
 # Binaries
-if(ENABLE_BINARY OR BUILD_TESTS)
+if(AVIOFLOW_ENABLE_BINARY OR AVIOFLOW_BUILD_TESTS)
     add_subdirectory(avioflow/bin)
 endif()
 
 # --- Python Bindings ---
-if(ENABLE_PYTHON)
+if(AVIOFLOW_ENABLE_PYTHON)
     add_subdirectory(python/csrc)
 endif()
 
 # --- Node.js Bindings ---
-if(ENABLE_NODE_JS)
+if(AVIOFLOW_ENABLE_NODE_JS)
     add_subdirectory(nodejs/csrc)
 endif()
 
 # --- Java JNI Bindings ---
-if(ENABLE_JAVA)
+if(AVIOFLOW_ENABLE_JAVA)
     add_subdirectory(java/src/main/cpp)
 endif()
 
@@ -245,8 +245,8 @@ if(UNIX AND NOT APPLE AND NOT BUILD_SHARED_LIBS)
 endif()
 
 # --- WebAssembly Bindings ---
-option(ENABLE_WASM "Enable WebAssembly bindings" OFF)
-if(ENABLE_WASM)
+option(AVIOFLOW_ENABLE_WASM "Enable WebAssembly bindings" OFF)
+if(AVIOFLOW_ENABLE_WASM)
     add_subdirectory(wasm/csrc)
 endif()
 
@@ -403,8 +403,8 @@ if(NOT SKBUILD)
         )
     endif()
 
-    # (Optional) Install CLI tools if ENABLE_BINARY is on
-    if(ENABLE_BINARY)
+    # (Optional) Install CLI tools if AVIOFLOW_ENABLE_BINARY is on
+    if(AVIOFLOW_ENABLE_BINARY)
         set(INSTALL_TARGETS 
             avioflow-offline-load-audio
             avioflow-online-load-audio

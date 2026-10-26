@@ -37,8 +37,8 @@ jobs:
           cmake -S . -B build-go \
             -DCMAKE_BUILD_TYPE=Release \
             -DBUILD_SHARED_LIBS=OFF \
-            -DBUILD_TESTS=OFF \
-            -DENABLE_BINARY=OFF \
+            -DAVIOFLOW_BUILD_TESTS=OFF \
+            -DAVIOFLOW_ENABLE_BINARY=OFF \
             -DCMAKE_INSTALL_PREFIX="$PWD/build-go/prefix"
           cmake --build build-go --config Release -j "$(nproc)"
           cmake --install build-go

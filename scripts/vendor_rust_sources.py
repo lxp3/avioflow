@@ -26,7 +26,7 @@ VENDOR_DIR = ROOT / "rust" / "native"
 
 # Files and directories the CMake build needs, relative to the repository root.
 # avioflow/bin is deliberately excluded: those are examples and tests, and the
-# crate configures with -DBUILD_TESTS=OFF -DENABLE_BINARY=OFF.
+# crate configures with -DAVIOFLOW_BUILD_TESTS=OFF -DAVIOFLOW_ENABLE_BINARY=OFF.
 VENDORED_PATHS = (
     "CMakeLists.txt",
     "version.txt",

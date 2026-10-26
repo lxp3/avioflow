@@ -51,7 +51,7 @@ jobs:
           if (Test-Path build-wasm) { Remove-Item -Recurse -Force build-wasm }
 
           emcmake cmake -B build-wasm -S . `
-            -DENABLE_WASM=ON `
+            -DAVIOFLOW_ENABLE_WASM=ON `
             -DCMAKE_BUILD_TYPE=Release
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 

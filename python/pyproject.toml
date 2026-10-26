@@ -31,9 +31,9 @@ classifiers = [
 # Pass options to CMake - use parent directory as source
 cmake.source-dir = ".."
 cmake.args = [
-    "-DENABLE_PYTHON=ON",
-    "-DENABLE_WASAPI=ON",
-    "-DBUILD_TESTS=OFF",
+    "-DAVIOFLOW_ENABLE_PYTHON=ON",
+    "-DAVIOFLOW_ENABLE_WASAPI=ON",
+    "-DAVIOFLOW_BUILD_TESTS=OFF",
 ]
 
 # Ensure the build directory is separate

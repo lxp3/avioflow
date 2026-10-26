@@ -97,7 +97,7 @@
     },
     "cmake.generator": "Visual Studio 18 2026",
     "cmake.configureArgs": [
-        "-DENABLE_WASAPI=ON"
+        "-DAVIOFLOW_ENABLE_WASAPI=ON"
     ],
     "cmake.exportCompileCommands": false
 }

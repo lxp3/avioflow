@@ -91,10 +91,10 @@ jobs:
             -A ${{ matrix.cmake-platform }} `
             -DCMAKE_BUILD_TYPE=Release `
             -DBUILD_SHARED_LIBS=${{ matrix.shared-libs }} `
-            -DENABLE_WASAPI=ON `
-            -DENABLE_PYTHON=OFF `
-            -DENABLE_NODE_JS=OFF `
-            -DENABLE_BINARY=ON
+            -DAVIOFLOW_ENABLE_WASAPI=ON `
+            -DAVIOFLOW_ENABLE_PYTHON=OFF `
+            -DAVIOFLOW_ENABLE_NODE_JS=OFF `
+            -DAVIOFLOW_ENABLE_BINARY=ON
           cmake --build build_${{ matrix.package-kind }} --config Release -j 4
 
       - name: Package C++ Binaries
@@ -157,10 +157,10 @@ jobs:
           try {
             cmake-js compile --out build-nodejs `
               --arch ${{ matrix.arch }} `
-              --CDENABLE_NODE_JS=ON `
-              --CDENABLE_PYTHON=OFF `
-              --CDENABLE_BINARY=OFF `
-              --CDENABLE_WASAPI=OFF
+              --CDAVIOFLOW_ENABLE_NODE_JS=ON `
+              --CDAVIOFLOW_ENABLE_PYTHON=OFF `
+              --CDAVIOFLOW_ENABLE_BINARY=OFF `
+              --CDAVIOFLOW_ENABLE_WASAPI=OFF
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           } finally {
             if ($cleanupPackageJson) { Remove-Item package.json }

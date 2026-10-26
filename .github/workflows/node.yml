@@ -35,10 +35,10 @@ jobs:
           ln -sf nodejs/package.json package.json
           export PATH="$(pwd)/nodejs/node_modules/.bin:$PATH"
           cmake-js compile --out build-nodejs \
-            --CDENABLE_NODE_JS=ON \
-            --CDENABLE_PYTHON=OFF \
-            --CDENABLE_BINARY=OFF \
-            --CDENABLE_WASAPI=OFF
+            --CDAVIOFLOW_ENABLE_NODE_JS=ON \
+            --CDAVIOFLOW_ENABLE_PYTHON=OFF \
+            --CDAVIOFLOW_ENABLE_BINARY=OFF \
+            --CDAVIOFLOW_ENABLE_WASAPI=OFF
           rm -f package.json
           cp build-nodejs/bin/avioflow.node nodejs/npm-packages/@lxp3/linux-x64/avioflow.node
           scripts/check_glibc_version.sh nodejs/npm-packages/@lxp3/linux-x64/avioflow.node
@@ -77,10 +77,10 @@ jobs:
               ln -sf nodejs/package.json package.json && \
               export PATH=\"\$(pwd)/nodejs/node_modules/.bin:\$PATH\" && \
               cmake-js compile --out build-nodejs \
-                --CDENABLE_NODE_JS=ON \
-                --CDENABLE_PYTHON=OFF \
-                --CDENABLE_BINARY=OFF \
-                --CDENABLE_WASAPI=OFF && \
+                --CDAVIOFLOW_ENABLE_NODE_JS=ON \
+                --CDAVIOFLOW_ENABLE_PYTHON=OFF \
+                --CDAVIOFLOW_ENABLE_BINARY=OFF \
+                --CDAVIOFLOW_ENABLE_WASAPI=OFF && \
               rm -f package.json && \
               cp build-nodejs/bin/avioflow.node nodejs/npm-packages/@lxp3/linux-arm64/avioflow.node && \
               scripts/check_glibc_version.sh nodejs/npm-packages/@lxp3/linux-arm64/avioflow.node
@@ -126,10 +126,10 @@ jobs:
           ln -sf nodejs/package.json package.json
           export PATH="$(pwd)/nodejs/node_modules/.bin:$PATH"
           cmake-js compile --out build-nodejs \
-            --CDENABLE_NODE_JS=ON \
-            --CDENABLE_PYTHON=OFF \
-            --CDENABLE_BINARY=OFF \
-            --CDENABLE_WASAPI=OFF
+            --CDAVIOFLOW_ENABLE_NODE_JS=ON \
+            --CDAVIOFLOW_ENABLE_PYTHON=OFF \
+            --CDAVIOFLOW_ENABLE_BINARY=OFF \
+            --CDAVIOFLOW_ENABLE_WASAPI=OFF
           rm -f package.json
           cp build-nodejs/bin/avioflow.node nodejs/npm-packages/@lxp3/darwin-x64/avioflow.node
 
@@ -167,10 +167,10 @@ jobs:
           ln -sf nodejs/package.json package.json
           export PATH="$(pwd)/nodejs/node_modules/.bin:$PATH"
           cmake-js compile --out build-nodejs \
-            --CDENABLE_NODE_JS=ON \
-            --CDENABLE_PYTHON=OFF \
-            --CDENABLE_BINARY=OFF \
-            --CDENABLE_WASAPI=OFF
+            --CDAVIOFLOW_ENABLE_NODE_JS=ON \
+            --CDAVIOFLOW_ENABLE_PYTHON=OFF \
+            --CDAVIOFLOW_ENABLE_BINARY=OFF \
+            --CDAVIOFLOW_ENABLE_WASAPI=OFF
           rm -f package.json
           cp build-nodejs/bin/avioflow.node nodejs/npm-packages/@lxp3/darwin-arm64/avioflow.node
 

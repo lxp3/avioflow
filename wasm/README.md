@@ -53,7 +53,7 @@ emsdk_env.bat           # Windows
 From the repository root, with the Emscripten environment activated:
 
 ```bash
-emcmake cmake -B build-wasm -S . -DENABLE_WASM=ON -DCMAKE_BUILD_TYPE=Release
+emcmake cmake -B build-wasm -S . -DAVIOFLOW_ENABLE_WASM=ON -DCMAKE_BUILD_TYPE=Release
 cmake --build build-wasm --config Release
 ```
 

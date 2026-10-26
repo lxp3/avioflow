@@ -310,7 +310,7 @@ Building needs JDK 17+, a C++17 compiler and CMake 3.20 or newer. FFmpeg is
 fetched automatically during the CMake configure step.
 
 ```bash
-cmake -S . -B build-java -DCMAKE_BUILD_TYPE=Release -DENABLE_JAVA=ON -DBUILD_SHARED_LIBS=OFF
+cmake -S . -B build-java -DCMAKE_BUILD_TYPE=Release -DAVIOFLOW_ENABLE_JAVA=ON -DBUILD_SHARED_LIBS=OFF
 cmake --build build-java --config Release
 
 mkdir -p java/build/native/linux-x86_64

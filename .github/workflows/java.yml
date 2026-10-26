@@ -95,12 +95,12 @@ jobs:
           cmake -S . -B build-java \
             -DCMAKE_BUILD_TYPE=Release \
             -DBUILD_SHARED_LIBS=OFF \
-            -DENABLE_WASAPI=OFF \
-            -DENABLE_PYTHON=OFF \
-            -DENABLE_NODE_JS=OFF \
-            -DENABLE_JAVA=ON \
-            -DENABLE_BINARY=OFF \
-            -DBUILD_TESTS=OFF
+            -DAVIOFLOW_ENABLE_WASAPI=OFF \
+            -DAVIOFLOW_ENABLE_PYTHON=OFF \
+            -DAVIOFLOW_ENABLE_NODE_JS=OFF \
+            -DAVIOFLOW_ENABLE_JAVA=ON \
+            -DAVIOFLOW_ENABLE_BINARY=OFF \
+            -DAVIOFLOW_BUILD_TESTS=OFF
           cmake --build build-java --config Release -j "$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 2)"
 
           NATIVE_DIR="java/build/native/$CLASSIFIER"
@@ -134,12 +134,12 @@ jobs:
           cmake -S . -B build-java `
             -A $Platform `
             -DBUILD_SHARED_LIBS=OFF `
-            -DENABLE_WASAPI=ON `
-            -DENABLE_PYTHON=OFF `
-            -DENABLE_NODE_JS=OFF `
-            -DENABLE_JAVA=ON `
-            -DENABLE_BINARY=OFF `
-            -DBUILD_TESTS=OFF
+            -DAVIOFLOW_ENABLE_WASAPI=ON `
+            -DAVIOFLOW_ENABLE_PYTHON=OFF `
+            -DAVIOFLOW_ENABLE_NODE_JS=OFF `
+            -DAVIOFLOW_ENABLE_JAVA=ON `
+            -DAVIOFLOW_ENABLE_BINARY=OFF `
+            -DAVIOFLOW_BUILD_TESTS=OFF
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
           cmake --build build-java --config Release -j 4
