@@ -50,6 +50,9 @@ namespace avioflow
 
     bool is_finished() const { return eof_reached_; }
     const Metadata &get_metadata() const { return metadata_; }
+    // All streams of the opened container. Empty before load, and for raw PCM
+    // streaming input, which has no container.
+    const std::vector<StreamInfo> &get_streams() const { return streams_; }
 
   private:
     enum class Mode { None, Offline, Stream };
@@ -63,6 +66,7 @@ namespace avioflow
     // Internal helpers
     void init_stream_context();
     void setup_decoder();
+    void populate_streams();
     void seek_to(double start_seconds);
     enum class TrimAction { Keep, Skip, Stop };
     TrimAction trim_to_range(AVFrame *frame, double start_seconds,
@@ -88,6 +92,7 @@ namespace avioflow
 
     AudioStreamOptions options_;
     Metadata metadata_;
+    std::vector<StreamInfo> streams_;
     int audio_stream_index_ = -1;
     bool eof_reached_ = false;
     size_t stream_read_offset_ = 0;

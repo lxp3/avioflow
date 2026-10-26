@@ -27,6 +27,22 @@ export interface StreamOptions extends DecodeOptions {
     inputSampleRate?: number;
     inputChannels?: number;
     inputFormat?: string;
+    /** Container stream index of the audio track to decode, from getStreams(). */
+    audioStreamIndex?: number;
+}
+
+/** One stream of an opened container (audio, video, subtitle, ...). */
+export interface StreamInfo {
+    index: number;
+    /** "audio", "video", "subtitle", "data" or "attachment". */
+    mediaType: string;
+    codec: string;
+    language: string;
+    sampleRate: number;
+    numChannels: number;
+    bitRate: number;
+    duration: number;
+    isDefault: boolean;
 }
 
 /** Load result */
@@ -62,6 +78,9 @@ export declare class AudioDecoder {
     
     /** Get metadata */
     getMetadata(): Metadata;
+
+    /** List every stream of the opened container, including video. */
+    getStreams(): StreamInfo[];
     
     /** Check if finished */
     isFinished(): boolean;

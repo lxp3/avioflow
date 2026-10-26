@@ -147,7 +147,34 @@ typedef struct AvfStreamOptions {
   int32_t has_input_channels;
   /** NUL-terminated, or NULL when unset. Borrowed for the duration of the call. */
   const char *input_format;
+  /** Container stream index to decode; see avf_decoder_get_streams(). */
+  int32_t audio_stream_index;
+  int32_t has_audio_stream_index;
 } AvfStreamOptions;
+
+/** @brief Mirrors avioflow::StreamInfo. Strings are fixed-size to keep this POD. */
+typedef struct AvfStreamInfo {
+  int32_t index;
+  int32_t sample_rate;
+  int32_t num_channels;
+  int32_t is_default;
+  int64_t bit_rate;
+  double duration;
+  char media_type[16];
+  char codec[64];
+  char language[32];
+} AvfStreamInfo;
+
+/** Opaque owned stream list. Release with avf_stream_list_free(). */
+typedef struct AvfStreamList AvfStreamList;
+
+AVIOFLOW_API size_t avf_stream_list_size(const AvfStreamList *list);
+
+/** @brief Copy entry @p index into @p out_info. Fails when out of range. */
+AVIOFLOW_API int avf_stream_list_get(const AvfStreamList *list, size_t index,
+                                     AvfStreamInfo *out_info);
+
+AVIOFLOW_API void avf_stream_list_free(AvfStreamList *list);
 
 /** @brief Mirrors avioflow::AudioWriteOptions. NULL strings mean unset. */
 typedef struct AvfWriteOptions {
@@ -234,6 +261,15 @@ AVIOFLOW_API int avf_decoder_is_finished(const AvfDecoder *decoder, int32_t *out
 
 AVIOFLOW_API int avf_decoder_get_metadata(const AvfDecoder *decoder,
                              AvfMetadata *out_metadata);
+
+/**
+ * @brief List every stream of the opened container, including video.
+ *
+ * Empty before load and for raw PCM streaming input. On success *out_list is
+ * owned by the caller.
+ */
+AVIOFLOW_API int avf_decoder_get_streams(const AvfDecoder *decoder,
+                                         AvfStreamList **out_list);
 
 /* ------------------------------------------------------------------------- */
 /* Encoder                                                                    */

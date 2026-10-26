@@ -40,6 +40,32 @@ pub struct AvfDeviceList {
 }
 
 #[repr(C)]
+pub struct AvfStreamList {
+    _private: [u8; 0],
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct AvfStreamInfo {
+    pub index: i32,
+    pub sample_rate: i32,
+    pub num_channels: i32,
+    pub is_default: i32,
+    pub bit_rate: i64,
+    pub duration: f64,
+    pub media_type: [c_char; 16],
+    pub codec: [c_char; 64],
+    pub language: [c_char; 32],
+}
+
+impl Default for AvfStreamInfo {
+    fn default() -> Self {
+        // All fields are plain data, so a zeroed struct is a valid empty value.
+        unsafe { std::mem::zeroed() }
+    }
+}
+
+#[repr(C)]
 #[derive(Clone, Copy)]
 pub struct AvfMetadata {
     pub duration: f64,
@@ -71,6 +97,8 @@ pub struct AvfStreamOptions {
     pub input_channels: i32,
     pub has_input_channels: i32,
     pub input_format: *const c_char,
+    pub audio_stream_index: i32,
+    pub has_audio_stream_index: i32,
 }
 
 impl Default for AvfStreamOptions {
@@ -85,6 +113,8 @@ impl Default for AvfStreamOptions {
             input_channels: 0,
             has_input_channels: 0,
             input_format: std::ptr::null(),
+            audio_stream_index: 0,
+            has_audio_stream_index: 0,
         }
     }
 }
@@ -192,6 +222,17 @@ extern "C" {
         out_samples: *mut *mut AvfSamples,
     ) -> c_int;
     pub fn avf_decoder_is_finished(decoder: *const AvfDecoder, out_finished: *mut i32) -> c_int;
+    pub fn avf_decoder_get_streams(
+        decoder: *const AvfDecoder,
+        out_list: *mut *mut AvfStreamList,
+    ) -> c_int;
+    pub fn avf_stream_list_size(list: *const AvfStreamList) -> usize;
+    pub fn avf_stream_list_get(
+        list: *const AvfStreamList,
+        index: usize,
+        out_info: *mut AvfStreamInfo,
+    ) -> c_int;
+    pub fn avf_stream_list_free(list: *mut AvfStreamList);
     pub fn avf_decoder_get_metadata(
         decoder: *const AvfDecoder,
         out_metadata: *mut AvfMetadata,

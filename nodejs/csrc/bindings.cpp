@@ -34,6 +34,28 @@ Napi::Object MetadataToJs(Napi::Env env, const Metadata &meta) {
 }
 
 /**
+ * @brief Convert the container stream list to an array of plain objects.
+ */
+Napi::Array StreamsToJs(Napi::Env env, const std::vector<StreamInfo> &streams) {
+  Napi::Array result = Napi::Array::New(env, streams.size());
+  for (size_t i = 0; i < streams.size(); ++i) {
+    const StreamInfo &s = streams[i];
+    Napi::Object obj = Napi::Object::New(env);
+    obj.Set("index", s.index);
+    obj.Set("mediaType", s.media_type);
+    obj.Set("codec", s.codec);
+    obj.Set("language", s.language);
+    obj.Set("sampleRate", s.sample_rate);
+    obj.Set("numChannels", s.num_channels);
+    obj.Set("bitRate", static_cast<double>(s.bit_rate));
+    obj.Set("duration", s.duration);
+    obj.Set("isDefault", s.is_default);
+    result.Set(static_cast<uint32_t>(i), obj);
+  }
+  return result;
+}
+
+/**
  * @brief Read an array of Float32Array into planar sample vectors.
  *
  * Throws a JavaScript TypeError and returns false if the shape is wrong, so
@@ -441,6 +463,7 @@ public:
          InstanceMethod("getFrame", &AudioDecoderAddon::GetFrame),
          InstanceMethod("getSamples", &AudioDecoderAddon::GetSamples),
          InstanceMethod("getMetadata", &AudioDecoderAddon::GetMetadata),
+         InstanceMethod("getStreams", &AudioDecoderAddon::GetStreams),
          InstanceMethod("isFinished", &AudioDecoderAddon::IsFinished)});
     constructor = Napi::Persistent(func);
     constructor.SuppressDestruct();
@@ -455,7 +478,8 @@ public:
    *   outputNumChannels?: number,
    *   inputSampleRate?: number,
    *   inputChannels?: number,
-   *   inputFormat?: string
+   *   inputFormat?: string,
+   *   audioStreamIndex?: number
    * }
    */
   AudioDecoderAddon(const Napi::CallbackInfo &info)
@@ -478,6 +502,9 @@ public:
       if (obj.Has("inputFormat"))
         options.input_format =
             obj.Get("inputFormat").As<Napi::String>().Utf8Value();
+      if (obj.Has("audioStreamIndex"))
+        options.audio_stream_index =
+            obj.Get("audioStreamIndex").As<Napi::Number>().Int32Value();
     }
     decoder = std::make_unique<AudioDecoder>(options);
   }
@@ -533,6 +560,20 @@ private:
   Napi::Value GetMetadata(const Napi::CallbackInfo &info) {
     try {
       return MetadataToJs(info.Env(), decoder->get_metadata());
+    } catch (const std::exception &e) {
+      Napi::Error::New(info.Env(), e.what()).ThrowAsJavaScriptException();
+      return info.Env().Undefined();
+    }
+  }
+
+  /**
+   * @brief List every stream of the opened container, including video.
+   * @return Array of { index, mediaType, codec, language, sampleRate,
+   *   numChannels, bitRate, duration, isDefault }
+   */
+  Napi::Value GetStreams(const Napi::CallbackInfo &info) {
+    try {
+      return StreamsToJs(info.Env(), decoder->get_streams());
     } catch (const std::exception &e) {
       Napi::Error::New(info.Env(), e.what()).ThrowAsJavaScriptException();
       return info.Env().Undefined();

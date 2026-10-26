@@ -219,6 +219,25 @@ func (d *Decoder) IsFinished() (bool, error) {
 	return finished != 0, nil
 }
 
+// Streams lists every stream of the opened container, including video. It is
+// empty before a file or buffer is loaded, and for raw PCM stream input.
+//
+// Pass StreamInfo.Index as StreamOptions.AudioStreamIndex to a new Decoder to
+// decode that audio track.
+func (d *Decoder) Streams() ([]StreamInfo, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.handle == nil {
+		return nil, ErrClosed
+	}
+
+	var list *C.AvfStreamList
+	if err := check(C.avf_decoder_get_streams(d.handle, &list)); err != nil {
+		return nil, err
+	}
+	return streamsFromC(list)
+}
+
 // Metadata returns the current stream metadata.
 func (d *Decoder) Metadata() (Metadata, error) {
 	d.mu.Lock()

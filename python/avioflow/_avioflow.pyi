@@ -142,6 +142,35 @@ class Metadata:
     container: str
     """str: Container format (e.g., 'mp3', 'mp4', 'ogg')."""
 
+class StreamInfo:
+    """One stream of an opened container (audio, video, subtitle, ...)."""
+    index: int
+    """int: Index to pass as audio_stream_index to AudioDecoder."""
+
+    media_type: str
+    """str: 'audio', 'video', 'subtitle', 'data' or 'attachment'."""
+
+    codec: str
+    """str: Codec name (e.g., 'aac', 'h264')."""
+
+    language: str
+    """str: ISO 639 language tag from the container; may be empty."""
+
+    sample_rate: int
+    """int: Sample rate in Hz (audio streams only, otherwise 0)."""
+
+    num_channels: int
+    """int: Channel count (audio streams only, otherwise 0)."""
+
+    bit_rate: int
+    """int: Bit rate in bits per second, 0 if unknown."""
+
+    duration: float
+    """float: Duration in seconds, 0 if unknown."""
+
+    is_default: bool
+    """bool: True if the container flags this as the default stream."""
+
 class AudioDecoder:
     """
     High-performance audio decoder with file and streaming support.
@@ -168,7 +197,8 @@ class AudioDecoder:
         output_num_channels: Optional[int] = None,
         input_sample_rate: Optional[int] = None,
         input_channels: Optional[int] = None,
-        input_format: Optional[str] = None
+        input_format: Optional[str] = None,
+        audio_stream_index: Optional[int] = None
     ) -> None:
         """
         Initialize the AudioDecoder.
@@ -188,6 +218,19 @@ class AudioDecoder:
                 - "aac": AAC audio (with ADTS headers)
                 - "opus": Opus audio
                 Required for stream mode.
+            audio_stream_index (int, optional): Container stream index of the audio
+                track to decode, from get_streams(). Defaults to the best audio
+                stream.
+        """
+        ...
+
+    def get_streams(self) -> List[StreamInfo]:
+        """
+        List every stream of the opened container, including video.
+
+        Returns:
+            list[StreamInfo]: Empty before load_file()/load_buffer() and for raw
+            PCM streaming input.
         """
         ...
 

@@ -390,6 +390,32 @@ PYBIND11_MODULE(_avioflow, m) {
             return ss.str();
         });
 
+    // --- StreamInfo ---
+
+    py::class_<StreamInfo>(m, "StreamInfo",
+        "One stream of an opened container (audio, video, subtitle, ...).")
+        .def_readonly("index", &StreamInfo::index,
+            "int: Index to pass as audio_stream_index to AudioDecoder.")
+        .def_readonly("media_type", &StreamInfo::media_type,
+            "str: 'audio', 'video', 'subtitle', 'data' or 'attachment'.")
+        .def_readonly("codec", &StreamInfo::codec, "str: Codec name (e.g., 'aac', 'h264').")
+        .def_readonly("language", &StreamInfo::language,
+            "str: ISO 639 language tag from the container; may be empty.")
+        .def_readonly("sample_rate", &StreamInfo::sample_rate,
+            "int: Sample rate in Hz (audio streams only, otherwise 0).")
+        .def_readonly("num_channels", &StreamInfo::num_channels,
+            "int: Channel count (audio streams only, otherwise 0).")
+        .def_readonly("bit_rate", &StreamInfo::bit_rate,
+            "int: Bit rate in bits per second, 0 if unknown.")
+        .def_readonly("duration", &StreamInfo::duration,
+            "float: Duration in seconds, 0 if unknown.")
+        .def_readonly("is_default", &StreamInfo::is_default,
+            "bool: True if the container flags this as the default stream.")
+        .def("__repr__", [](const StreamInfo& self) {
+            return "<avioflow.StreamInfo index=" + std::to_string(self.index) +
+                   " type=" + self.media_type + " codec=" + self.codec + ">";
+        });
+
     // --- AudioDecoder ---
     
     py::class_<AudioDecoder>(m, "AudioDecoder", R"pbdoc(
@@ -422,6 +448,9 @@ PYBIND11_MODULE(_avioflow, m) {
                 - "aac": AAC audio (with ADTS headers)
                 - "opus": Opus audio
                 Required for stream mode.
+            audio_stream_index (int, optional): Container stream index of the audio
+                track to decode, from get_streams(). Defaults to the best audio
+                stream. Use it to pick a dub or commentary track in a video.
         
         Attributes:
             All audio data is returned as float32 in range [-1.0, 1.0].
@@ -430,20 +459,34 @@ PYBIND11_MODULE(_avioflow, m) {
                         std::optional<int> output_num_channels,
                         std::optional<int> input_sample_rate,
                         std::optional<int> input_channels,
-                        std::optional<std::string> input_format) {
+                        std::optional<std::string> input_format,
+                        std::optional<int> audio_stream_index) {
             AudioStreamOptions options;
             options.output_sample_rate = output_sample_rate;
             options.output_num_channels = output_num_channels;
             options.input_sample_rate = input_sample_rate;
             options.input_channels = input_channels;
             options.input_format = input_format;
+            options.audio_stream_index = audio_stream_index;
             return new AudioDecoder(options);
         }),
         py::arg("output_sample_rate") = py::none(),
         py::arg("output_num_channels") = py::none(),
         py::arg("input_sample_rate") = py::none(),
         py::arg("input_channels") = py::none(),
-        py::arg("input_format") = py::none())
+        py::arg("input_format") = py::none(),
+        py::arg("audio_stream_index") = py::none())
+
+        .def("get_streams", [](const AudioDecoder& self) {
+            return self.get_streams();
+        }, R"pbdoc(
+            List every stream of the opened container, including video.
+
+            Returns:
+                list[StreamInfo]: Empty before load_file()/load_buffer() and for
+                raw PCM streaming input. Pass StreamInfo.index as
+                audio_stream_index to a new AudioDecoder to select that track.
+        )pbdoc")
         
         .def("load_file", [](AudioDecoder& self, py::object source) -> const Metadata& {
             std::string path = parse_path_input(source);

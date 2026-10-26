@@ -178,6 +178,15 @@ public:
   bool is_finished() const;
   const Metadata &get_metadata() const;
 
+  /**
+   * @brief All streams of the opened container, including video.
+   *
+   * Use StreamInfo::index as AudioStreamOptions::audio_stream_index on a new
+   * decoder to pick a specific audio track (e.g. a dub in a multi-track video).
+   * Empty before load_file()/load_buffer() and for raw PCM streaming input.
+   */
+  const std::vector<StreamInfo> &get_streams() const;
+
 private:
   class Impl;
   std::unique_ptr<Impl> impl_;

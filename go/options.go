@@ -34,6 +34,9 @@ type StreamOptions struct {
 	// InputFormat names the input format, for example "s16le" or "mp3". Required
 	// to use Feed.
 	InputFormat string
+	// AudioStreamIndex selects the container stream to decode, taken from
+	// Decoder.Streams. Nil picks the best audio stream.
+	AudioStreamIndex *int32
 }
 
 // toC builds the C representation. The returned free function releases the C
@@ -59,6 +62,10 @@ func (o *StreamOptions) toC() (C.AvfStreamOptions, func()) {
 	if o.InputChannels != nil {
 		raw.input_channels = C.int32_t(*o.InputChannels)
 		raw.has_input_channels = 1
+	}
+	if o.AudioStreamIndex != nil {
+		raw.audio_stream_index = C.int32_t(*o.AudioStreamIndex)
+		raw.has_audio_stream_index = 1
 	}
 
 	free := func() {}

@@ -29,6 +29,24 @@ struct AudioStreamOptions {
   std::optional<int> input_sample_rate;
   std::optional<int> input_channels;
   std::optional<std::string> input_format;
+  /// Container stream index to decode (see AudioDecoder::get_streams()).
+  /// Unset picks the best audio stream. Must refer to an audio stream.
+  std::optional<int> audio_stream_index;
+};
+
+/**
+ * @brief One stream of an opened container (audio, video, subtitle, ...).
+ */
+struct StreamInfo {
+  int index = 0;           // Index to pass as AudioStreamOptions::audio_stream_index
+  std::string media_type;  // "audio", "video", "subtitle", "data", "attachment"
+  std::string codec;       // Codec name (e.g., "aac", "h264")
+  std::string language;    // ISO 639 language tag from the container, may be empty
+  int sample_rate = 0;     // Audio only, otherwise 0
+  int num_channels = 0;    // Audio only, otherwise 0
+  int64_t bit_rate = 0;    // Bit rate in bits/s, 0 if unknown
+  double duration = 0.0;   // Seconds, 0 if unknown
+  bool is_default = false; // Container flags this as the default stream
 };
 
 /**

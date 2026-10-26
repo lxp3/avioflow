@@ -84,6 +84,10 @@ const Metadata &AudioDecoder::get_metadata() const {
   return impl_->decoder_.get_metadata();
 }
 
+const std::vector<StreamInfo> &AudioDecoder::get_streams() const {
+  return impl_->decoder_.get_streams();
+}
+
 // --- Device Manager ---
 
 std::vector<DeviceInfo> DeviceManager::list_audio_devices() {

@@ -21,6 +21,7 @@ pub struct StreamOptions {
     input_sample_rate: Option<i32>,
     input_channels: Option<i32>,
     input_format: Option<String>,
+    audio_stream_index: Option<i32>,
 }
 
 impl StreamOptions {
@@ -60,6 +61,14 @@ impl StreamOptions {
         self
     }
 
+    /// Container stream index of the audio track to decode, from
+    /// [`AudioDecoder::streams`](crate::AudioDecoder::streams). Unset picks the
+    /// best audio stream.
+    pub fn audio_stream_index(mut self, index: i32) -> Self {
+        self.audio_stream_index = Some(index);
+        self
+    }
+
     /// Builds the C representation. The returned `CString` owns the storage the
     /// struct's `input_format` pointer refers to and must outlive the call.
     pub(crate) fn to_ffi(&self) -> Result<(ffi::AvfStreamOptions, Option<CString>)> {
@@ -88,6 +97,10 @@ impl StreamOptions {
         if let Some(value) = self.input_channels {
             raw.input_channels = value;
             raw.has_input_channels = 1;
+        }
+        if let Some(value) = self.audio_stream_index {
+            raw.audio_stream_index = value;
+            raw.has_audio_stream_index = 1;
         }
 
         Ok((raw, format))

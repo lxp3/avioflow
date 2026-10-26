@@ -124,6 +124,8 @@ namespace avioflow
       throw std::invalid_argument("input_channels must be greater than zero");
     if (options.input_format && options.input_format->empty())
       throw std::invalid_argument("input_format must not be empty");
+    if (options.audio_stream_index && *options.audio_stream_index < 0)
+      throw std::invalid_argument("audio_stream_index must not be negative");
   }
 
   void SingleStreamDecoder::load_file(const std::string &source)
@@ -283,6 +285,36 @@ namespace avioflow
     }
   }
 
+  void SingleStreamDecoder::populate_streams()
+  {
+    streams_.clear();
+    for (unsigned i = 0; i < fmt_ctx_->nb_streams; ++i)
+    {
+      const AVStream *stream = fmt_ctx_->streams[i];
+      const AVCodecParameters *par = stream->codecpar;
+
+      StreamInfo info;
+      info.index = static_cast<int>(i);
+      const char *type = av_get_media_type_string(par->codec_type);
+      info.media_type = type ? type : "unknown";
+      const char *codec = avcodec_get_name(par->codec_id);
+      info.codec = codec ? codec : "";
+      if (const AVDictionaryEntry *lang =
+              av_dict_get(stream->metadata, "language", nullptr, 0))
+        info.language = lang->value;
+      if (par->codec_type == AVMEDIA_TYPE_AUDIO)
+      {
+        info.sample_rate = par->sample_rate;
+        info.num_channels = par->ch_layout.nb_channels;
+      }
+      info.bit_rate = par->bit_rate;
+      if (stream->duration > 0 && stream->time_base.den > 0)
+        info.duration = static_cast<double>(stream->duration) * av_q2d(stream->time_base);
+      info.is_default = (stream->disposition & AV_DISPOSITION_DEFAULT) != 0;
+      streams_.push_back(std::move(info));
+    }
+  }
+
   void SingleStreamDecoder::setup_decoder()
   {
     if (!(mode_ == Mode::Stream && is_raw_pcm_input_format(options_.input_format)))
@@ -291,10 +323,28 @@ namespace avioflow
                      "Could not find stream info");
     }
 
-    audio_stream_index_ = av_find_best_stream(fmt_ctx_.get(), AVMEDIA_TYPE_AUDIO,
-                                              -1, -1, nullptr, 0);
-    if (audio_stream_index_ < 0)
-      throw std::runtime_error("Could not find audio stream");
+    populate_streams();
+
+    if (options_.audio_stream_index)
+    {
+      const int requested = *options_.audio_stream_index;
+      if (requested >= static_cast<int>(fmt_ctx_->nb_streams))
+        throw std::invalid_argument(
+            "audio_stream_index " + std::to_string(requested) +
+            " is out of range (container has " +
+            std::to_string(fmt_ctx_->nb_streams) + " streams)");
+      if (fmt_ctx_->streams[requested]->codecpar->codec_type != AVMEDIA_TYPE_AUDIO)
+        throw std::invalid_argument("Stream " + std::to_string(requested) +
+                                    " is not an audio stream");
+      audio_stream_index_ = requested;
+    }
+    else
+    {
+      audio_stream_index_ = av_find_best_stream(fmt_ctx_.get(), AVMEDIA_TYPE_AUDIO,
+                                                -1, -1, nullptr, 0);
+      if (audio_stream_index_ < 0)
+        throw std::runtime_error("Could not find audio stream");
+    }
 
     // Let the demuxer skip packets of every other stream (video, subtitles,
     // other audio tracks) instead of reading and discarding them one by one.

@@ -36,6 +36,25 @@ val MetadataToJs(const Metadata &meta) {
     return obj;
 }
 
+val StreamsToJs(const std::vector<StreamInfo> &streams) {
+    val result = val::array();
+    for (size_t i = 0; i < streams.size(); ++i) {
+        const StreamInfo &s = streams[i];
+        val obj = val::object();
+        obj.set("index", s.index);
+        obj.set("mediaType", s.media_type);
+        obj.set("codec", s.codec);
+        obj.set("language", s.language);
+        obj.set("sampleRate", s.sample_rate);
+        obj.set("numChannels", s.num_channels);
+        obj.set("bitRate", static_cast<double>(s.bit_rate));
+        obj.set("duration", s.duration);
+        obj.set("isDefault", s.is_default);
+        result.set(i, obj);
+    }
+    return result;
+}
+
 val StringsToJs(const std::vector<std::string> &values) {
     val result = val::array();
     for (size_t i = 0; i < values.size(); ++i) {
@@ -90,6 +109,9 @@ public:
         }
         if (options.hasOwnProperty("inputFormat")) {
             opts.input_format = options["inputFormat"].as<std::string>();
+        }
+        if (options.hasOwnProperty("audioStreamIndex")) {
+            opts.audio_stream_index = options["audioStreamIndex"].as<int>();
         }
         decoder_ = AudioDecoder(opts);
     }
@@ -187,6 +209,13 @@ public:
      */
     val getMetadata() {
         return MetadataToJs(decoder_.get_metadata());
+    }
+
+    /**
+     * @brief List every stream of the opened container, including video
+     */
+    val getStreams() {
+        return StreamsToJs(decoder_.get_streams());
     }
 
     /**
@@ -427,5 +456,6 @@ EMSCRIPTEN_BINDINGS(avioflow) {
         .function("getFrame", &AudioDecoderWrapper::getFrame)
         .function("getSamples", &AudioDecoderWrapper::getSamples)
         .function("getMetadata", &AudioDecoderWrapper::getMetadata)
+        .function("getStreams", &AudioDecoderWrapper::getStreams)
         .function("isFinished", &AudioDecoderWrapper::isFinished);
 }

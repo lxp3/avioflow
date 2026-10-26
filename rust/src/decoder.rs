@@ -4,7 +4,7 @@ use std::marker::PhantomData;
 
 use crate::error::{check, null_handle_error, to_cstring, Result};
 use crate::ffi;
-use crate::metadata::Metadata;
+use crate::metadata::{Metadata, StreamInfo};
 use crate::options::StreamOptions;
 use crate::samples::OwnedSamples;
 
@@ -205,6 +205,33 @@ impl AudioDecoder {
         // SAFETY: handle is valid; finished is a live local.
         check(unsafe { ffi::avf_decoder_is_finished(self.handle, &mut finished) })?;
         Ok(finished != 0)
+    }
+
+    /// Lists every stream of the opened container, including video.
+    ///
+    /// Empty before a file or buffer is loaded, and for raw PCM stream input.
+    /// Pass [`StreamInfo::index`] to
+    /// [`StreamOptions::audio_stream_index`](crate::StreamOptions::audio_stream_index)
+    /// to decode that audio track.
+    pub fn streams(&self) -> Result<Vec<StreamInfo>> {
+        let mut list: *mut ffi::AvfStreamList = std::ptr::null_mut();
+        // SAFETY: handle is valid; list is a live local the callee writes to.
+        check(unsafe { ffi::avf_decoder_get_streams(self.handle, &mut list) })?;
+
+        // SAFETY: list was produced by the call above and is freed exactly once
+        // below, on every path.
+        let result = (|| {
+            let count = unsafe { ffi::avf_stream_list_size(list) };
+            let mut out = Vec::with_capacity(count);
+            for i in 0..count {
+                let mut raw = ffi::AvfStreamInfo::default();
+                check(unsafe { ffi::avf_stream_list_get(list, i, &mut raw) })?;
+                out.push(StreamInfo::from_ffi(&raw));
+            }
+            Ok(out)
+        })();
+        unsafe { ffi::avf_stream_list_free(list) };
+        result
     }
 
     /// Current stream metadata.

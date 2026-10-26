@@ -54,6 +54,32 @@ export interface AudioDecoderOptions {
      * Required for stream mode.
      */
     inputFormat?: string;
+    /**
+     * Container stream index of the audio track to decode, from getStreams().
+     * Defaults to the best audio stream.
+     */
+    audioStreamIndex?: number;
+}
+
+/** One stream of an opened container (audio, video, subtitle, ...). */
+export interface StreamInfo {
+    /** Index to pass as audioStreamIndex. */
+    index: number;
+    /** "audio", "video", "subtitle", "data" or "attachment". */
+    mediaType: string;
+    codec: string;
+    /** ISO 639 language tag from the container; may be empty. */
+    language: string;
+    /** Audio streams only, otherwise 0. */
+    sampleRate: number;
+    /** Audio streams only, otherwise 0. */
+    numChannels: number;
+    /** Bit rate in bits per second, 0 if unknown. */
+    bitRate: number;
+    /** Duration in seconds, 0 if unknown. */
+    duration: number;
+    /** True if the container flags this as the default stream. */
+    isDefault: boolean;
 }
 
 export interface AudioWriteOptions {
@@ -132,6 +158,12 @@ export class AudioDecoder {
      * @returns Metadata object
      */
     getMetadata(): Metadata;
+
+    /**
+     * List every stream of the opened container, including video.
+     * Empty before load and for raw PCM streaming input.
+     */
+    getStreams(): StreamInfo[];
 
     /**
      * Feed raw encoded bytes for streaming decode.

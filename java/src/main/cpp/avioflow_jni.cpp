@@ -118,6 +118,12 @@ AudioStreamOptions to_stream_options(JNIEnv *env, jobject options) {
     env->DeleteLocalRef(input_format);
   }
 
+  jobject audio_stream_index = object_field(env, options, "audioStreamIndex", "Ljava/lang/Integer;");
+  if (audio_stream_index) {
+    result.audio_stream_index = integer_value(env, audio_stream_index);
+    env->DeleteLocalRef(audio_stream_index);
+  }
+
   return result;
 }
 
@@ -210,6 +216,32 @@ jobject to_metadata(JNIEnv *env, const Metadata &metadata) {
   env->DeleteLocalRef(sample_format);
   env->DeleteLocalRef(codec);
   env->DeleteLocalRef(container);
+  env->DeleteLocalRef(cls);
+  return result;
+}
+
+jobjectArray to_stream_array(JNIEnv *env, const std::vector<StreamInfo> &streams) {
+  jclass cls = env->FindClass("io/github/lxp3/avioflow/StreamInfo");
+  jmethodID constructor = env->GetMethodID(
+      cls, "<init>",
+      "(ILjava/lang/String;Ljava/lang/String;Ljava/lang/String;IIJDZ)V");
+  jobjectArray result = env->NewObjectArray(
+      static_cast<jsize>(streams.size()), cls, nullptr);
+  for (jsize i = 0; i < static_cast<jsize>(streams.size()); ++i) {
+    const StreamInfo &s = streams[static_cast<size_t>(i)];
+    jstring media_type = env->NewStringUTF(s.media_type.c_str());
+    jstring codec = env->NewStringUTF(s.codec.c_str());
+    jstring language = env->NewStringUTF(s.language.c_str());
+    jobject value = env->NewObject(
+        cls, constructor, s.index, media_type, codec, language, s.sample_rate,
+        s.num_channels, static_cast<jlong>(s.bit_rate), s.duration,
+        s.is_default ? JNI_TRUE : JNI_FALSE);
+    env->SetObjectArrayElement(result, i, value);
+    env->DeleteLocalRef(value);
+    env->DeleteLocalRef(language);
+    env->DeleteLocalRef(codec);
+    env->DeleteLocalRef(media_type);
+  }
   env->DeleteLocalRef(cls);
   return result;
 }
@@ -471,6 +503,16 @@ extern "C" JNIEXPORT jobject JNICALL
 Java_io_github_lxp3_avioflow_AudioDecoder_nativeGetMetadata(JNIEnv *env, jclass, jlong handle) {
   try {
     return to_metadata(env, decoder_from_handle(handle)->get_metadata());
+  } catch (const std::exception &error) {
+    throw_avioflow(env, error);
+    return nullptr;
+  }
+}
+
+extern "C" JNIEXPORT jobjectArray JNICALL
+Java_io_github_lxp3_avioflow_AudioDecoder_nativeGetStreams(JNIEnv *env, jclass, jlong handle) {
+  try {
+    return to_stream_array(env, decoder_from_handle(handle)->get_streams());
   } catch (const std::exception &error) {
     throw_avioflow(env, error);
     return nullptr;

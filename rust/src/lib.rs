@@ -75,7 +75,7 @@ mod samples;
 pub use decoder::{AudioDecoder, Frame};
 pub use encoder::{save_audio, AudioEncoder};
 pub use error::{Error, ErrorKind, Result};
-pub use metadata::Metadata;
+pub use metadata::{Metadata, StreamInfo};
 pub use options::{ResampleOptions, StreamOptions, WriteOptions};
 pub use resampler::{resample, AudioResampler};
 

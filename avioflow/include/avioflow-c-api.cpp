@@ -125,6 +125,8 @@ AudioStreamOptions to_stream_options(const AvfStreamOptions *options) {
   result.input_channels =
       optional_int(options->input_channels, options->has_input_channels);
   result.input_format = optional_string(options->input_format);
+  result.audio_stream_index = optional_int(options->audio_stream_index,
+                                           options->has_audio_stream_index);
   return result;
 }
 
@@ -181,6 +183,10 @@ std::vector<std::vector<float>> to_sample_vectors(const float *const *channels,
 // Definitions of the opaque handle types declared in the header.
 struct AvfStringList {
   std::vector<std::string> items;
+};
+
+struct AvfStreamList {
+  std::vector<StreamInfo> items;
 };
 
 struct AvfSamples {
@@ -399,6 +405,47 @@ int avf_decoder_get_metadata(const AvfDecoder *decoder,
     return AVF_OK;
   });
 }
+
+int avf_decoder_get_streams(const AvfDecoder *decoder,
+                            AvfStreamList **out_list) {
+  return guard([&] {
+    if (!decoder)
+      throw std::invalid_argument("decoder must not be null");
+    if (!out_list)
+      throw std::invalid_argument("out_list must not be null");
+    *out_list = new AvfStreamList{decoder->decoder.get_streams()};
+    return AVF_OK;
+  });
+}
+
+size_t avf_stream_list_size(const AvfStreamList *list) {
+  return list ? list->items.size() : 0;
+}
+
+int avf_stream_list_get(const AvfStreamList *list, size_t index,
+                        AvfStreamInfo *out_info) {
+  return guard([&] {
+    if (!list)
+      throw std::invalid_argument("list must not be null");
+    if (!out_info)
+      throw std::invalid_argument("out_info must not be null");
+    if (index >= list->items.size())
+      throw std::invalid_argument("stream index out of range");
+    const StreamInfo &info = list->items[index];
+    out_info->index = info.index;
+    out_info->sample_rate = info.sample_rate;
+    out_info->num_channels = info.num_channels;
+    out_info->is_default = info.is_default ? 1 : 0;
+    out_info->bit_rate = info.bit_rate;
+    out_info->duration = info.duration;
+    copy_string(out_info->media_type, info.media_type);
+    copy_string(out_info->codec, info.codec);
+    copy_string(out_info->language, info.language);
+    return AVF_OK;
+  });
+}
+
+void avf_stream_list_free(AvfStreamList *list) { delete list; }
 
 /* --- Encoder --- */
 

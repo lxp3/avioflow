@@ -6,6 +6,7 @@ public final class AudioStreamOptions {
     Integer inputSampleRate;
     Integer inputChannels;
     String inputFormat;
+    Integer audioStreamIndex;
 
     /** Sets the target sample rate; -1 preserves the source sample rate. */
     public AudioStreamOptions outputSampleRate(int outputSampleRate) {
@@ -31,6 +32,15 @@ public final class AudioStreamOptions {
 
     public AudioStreamOptions inputFormat(String inputFormat) {
         this.inputFormat = inputFormat;
+        return this;
+    }
+
+    /**
+     * Sets the container stream index of the audio track to decode, taken from
+     * {@link AudioDecoder#getStreams()}. Unset picks the best audio stream.
+     */
+    public AudioStreamOptions audioStreamIndex(int audioStreamIndex) {
+        this.audioStreamIndex = audioStreamIndex;
         return this;
     }
 }

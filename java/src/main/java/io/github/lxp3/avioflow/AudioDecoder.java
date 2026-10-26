@@ -57,6 +57,12 @@ public final class AudioDecoder implements AutoCloseable {
         return nativeGetMetadata(handle);
     }
 
+    /** Lists every stream of the opened container, including video. */
+    public synchronized StreamInfo[] getStreams() {
+        ensureOpen();
+        return nativeGetStreams(handle);
+    }
+
     public synchronized boolean isFinished() {
         ensureOpen();
         return nativeIsFinished(handle);
@@ -92,6 +98,8 @@ public final class AudioDecoder implements AutoCloseable {
     private static native float[][] nativeGetFrame(long handle);
 
     private static native Metadata nativeGetMetadata(long handle);
+
+    private static native StreamInfo[] nativeGetStreams(long handle);
 
     private static native boolean nativeIsFinished(long handle);
 
