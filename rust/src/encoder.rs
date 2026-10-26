@@ -66,11 +66,24 @@ impl AudioEncoder {
         })
     }
 
+    /// Encodes `samples` (`samples[channel][sample]`) and returns the encoded
+    /// file bytes instead of writing them to disk.
+    ///
+    /// All channels must have the same length.
     pub fn save_buffer(&mut self, samples: &[Vec<f32>]) -> Result<Vec<u8>> {
         let (pointers, num_samples) = channel_pointers(samples)?;
         let mut data = std::ptr::null_mut();
         let mut size = 0usize;
-        check(unsafe { ffi::avf_encoder_save_buffer(self.handle, pointers.as_ptr(), pointers.len() as i32, num_samples, &mut data, &mut size) })?;
+        check(unsafe {
+            ffi::avf_encoder_save_buffer(
+                self.handle,
+                pointers.as_ptr(),
+                pointers.len() as i32,
+                num_samples,
+                &mut data,
+                &mut size,
+            )
+        })?;
         let result = unsafe { std::slice::from_raw_parts(data, size).to_vec() };
         unsafe { ffi::avf_free_buffer(data) };
         Ok(result)
